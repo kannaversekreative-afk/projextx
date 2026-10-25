@@ -115,6 +115,11 @@ LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
     SECTORS[s.n] = { icon: s.icon, color: s.c, pe: 16, growth: s.growth, vol: s.vol, beta: s.beta, div: s.div,
       tag: s.n + '.', products: [s.n], loc: locFor(s.g), fleet: fleetFor(s.n) };
     if (typeof SUFFIX !== 'undefined' && !SUFFIX[s.n]) SUFFIX[s.n] = [' Co.', ' Group', ' Industries', ' Ltd.', ' Corp.'];
+    // SECTOR_LIST was built from the original 5 sectors at data load time.
+    // If it is not expanded here, marketDay looks up sec[newSector] as
+    // undefined, every leader-sector stock return becomes NaN, and the
+    // World Index poisons to NaN forever. That was the live NaN bug.
+    if (typeof SECTOR_LIST !== 'undefined' && !SECTOR_LIST.includes(s.n)) SECTOR_LIST.push(s.n);
   });
 })();
 

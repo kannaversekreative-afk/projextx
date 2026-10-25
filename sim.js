@@ -445,7 +445,9 @@ function marketDay() {
     if (!c.listed) { c.dayVol = 0; c.tradedToday = 0; c.price = companyFairTotal(c) / c.shares; continue; }
     if (rand() < 1 / 25) c.moodT = clamp(gauss() * 0.5, -1, 1);
     c.mood = clamp(c.mood + 0.15 * (c.moodT - c.mood) + gauss() * 0.05, -1, 1);
-    let r = c.beta * mkt + sec[c.sector] + c.mood * 0.003 + 0.012 * Math.log(fairValue(c) / c.price) + gauss() * c.vol * R.vol * (cs.war || cs.occ ? 1.5 : 1);
+    if (!isFinite(c.price) || c.price <= 0) c.price = (isFinite(c.p0) && c.p0 > 0) ? c.p0 : 100;
+    let r = c.beta * mkt + (sec[c.sector] || 0) + c.mood * 0.003 + 0.012 * Math.log(Math.max(1, fairValue(c)) / c.price) + gauss() * c.vol * R.vol * (cs.war || cs.occ ? 1.5 : 1);
+    if (!isFinite(r)) r = 0;
     r += cs.drift + c.tmp * 0.5 + rate; c.tmp *= 0.5;
     if (c.shock) { r += c.shock; c.shock = 0; }
     if (!c.pattern) { if (c.vol >= 0.024 && rand() < 0.002) c.pattern = { type: 'pump', seq: [0.07, 0.09, 0.1, 0.05, -0.18, -0.16, -0.09] }; else if (rand() < 0.0012) c.pattern = { type: 'squeeze', seq: [0.11, 0.13, 0.07, -0.06] }; }
@@ -456,7 +458,8 @@ function marketDay() {
     c.price = Math.max(0.5, c.price * Math.exp(r));
   }
   if (--S.regime.left <= 0) { const nx = pickW(REGIMES[S.regime.type].next); S.regime = regimeOf(nx); news('Market', REGIMES[nx].news); }
-  if (eqN) S.idx.v *= Math.exp(eqSum / eqN);
+  if (!isFinite(S.idx.v)) S.idx.v = 1000;
+  if (eqN && isFinite(eqSum)) S.idx.v *= Math.exp(eqSum / eqN);
 }
 function pushHist(h, v, day, vol) {
   h.d.push(v); if (h.d.length > 400) h.d.shift();
