@@ -268,3 +268,11 @@ body.in-city #hud, body.in-city #popup { display: none; }
   .more-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { #panel.open, .mbox, .toast { animation: none; } }
+
+/* Leader inherit screen: black, full screen, above everything else. */
+#inherit { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #000; color: #fff; padding: 24px; text-align: center; }
+#inherit.open { display: flex; }
+#inherit h1 { font-size: 28px; font-weight: 900; margin: 0; }
+#inherit p { color: #aaa; max-width: 480px; margin: 0; }
+#inherit select { width: min(480px, 90vw); padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; background: #111; color: #fff; border: 1.5px solid #333; }
+#inherit .btn3d { width: min(480px, 90vw); }
