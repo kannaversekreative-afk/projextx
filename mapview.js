@@ -272,6 +272,29 @@ const MapView = (() => {
   const PILL_SEL = { font: '800 15px Nunito, system-ui, sans-serif', bg: '#2f7cf6', border: 'rgba(255,255,255,0.35)', fg: '#ffffff', px: 14, h: 32 };
   const PILL_MINE = { font: '800 13px Nunito, system-ui, sans-serif', bg: 'rgba(22,34,62,0.95)', border: '#2f7cf6', fg: '#cfe0ff', px: 11, h: 26 };
   function drawSprite(sx, sy, ang, k, fn) { const c = tctx; c.save(); c.translate(sx, sy); c.rotate(ang); c.scale(k, k); fn(c); c.restore(); }
+  // Navy patrols: warships used to orbit a point near the capital, and that
+  // orbit crossed land half the time — that is the "boats are on land" bug.
+  // A warship now sails a real sea path (water cells only, same basin) and
+  // turns back at the end, so its centre never leaves the water.
+  let navyCache = {};
+  function navyPatrol(a3, cap, now) {
+    if (!navyCache[a3]) {
+      const start = nearestWater(W, cap.lon, cap.lat);
+      if (start == null) { navyCache[a3] = null; return null; }
+      const basin = basinOf(start);
+      let dest = null;
+      const list = (portByBasin && portByBasin.get(basin)) || [];
+      if (list.length) { let best = null, bd = -1; for (const c of list) { const d = Math.hypot(c % W.ww - start % W.ww, ((c / W.ww) | 0) - ((start / W.ww) | 0)); if (d > 8 && d > bd) { bd = d; best = c; } } dest = best; }
+      if (dest == null) { navyCache[a3] = null; return null; }
+      const p = seaPath(W, start, dest);
+      if (!p || p.length < 2) { navyCache[a3] = null; return null; }
+      navyCache[a3] = { pts: p, len: pathLen(p) };
+    }
+    const e = navyCache[a3]; if (!e) return null;
+    const cycle = Math.max(20, e.len / 5), tt = ((now / 1000) / cycle) % 2, f = tt < 1 ? tt : 2 - tt;
+    const pos = along(e.pts, e.len, f);
+    return [pos[0], pos[1], tt < 1 ? pos[2] : pos[2] + Math.PI];
+  }
   function military(now) {
     const st = S_(), out = [];
     const orbit = (cx, cy, r, sp, ph) => { const a = now / 1000 * sp + ph; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.6, a + Math.PI / 2]; };
@@ -293,7 +316,8 @@ const MapView = (() => {
       // the orbit is actually visible as movement.
       if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 26, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air), false, { kind: 'fighter', a3, level: cs.milLv.air, key: `mil:${a3}:air` }]); }
       if (cs.milLv.navy > 0) {
-        const cell = nearestWater(W, cap.lon, cap.lat); if (cell != null) { const [wx, wy] = cellXY(W, cell); const [x, y, ang] = orbit(wx, wy, 28, 0.12, i * 2); out.push([x, y, ang, c => warship(c, cs.milLv.navy), true, { kind: cs.milLv.navy >= 5 ? 'carrier' : 'warship', a3, level: cs.milLv.navy, key: `mil:${a3}:navy` }]); }
+        const pos = navyPatrol(a3, cap, now);
+        if (pos) out.push([pos[0], pos[1], pos[2], c => warship(c, cs.milLv.navy), true, { kind: cs.milLv.navy >= 5 ? 'carrier' : 'warship', a3, level: cs.milLv.navy, key: `mil:${a3}:navy` }]);
       }
     });
     return out;
