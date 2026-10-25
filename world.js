@@ -149,6 +149,30 @@ function ownCoastWater(a3, lon, lat, maxR) {
   }
   return null;
 }
+// Port icons used to sit at the centre of a water cell — up to ~100 miles
+// offshore, in open ocean, for a country far away. A port should sit on
+// the coast: halfway between its water cell and the neighbouring land
+// cell that belongs to this country. For a tiny island with no land cell
+// in the grid, the port sits on the capital itself, not out at sea.
+function coastPoint(a3, cell, cap) {
+  const wxy = cellXY(W, cell);
+  const G = W.ww, x = cell % G, y = (cell / G) | 0;
+  let anyLand = null;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= W.wh) continue;
+    const nc = ny * G + nx; if (W.water[nc]) continue;
+    const lxy = cellXY(W, nc);
+    if (!anyLand) anyLand = lxy;
+    // Own-country land: check the land cell itself is inside the shape.
+    const k = W.byA3[a3];
+    if (k && k.path && FAC_CTX && typeof FAC_CTX.isPointInPath === 'function') {
+      try { if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return [(wxy[0] + lxy[0]) / 2, (wxy[1] + lxy[1]) / 2]; } catch (e) {}
+    }
+  }
+  if (anyLand) return [(wxy[0] + anyLand[0]) / 2, (wxy[1] + anyLand[1]) / 2];
+  return cap ? [cap.x, cap.y] : wxy;
+}
 let FAC_CACHE = {};
 function facilitiesFor(a3) {
   if (typeof W === 'undefined' || !W || !W.byA3[a3]) return null;
@@ -185,8 +209,8 @@ function facilitiesFor(a3) {
   if (typeof S !== 'undefined' && S && S.facilities && S.facilities[a3] && Array.isArray(S.facilities[a3].bases)) {
     S.facilities[a3].bases.forEach(b => { if (b && isFinite(b.x) && isFinite(b.y)) bases.push(b); });
   }
-  const portXY = portCell != null ? cellXY(W, portCell) : null;
-  let milPortXY = milPortCell != null ? cellXY(W, milPortCell) : null;
+  const portXY = portCell != null ? coastPoint(a3, portCell, cap) : null;
+  let milPortXY = milPortCell != null ? coastPoint(a3, milPortCell, cap) : null;
   if (milPortXY && portXY && milPortXY[0] === portXY[0] && milPortXY[1] === portXY[1]) milPortXY = [portXY[0] + 18, portXY[1] - 10];
   FAC_CACHE[a3] = { portCell, milPortCell, portXY, milPortXY, base: bases[0] };
   return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases };
