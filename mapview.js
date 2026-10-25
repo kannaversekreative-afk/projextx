@@ -78,17 +78,23 @@ const MapView = (() => {
       else units.push({ type: F.kind, a3, start: nearestWater(W, home.lon, home.lat), pts: null, t: r(), dir: 1, r });
     }
   }
-  function nextSea(u) {
+  function nextSea(u, to) {
     if (u.start == null || !portCells.length) return;
-    const to = portCells[Math.floor(u.r() * portCells.length)];
+    // When called from pumpRoutes, `to` is the destination the queued path was
+    // computed for. Previously nextSea always rolled a NEW random destination
+    // here, discarding the just-computed path and re-queueing the boat, so a
+    // boat only ever got a route when its random roll happened to hit a path
+    // already in the cache. That made boats pop in one by one over many
+    // seconds at game start and vanish again every time one finished a route.
+    if (to == null) to = portCells[Math.floor(u.r() * portCells.length)];
     const key = u.start + '>' + to;
     if (!(key in seaCache)) { routeQueue.push([u, key, to]); return; }
     const p = seaCache[key]; if (!p || p.length < 2) { u.pts = null; return; }
-    u.pts = p; u.len = 0; for (let i = 1; i < p.length; i++) u.len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    u.pts = p; u.waiting = false; u.len = 0; for (let i = 1; i < p.length; i++) u.len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
     u.t = 0; u.dir = 1;
   }
   function pumpRoutes() { // compute at most two sea paths per frame
-    for (let i = 0; i < 2 && routeQueue.length; i++) { const [u, key, to] = routeQueue.shift(); if (!(key in seaCache)) seaCache[key] = seaPath(W, u.start, to); nextSea(u); }
+    for (let i = 0; i < 2 && routeQueue.length; i++) { const [u, key, to] = routeQueue.shift(); if (!(key in seaCache)) seaCache[key] = seaPath(W, u.start, to); nextSea(u, to); }
   }
   function bez(a, b, t) {
     const d = Math.hypot(b.x - a.x, b.y - a.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2 - d * 0.22, u = 1 - t;
@@ -107,7 +113,10 @@ const MapView = (() => {
       if (u.type === 'plane') {
         const d = Math.max(30, Math.hypot(u.to.x - u.from.x, u.to.y - u.from.y));
         u.t += dt * 24 / d;
-        if (u.t >= 1) { u.from = u.dir > 0 ? u.to : u.from; u.to = u.dir > 0 ? W.cities[st.co[u.a3].city] : u.dests[Math.floor(u.r() * u.dests.length)]; u.dir = -u.dir; u.t = 0; }
+        // On arrival the plane is AT u.to, so the next leg must start there.
+        // Previously the return leg kept the old u.from, so the next outbound
+        // leg teleported from the home city back to the previous destination.
+        if (u.t >= 1) { const arrived = u.to; u.from = arrived; u.to = u.dir > 0 ? W.cities[st.co[u.a3].city] : u.dests[Math.floor(u.r() * u.dests.length)]; u.dir = -u.dir; u.t = 0; }
       } else {
         if (!u.pts) { if (!u.waiting) { u.waiting = true; nextSea(u); } else if (routeQueue.every(q => q[0] !== u)) { u.waiting = false; } return; }
         u.t += u.dir * dt * 3 / Math.max(20, u.len);
