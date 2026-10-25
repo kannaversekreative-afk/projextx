@@ -76,6 +76,8 @@ function migrateSave(s) {
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
   if (s.extra == null) s.extra = {};
+  if (s.facilities == null) s.facilities = {};
+  if (s.lastWarDay == null) s.lastWarDay = null;
   if (!Array.isArray(s.papers)) s.papers = [];
   if (s.leader == null) s.leader = false;
   if (s.countryName === undefined) s.countryName = null;
@@ -786,6 +788,7 @@ function renderPopup() {
       <h5>Businesses here</h5>
       ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('') || `<p class="muted small">No businesses here yet. ${esc(co.name)} is this country's main business — see it in Markets if you want its stock.</p>`}
       <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
+      ${W.byA3[c.a3].capital === c.id && c.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${c.a3}">INVADE</button></div>` : ''}
     </div>`;
   } else if (p.type === 'country') {
     const k = W.byA3[p.a3], co = S.co[p.a3], st = countryStatus(p.a3), cs = country(p.a3), cap = W.cities[k.capital];
@@ -797,6 +800,7 @@ function renderPopup() {
       ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
       <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
+      ${p.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${p.a3}">INVADE</button></div>` : ''}
     </div>`;
   } else if (p.type === 'pin') {
     const lot = p.lot, city = CityView.city, co = S.co[city.a3];
@@ -1063,7 +1067,8 @@ PANELS.nation = () => {
   const cs = country(S.home), k = W.byA3[S.home];
   const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).map(n => {
     const rel = getRel(S.home, n), err = canAttack(n);
-    return `<div class="kv"><span>${W.byA3[n].flag} ${esc(cname(n))} · Relations ${rel}</span><span><button class="btn small" data-a="diplomacy" data-x="${n}">${fmtMoney(diplomacyCost(n), true)}</button> ${err ? `<span class="muted small">${esc(err)}</span>` : `<button class="btn small" data-a="war" data-x="${n}">DECLARE WAR (${Math.round(warOdds(S.home, n) * 100)}%)</button>`}</span></div>`;
+    const wp = warPlanScore({ target: n, army: 100, navy: 100, air: 100, approachBonus: 0.15, research: false });
+    return `<div class="kv"><span>${W.byA3[n].flag} ${esc(cname(n))} · Relations ${rel}</span><span><button class="btn small" data-a="diplomacy" data-x="${n}">${fmtMoney(diplomacyCost(n), true)}</button> ${err ? `<span class="muted small">${esc(err)}</span>` : `<button class="btn small" data-a="warPlan" data-x="${n}">PLAN ATTACK (${Math.round(wp.winP * 100)}%)</button>`}</span></div>`;
   }).join('') || '<p class="muted small">No land neighbours. You need Destroyers or Stealth fighters to strike overseas.</p>';
   const occ = Object.keys(S.countries).filter(a => S.countries[a].occ === S.home);
   return panelShell('Nation', `${k.flag} ${esc(k.name)} · ${esc(countryStatus(S.home).t)}`,
@@ -1074,7 +1079,7 @@ PANELS.nation = () => {
     <div class="kv"><span>Income tax</span><span><input type="range" min="0" max="40" step="1" value="${Math.round((cs.incTax || 0.20) * 100)}" data-in="taxInc" data-x=""> ${Math.round((cs.incTax || 0.20) * 100)}%</span></div>
     <div class="kv"><span>VAT (sales tax)</span><span><input type="range" min="0" max="20" step="1" value="${Math.round((cs.vat || 0.05) * 100)}" data-in="taxVat" data-x=""> ${Math.round((cs.vat || 0.05) * 100)}%</span></div>
     ${S.yearReport ? `<h4>Last year in review (${S.yearReport.year})</h4>${S.yearReport.entries.map(e => `<div class="kv"><span>${esc(e.name)} · ${e.old.toFixed(1)}★ → ${e.new.toFixed(1)}★</span><b>${esc(e.reasons.join(' '))}</b></div>`).join('')}<p class="muted small">${esc(S.yearReport.taxLines.join(' '))}</p>` : ''}
-    ${S.wars.length ? `<h4>Wars</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))} · Front ${Math.round(w.front)}%</span><button class="btn" data-a="peace">SUE FOR PEACE · ${fmtMoney(peaceCost(), true)}</button></div>`).join('')}` : ''}
+    ${S.wars.length ? `<h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('')}<p class="muted small">No buying peace. Your own wars are decided the moment you submit an attack plan.</p>` : ''}
     <h4>Projects</h4>${PROJECTS.map(d => {
       const run = cs.proj.find(p => p.id === d.id && p.until > S.day);
       return `<div class="kv"><span>${d.icon} ${d.name} · ${d.desc}</span>${run ? '<span class="tagp green">ACTIVE</span>' : `<button class="btn" data-a="project" data-x="${d.id}">${fmtMoney(projectCost(d), true)}</button>`}</div>`;
@@ -1105,6 +1110,42 @@ PANELS.leader = () => {
     ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}${bc.week && bc.week.profit ? ' · ' + fmtMoney(bc.week.profit, true) + '/week' : ''}</b></div>`).join('')}
     <div class="row"><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="military">MILITARY</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button></div>`);
 };
+PANELS.warplan = () => {
+  const plan = UI.warPlan; if (!plan || !S.countries[plan.target]) return panelShell('War Plan', '', '<p class="muted">Pick a country to invade first.</p>');
+  const err = canAttack(plan.target);
+  const { att, def, winP } = warPlanScore(plan);
+  const approaches = approachList(plan.target);
+  const commitRow = (branch, label) => `<div class="kv"><span>${label} Lv ${country(S.home).milLv[branch]} · Commit ${plan[branch]}%</span><span><button class="btn small" data-a="warCommit" data-x="${branch}|-25">−25</button> <button class="btn small" data-a="warCommit" data-x="${branch}|25">+25</button></span></div>`;
+  return panelShell(`Invade ${cname(plan.target)}`, `${W.byA3[plan.target].flag} ${esc(cname(plan.target))} · Relations ${getRel(S.home, plan.target)} · Treasury ${fmtMoney(S.cash, true)}`,
+    `${err ? `<div class="card in"><p class="muted">${esc(err)}</p></div>` : ''}
+    <h4>1 · Position — where do you attack from?</h4><p class="muted small">Put your troops where you think they will work, then submit. The game decides from power and endurance, not just army size.</p>
+    ${approaches.map(a => a.ok ? `<button class="btn ${plan.approach === a.id ? 'btn3d orange' : ''} wide" data-a="warApproach" data-x="${plan.target}|${a.id}">${a.name} · +${Math.round(a.bonus * 100)}% power — ${a.why}</button>` : `<p class="muted small">${a.name} — not available: ${a.why}</p>`).join('')}
+    <h4>2 · Commit your forces</h4><p class="muted small">Committing less keeps forces home but cuts your attack power in proportion.</p>
+    ${commitRow('army', '🪖 Army')}${commitRow('navy', '⚓ Navy')}${commitRow('air', '✈️ Air force')}
+    <h4>3 · Upgrade, research, sell</h4>
+    <div class="row wrap">${Object.entries(MILITARY).map(([b, d]) => { const lv = country(S.home).milLv[b], cost = milCost(b); return cost != null ? `<button class="btn" data-a="milUp" data-x="${b}">Upgrade ${d.name} · ${fmtMoney(cost, true)}</button>` : ''; }).join('')}</div>
+    <div class="kv"><span>War research · +15% attack power, this attack only</span>${plan.research ? '<span class="tagp green">RESEARCHED</span>' : `<button class="btn" data-a="warResearch">RESEARCH · ${fmtMoney(researchWarCost(), true)}</button>`}</div>
+    <div class="kv"><span>Sell some stock for war funds (sells 25% of each holding)</span><button class="btn" data-a="warSell">SELL 25%</button></div>
+    <div class="kv"><span>Military bases · +5% war power each, beyond your first</span><button class="btn" data-a="buyBase">BUY BASE · ${fmtMoney(baseCost(), true)}</button></div>
+    <h4>4 · How long can each side last?</h4><p class="muted small">Power is army strength. Endurance is treasury, supplies (GDP per person), stability and debt. The side that runs out first loses, even if its army is bigger.</p>
+    <div class="stats3 box"><div><span>You — power</span><b>${Math.round(att.effective).toLocaleString()}</b></div><div><span>Them — power</span><b>${Math.round(def.effective).toLocaleString()}</b></div><div><span>Your win chance</span><b>${Math.round(winP * 100)}%</b></div></div>
+    <div class="kv"><span>You can last</span><b>~${Math.round(att.weeks)} weeks · Treasury ${fmtMoney(att.treasury, true)} · Stability ${Math.round(att.stab)}</b></div>
+    <div class="kv"><span>They can last</span><b>~${Math.round(def.weeks)} weeks · Treasury ${fmtMoney(def.treasury, true)} · Stability ${Math.round(def.stab)}</b></div>
+    <div class="kv"><span>You — people</span><b>${fmtPop(country(S.home).pop)}</b></div><div class="kv"><span>Them — people</span><b>${fmtPop(country(plan.target).pop)}</b></div>
+    <button class="btn3d orange wide" data-a="warSubmit" ${err ? 'disabled' : ''}>SUBMIT ATTACK</button>
+    <p class="muted small">No buying peace afterwards. You can declare war only once every 10 years, win or lose.</p>`);
+};
+PANELS.warresult = () => {
+  const r = S.lastWarResult; if (!r) return panelShell('War result', '', '<p class="muted">No war result yet.</p>');
+  const win = r.attackerWins;
+  return panelShell(win ? `VICTORY — ${cname(r.target)} occupied` : `DEFEAT — ${cname(r.target)} held`, `Your win chance was ${Math.round(r.winP * 100)}% · War cost ${fmtMoney(r.cost, true)}`,
+    `<div class="stats3 box"><div><span>You — power</span><b>${Math.round(r.att.effective).toLocaleString()}</b></div><div><span>Them — power</span><b>${Math.round(r.def.effective).toLocaleString()}</b></div><div><span>You could last</span><b>~${Math.round(r.att.weeks)} weeks</b></div></div>
+    <div class="kv"><span>You</span><b>Army Lv ${r.att.milLv.army} · Navy Lv ${r.att.milLv.navy} · Air Lv ${r.att.milLv.air} · Stability ${Math.round(r.att.stab)} · Debt ${Math.round(r.att.debtRatio * 100)}% of GDP</b></div>
+    <div class="kv"><span>Them</span><b>Army Lv ${r.def.milLv.army} · Navy Lv ${r.def.milLv.navy} · Air Lv ${r.def.milLv.air} · Stability ${Math.round(r.def.stab)} · Debt ${Math.round(r.def.debtRatio * 100)}% of GDP</b></div>
+    ${win ? `<p><b>${cname(r.target)} is now occupied by you.</b> Its main company and its people count toward your nation.</p>` : `<p><b>Your invasion was driven back.</b> Your stability fell 15 points and the war cost was paid from your treasury.</p>`}
+    <p class="muted small">Next war: ${yearOf(S.day + WAR_COOLDOWN_DAYS)} — one declaration every 10 years.</p>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
 PANELS.military = () => {
   const cs = country(S.home);
   return panelShell('Military', `Power ${Math.round(milPower(S.home)).toLocaleString()} · Rank #${milRank(S.home)}`,
@@ -1112,7 +1153,8 @@ PANELS.military = () => {
       const lv = cs.milLv[b], cost = milCost(b);
       return `<div class="card in"><h4>${d.icon} ${d.name}</h4><p class="muted small">Now: ${d.levels[lv]}</p>${cost != null ? `<button class="btn" data-a="milUp" data-x="${b}">Upgrade to ${d.levels[lv + 1]} · ${fmtMoney(cost, true)}</button>` : '<span class="tagp green">TOP LEVEL</span>'}</div>`;
     }).join('') +
-    `<h4>Wars</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}`);
+    `<div class="card in"><h4>🛡️ Military bases</h4><p class="muted small">You start with one base. Each extra base adds +5% to your war power. You have ${facilityCount(S.home)} base${facilityCount(S.home) === 1 ? '' : 's'}.</p><button class="btn" data-a="buyBase">BUY MILITARY BASE · ${fmtMoney(baseCost(), true)}</button></div>
+    <h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}`);
 };
 PANELS.estate = () => {
   return panelShell('My Estate', `${S.props.length} buildings · Value ${fmtMoney(propValue(), true)}`,
@@ -1271,8 +1313,13 @@ const A = {
   acceptOffer: x => act(() => acceptOffer(x), 'Offer accepted'),
   project: x => act(() => fundProject(x), 'Project funded'),
   diplomacy: x => act(() => diplomacy(x), 'Relations improved'),
-  war: x => act(() => declareWar(x), 'War declared'),
-  peace: () => act(() => suePeace(), 'Peace signed'),
+  warPlan: x => { const ap0 = approachList(x).find(a => a.ok); UI.warPlan = { target: x, army: 100, navy: 100, air: 100, approach: ap0 ? ap0.id : 'land', approachBonus: ap0 ? ap0.bonus : 0, research: false }; closePopup(); if (CityView.isOpen()) leaveCity(); openPanel('warplan'); },
+  warApproach: x => { const [target, id] = x.split('|'); const ap = approachList(target).find(a => a.id === id); if (!ap || !ap.ok) return toast(ap ? ap.why : 'Approach not available', 'bad'); UI.warPlan.approach = id; UI.warPlan.approachBonus = ap.bonus; renderPanel(); },
+  warCommit: x => { const [branch, delta] = x.split('|'); UI.warPlan[branch] = clamp(UI.warPlan[branch] + (+delta), 0, 100); renderPanel(); },
+  warResearch: () => { const e = researchWar(UI.warPlan); if (e) toast(e, 'bad'); else toast('War research done: +15% attack power for this attack', 'good'); save(); renderPanel(); },
+  warSell: () => { const before = S.cash; const e = sellForWar(); if (e) toast(e, 'bad'); else toast(`Sold stock for ${fmtMoney(S.cash - before, true)} war funds`, 'good'); save(); renderPanel(); },
+  warSubmit: () => { const e = resolveWar(UI.warPlan); if (e) return toast(e, 'bad'); closePanel(); openPanel('warresult'); save(); },
+  buyBase: () => act(() => buyBase(), 'Military base built'),
   milUp: x => act(() => upgradeMilitary(x), 'Military upgraded'),
   fleetUp: x => act(() => upgradeFleet(x), 'Fleet upgraded'),
   fleetSell: x => act(() => sellFleet(x), 'Fleet level sold'),
