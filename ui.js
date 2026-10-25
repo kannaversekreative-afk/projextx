@@ -1,94 +1,235 @@
-// HUD, panels, popups, onboarding and the real-time game loop.
+// Ticker Tycoon UI — rewritten for the v2 engine (S.v === 2).
+// Plain JS, no framework. Original art and names only.
+// Wiring note: this file uses ONLY engine functions that exist in
+// data.js / sim.js / world-events.js / mapview.js / cityview.js.
 'use strict';
 
 let W = null, S = null;
-const UI = { panel: null, stack: [], popup: null, modal: null, range: '1Y', q: '', sector: 'All', bizTab: 'all', needs: false, mktTab: 'overview', lastPanel: 0, acc: 0, pick: null };
+const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: false,
+  range: '1Y', tradeRange: '1Y', web: { view: 'search', q: '', a3: null }, pick: null,
+  mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0 };
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const upCls = x => x >= 0 ? 'up' : 'down';
 const DAY_MS_BY_SPEED = [Infinity, 1400, 650, 200];
-
-// ---------- icons (inline SVG, original) ----------
 const IC = {
-  markets: '<svg viewBox="0 0 28 28"><path d="M4 22V12M10 22V6M16 22v-8M22 22V9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
-  business: '<svg viewBox="0 0 28 28"><path d="M5 11h18l-2-5H7zM6 11v11h16V11M11 22v-6h6v6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>',
-  nation: '<svg viewBox="0 0 28 28"><path d="M7 24V4M7 5h14l-3 4.5 3 4.5H7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg>',
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
-  bell: '<svg viewBox="0 0 28 28"><path d="M14 4a7 7 0 0 0-7 7v5l-2 4h18l-2-4v-5a7 7 0 0 0-7-7zM11 22a3 3 0 0 0 6 0" fill="currentColor"/></svg>',
-  gear: '<svg viewBox="0 0 28 28"><path d="M14 9.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm9.6 6.1 2.1 1.6-2 3.5-2.5-1a8 8 0 0 1-2.4 1.4l-.4 2.6h-4l-.4-2.6a8 8 0 0 1-2.4-1.4l-2.5 1-2-3.5 2.1-1.6a8 8 0 0 1 0-3.2L2.3 10.8l2-3.5 2.5 1a8 8 0 0 1 2.4-1.4L9.6 4.3h4l.4 2.6a8 8 0 0 1 2.4 1.4l2.5-1 2 3.5-2.1 1.6a8 8 0 0 1 0 3.2z" fill="currentColor"/></svg>',
-  bag: '<svg viewBox="0 0 28 28"><path d="M6 9h16l-1.2 14H7.2zM10 9V7a4 4 0 0 1 8 0v2" fill="none" stroke="#f5b301" stroke-width="2.6" stroke-linejoin="round"/></svg>',
-  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>',
-  minus: '<svg viewBox="0 0 24 24"><path d="M5 12h14" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>',
-  locate: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  layers: '<svg viewBox="0 0 28 28"><path d="M14 4 3 9.5 14 15l11-5.5zM3 14l11 5.5L25 14M3 18.5 14 24l11-5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>',
-  menu: '<svg viewBox="0 0 28 28"><path d="M5 8h18M5 14h18M5 20h18" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>',
   pause: '<svg viewBox="0 0 20 20"><rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/></svg>',
   play1: '<svg viewBox="0 0 20 20"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>',
   play2: '<svg viewBox="0 0 20 20"><path d="M2 4l8 6-8 6zM10 4l8 6-8 6z" fill="currentColor"/></svg>',
   play3: '<svg viewBox="0 0 20 20"><path d="M1 4l6 6-6 6zM7 4l6 6-6 6zM13 4l6 6-6 6z" fill="currentColor"/></svg>',
-  trophy: '<svg viewBox="0 0 28 28"><path d="M8 4h12v6a6 6 0 0 1-12 0zM8 6H4v2a4 4 0 0 0 4 4M20 6h4v2a4 4 0 0 1-4 4M14 16v4M9 24h10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
-  news: '<svg viewBox="0 0 28 28"><rect x="5" y="5" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9 10h10M9 14h10M9 18h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 const LOGO_SVG = '<svg viewBox="0 0 40 40"><path d="M9 25c6-1 15-6 22-14M9 31c8-1 16-5 22-11" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none"/></svg>';
-const logoHTML = size => `<span class="logo" style="background:${S.company.color};width:${size}px;height:${size}px">${LOGO_SVG}</span>`;
 
-// ---------- sound ----------
-let AC = null;
-function beep(f, d, type) {
-  if (!S || !S.settings || S.settings.vol * S.settings.ui <= 0) return;
-  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); const o = AC.createOscillator(), g = AC.createGain(); o.type = type || 'sine'; o.frequency.value = f; g.gain.value = 0.06 * S.settings.vol * S.settings.ui; g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + d); o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime + d); } catch (e) { /* audio unavailable */ }
+// ---------- saves: IndexedDB first, localStorage fallback ----------
+const IDB_NAME = 'ticker-tycoon', IDB_STORE = 'saves';
+function idb() {
+  return new Promise(res => {
+    if (!window.indexedDB) return res(null);
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (e) {} };
+    req.onsuccess = () => res(req.result); req.onerror = () => res(null);
+  });
 }
-const sfx = { tap: () => beep(660, 0.06), cash: () => { beep(880, 0.08); setTimeout(() => beep(1320, 0.12), 70); }, bad: () => beep(220, 0.2, 'triangle') };
+async function idbGet(key) {
+  const db = await idb(); if (!db) return null;
+  return new Promise(res => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const r = tx.objectStore(IDB_STORE).get(key);
+      r.onsuccess = () => res(r.result || null); r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+async function idbPut(key, val) {
+  const db = await idb(); if (!db) return false;
+  return new Promise(res => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const r = tx.objectStore(IDB_STORE).put(val, key);
+      r.onsuccess = () => res(true); r.onerror = () => res(false);
+    } catch (e) { res(false); }
+  });
+}
+async function idbDel(key) {
+  const db = await idb(); if (!db) return;
+  try { db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(key); } catch (e) {}
+}
+async function loadSave() {
+  const fromIdb = await idbGet('main');
+  if (fromIdb && fromIdb.v === 2 && !fromIdb.over) return fromIdb;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && s.v === 2 && !s.over) { idbPut('main', s); return s; }
+      if (s && s.over) UI.lastOver = s.over;
+    }
+  } catch (e) {}
+  return null;
+}
+let saveQueued = false;
+function save() {
+  if (!S || UI.pick) return;
+  if (saveQueued) return; saveQueued = true;
+  setTimeout(async () => {
+    saveQueued = false;
+    S.lastSeen = Date.now();
+    const ok = await idbPut('main', S);
+    if (!ok) {
+      try {
+        const copy = JSON.parse(JSON.stringify(S));
+        for (const k in copy.co) { copy.co[k].h.d = copy.co[k].h.d.slice(-120); copy.co[k].h.w = copy.co[k].h.w.slice(-104); }
+        copy.news = (copy.news || []).slice(0, 60);
+        localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
+      } catch (e) {}
+    }
+  }, 0);
+}
 
-// ---------- charts ----------
-function chart(vals, o) {
-  o = o || {}; const Wd = 400, H = o.h || 160, ax = o.axis ? 58 : 4;
-  vals = vals.filter(v => isFinite(v)); if (vals.length < 2) vals = [vals[0] || 0, vals[0] || 0];
-  let lo = Math.min(...vals), hi = Math.max(...vals); if (hi - lo < 1e-9) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
-  const pts = vals.map((v, i) => [ax + i / (vals.length - 1) * (Wd - ax - 6), 8 + (1 - (v - lo) / (hi - lo)) * (H - 16)]);
-  const col = o.color || (vals[vals.length - 1] >= vals[0] ? 'var(--green)' : 'var(--orange)');
-  let lab = ''; if (o.axis) for (let k = 0; k < 4; k++) { const v = hi - (hi - lo) * k / 3, y = 8 + k / 3 * (H - 16); lab += `<text x="0" y="${y + 4}" class="axis">${o.money === false ? v.toFixed(0) : fmtMoney(v, true)}</text>`; }
+// ---------- small helpers ----------
+function toast(t, kind) {
+  const d = document.createElement('div'); d.className = 'toast ' + (kind || '');
+  d.textContent = t; $('toasts').appendChild(d); setTimeout(() => d.remove(), 3000);
+}
+function act(fn, ok) {
+  const e = fn(); if (e) toast(e, 'bad'); else { if (ok) toast(ok, 'good'); }
+  save(); refreshAll(); return !e;
+}
+function lineChart(vals, o) {
+  o = o || {}; const Wd = 400, H = o.h || 150;
+  vals = (vals || []).filter(v => isFinite(v));
+  if (vals.length < 2) vals = [vals[0] || 0, vals[0] || 0];
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const pts = vals.map((v, i) => [4 + i / (vals.length - 1) * (Wd - 10), 8 + (1 - (v - lo) / (hi - lo)) * (H - 16)]);
+  const col = o.color || (vals[vals.length - 1] >= vals[0] ? '#12a150' : '#e5484d');
   const d = 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
-  const area = d + `L${pts[pts.length - 1][0].toFixed(1)},${H}L${pts[0][0].toFixed(1)},${H}Z`;
-  return `<svg class="chart" viewBox="0 0 ${Wd} ${H}" preserveAspectRatio="none">${lab}<path d="${area}" fill="${col}" opacity="0.08"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+  return `<svg class="chart" viewBox="0 0 ${Wd} ${H}" preserveAspectRatio="none"><path d="${d}L${pts[pts.length - 1][0].toFixed(1)},${H}L${pts[0][0].toFixed(1)},${H}Z" fill="${col}" opacity="0.10"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
 }
-function seriesFor(h, range) {
-  if (range === '1M') return h.d.slice(-22); if (range === '6M') return h.d.slice(-130);
-  // Early in the game there are few weekly points; fall back to daily closes.
-  if (range === '1Y') return h.w.length >= 26 ? h.w.slice(-52) : h.d.slice(-130);
-  if (range === '5Y') return h.w.length >= 26 ? h.w.slice(-260) : h.d.slice(-130);
-  return h.m.length > 12 ? h.m : h.w.length >= 26 ? h.w : h.d;
+function sma(vals, n) {
+  const out = [];
+  for (let i = 0; i < vals.length; i++) {
+    const s = vals.slice(Math.max(0, i - n + 1), i + 1);
+    out.push(s.reduce((a, b) => a + b, 0) / s.length);
+  }
+  return out;
+}
+function candleChart(closes) {
+  const Wd = 400, H = 180;
+  const groups = [];
+  for (let i = 0; i < closes.length; i += 5) {
+    const g = closes.slice(i, i + 5); if (g.length) groups.push(g);
+  }
+  if (groups.length < 2) return lineChart(closes, { h: H });
+  const candles = groups.map(g => ({ o: g[0], c: g[g.length - 1], h: Math.max(...g), l: Math.min(...g) }));
+  let lo = Math.min(...candles.map(c => c.l)), hi = Math.max(...candles.map(c => c.h));
+  if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const y = v => 8 + (1 - (v - lo) / (hi - lo)) * (H - 16);
+  const bw = Math.max(2, Math.min(10, (Wd - 8) / candles.length * 0.55));
+  const step = (Wd - 8) / candles.length;
+  const s20 = sma(closes, 20);
+  const smaPts = candles.map((c, i) => {
+    const idx = Math.min(closes.length - 1, (i + 1) * 5 - 1);
+    return [8 + i * step + step / 2, y(s20[idx])];
+  });
+  const smaD = 'M' + smaPts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
+  const bars = candles.map((c, i) => {
+    const x = 8 + i * step + step / 2, col = c.c >= c.o ? '#12a150' : '#e5484d';
+    return `<line x1="${x.toFixed(1)}" y1="${y(c.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(c.l).toFixed(1)}" stroke="${col}" stroke-width="1.6"/><rect x="${(x - bw / 2).toFixed(1)}" y="${y(Math.max(c.o, c.c)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(y(c.o) - y(c.c))).toFixed(1)}" fill="${col}"/>`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${Wd} ${H}" preserveAspectRatio="none"><path d="${smaD}" fill="none" stroke="#7c4dff" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-dasharray="4 3"/>${bars}</svg>`;
 }
 const rangeSeg = (list, cur, act) => `<div class="seg">${list.map(r => `<button class="${cur === r ? 'on' : ''}" data-a="${act}" data-x="${r}">${r}</button>`).join('')}</div>`;
-const chg = (a, b) => b ? a / b - 1 : 0;
-const upCls = x => x >= 0 ? 'up' : 'down';
-const stars = x => `<span class="star">★</span> ${(x || 0).toFixed(1)}`;
+const chgVs = (c) => {
+  const h = c.h && c.h.d; if (h && h.length >= 2) return h[h.length - 1] / h[h.length - 2] - 1;
+  return c.price / (c.p0 || c.price) - 1;
+};
 
-// ---------- boot ----------
-function boot() {
+// ---------- modals / panels ----------
+function openModal(html, kind) {
+  UI.modal = kind || 'sheet';
+  $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
+}
+function closeModal() { UI.modal = null; $('modal').innerHTML = ''; }
+function openPanel(name, args) {
+  closeModal(); if (CityView.isOpen()) leaveCity();
+  UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
+}
+function pushPanel(args) { UI.stack.push(args); renderPanel(); }
+function closePanel() { UI.panel = null; UI.stack = []; $('panel').classList.remove('open'); renderHUD(); }
+function panelShell(title, sub, body) {
+  const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
+  return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
+}
+function renderPanel() {
+  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); return; }
+  const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
+  if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
+  let html = '';
+  if (UI.panel === 'stock' && cur) html = tradeView(cur.a3);
+  else if (PANELS[UI.panel]) html = PANELS[UI.panel]();
+  else html = '<div class="card in"><p class="muted">That screen is not ready yet.</p></div>';
+  $('panel').innerHTML = html; $('panel').classList.add('open');
+}
+
+// ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
+function renderHUD() {
+  if (!S || UI.pick) return;
+  const nw = netWorth(), lv = level(), dr = dailyRewardInfo();
+  const goals = `<div class="goals card"><span>👥 Population <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 Net worth <b>${fmtMoney(nw, true)}</b></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>`;
+  $('hud').innerHTML = `<div class="topbar card">
+    <button class="logo-btn" data-a="locate" aria-label="Go home"><span class="logo" style="background:${homeCo().color}">${LOGO_SVG}</span></button>
+    <div class="nw"><span>Net worth</span><b>${fmtMoney(nw, true)}</b><small>Cash ${fmtMoney(S.cash, true)}</small></div>
+    <div class="lv"><span>Level</span><b>Lv ${lv}</b><small>${careerName()}</small></div>
+    <button class="claim ${dr.claimed ? 'done' : ''}" data-a="claimDaily">${dr.claimed ? 'Claimed ✓' : `Claim ${fmtMoney(dr.amount, true)}`}</button>
+    <button class="shop-btn" data-a="panel" data-x="shop">🛍️ Shop</button>
+    <button class="more-btn" data-a="more" aria-label="More">${IC.more}</button>
+  </div>${goals}
+  <div class="timebar card">
+    <div class="speeds">${[0, 1, 2, 3].map(i => `<button class="${S.speed === i ? 'on' : ''}" data-a="speed" data-x="${i}" aria-label="${['Pause', 'Normal speed', 'Fast', 'Fastest'][i]}">${[IC.pause, IC.play1, IC.play2, IC.play3][i]}</button>`).join('')}</div>
+    ${S.mode === 'infinite' ? '<button class="skip" data-a="skipMenu">SKIP ⏩</button>' : '<span class="muted small">Normal mode: time never skips</span>'}
+    <button class="icon-btn" data-a="zoom" data-x="1.4">＋</button>
+    <button class="icon-btn" data-a="zoom" data-x="0.7">－</button>
+    <button class="icon-btn" data-a="locate" aria-label="Go home">⌖</button>
+  </div>`;
+  if (UI.panel) $('panel').classList.add('open');
+}
+function renderCityHUD() {
+  if (!CityView.isOpen()) { $('chud').innerHTML = ''; return; }
+  const c = CityView.city, k = W.byA3[c.a3], co = S.co[c.a3];
+  const mine = controlled(c.a3) ? co.locs.filter(l => l && W.cities[c.id] && co.city === c.id).length : 0;
+  $('chud').innerHTML = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)}</span></div>
+    <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
+}
+
+// ---------- boot / onboarding ----------
+async function boot() {
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('empty', () => { if (!UI.pick) closePopup(); });
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap);
+  MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
   CityView.init($('cityview'), onPin);
-  const saved = storeGet(SAVE_KEY);
   document.addEventListener('click', onClick);
   document.addEventListener('input', onInput);
-  addEventListener('pagehide', save); document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
-  if (saved && saved.v === 1 && !saved.over && saved.countries) { S = saved; enterGame(true); }
-  else showTitle(saved);
+  document.addEventListener('change', onChange);
+  addEventListener('pagehide', save);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  const saved = await loadSave();
+  if (saved) { S = saved; enterGame(true); }
+  else showTitle();
 }
-function save() { if (S && !UI.pick) { S.lastSeen = Date.now(); if (!storeSet(SAVE_KEY, S)) trimSave(); } }
-function trimSave() { for (const k in S.co) { const h = S.co[k].h; h.w = h.w.slice(-104); } S.news.length = Math.min(S.news.length, 60); storeSet(SAVE_KEY, S); }
-
-// ---------- onboarding ----------
-function showTitle(saved) {
+function showTitle() {
   $('hud').innerHTML = ''; MapView.setPick(false);
   openModal(`<div class="title-card">
     <div class="brand"><span class="logo big" style="background:#2f7cf6">${LOGO_SVG}</span><div><h1>Ticker Tycoon</h1><p>Build an empire across the real world. Grow your nation, grow your money, and beat the market.</p></div></div>
-    ${saved && saved.over ? `<div class="note">Your last run ended with a score of <b>${saved.over.score}</b>.</div>` : ''}
+    ${UI.lastOver ? `<div class="note">Your last run ended with a score of <b>${UI.lastOver.score}</b>.</div>` : ''}
     <button class="btn3d orange wide" data-a="newGame">NEW GAME</button>
   </div>`, 'center');
 }
@@ -99,19 +240,21 @@ function chooseMode() {
       <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Skip ahead a day, a week, a month or a year whenever you want.</span></button>
     </div>`, 'center');
 }
-function startPick() { closeModal(); UI.pick = { a3: null }; MapView.setPick(true); MapView.world(); renderPick(); }
+function startPick() {
+  closeModal(); UI.pick = { a3: null }; MapView.setPick(true); MapView.world(); renderPick();
+}
 function renderPick() {
   const a3 = UI.pick.a3, k = a3 && W.byA3[a3];
   const q = UI.q.trim().toLowerCase();
   const list = q ? W.countries.filter(c => c.playable && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
   $('hud').innerHTML = `<div class="pick-top card"><b>Pick your country</b><span class="muted">Tap a country on the map, or search.</span>
-      <input id="csearch" class="search" placeholder="Search countries" value="${esc(UI.q)}" autocomplete="off">
-      <div class="sugg">${list.map(c => `<button class="chip" data-a="pickCountry" data-x="${c.a3}">${c.flag} ${esc(c.name)}</button>`).join('')}</div></div>
-    ${k ? `<div class="pick-card card">
-      <div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(k.name)}</h2><div class="muted">${esc(k.sub)} · ${k.cities.length} cities</div></div></div>
-      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP per person</span><b>${fmtMoney(k.gdp0 * 1e6 / k.pop0, true)}</b></div><div><span>Neighbours</span><b>${k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).length}</b></div></div>
-      <p class="muted small">${k.wealth > 1.2 ? 'Rich market: high prices and high rents.' : k.wealth > 0.6 ? 'Middle-income market: balanced costs.' : 'Developing market: cheap to start, fast population growth.'} ${k.nb.length > 4 ? 'Many neighbours means more trade and more risk of conflict.' : k.nb.length === 0 ? 'An island: safe from land invasion.' : ''}</p>
-      <button class="btn3d orange wide" data-a="confirmCountry">START IN ${esc(k.name.toUpperCase())}</button></div>` : ''}`;
+    <input id="csearch" class="search" placeholder="Search countries" value="${esc(UI.q)}" autocomplete="off">
+    <div class="sugg">${list.map(c => `<button class="chip" data-a="pickCountry" data-x="${c.a3}">${c.flag} ${esc(c.name)}</button>`).join('')}</div></div>
+  ${k ? `<div class="pick-card card">
+    <div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(k.name)}</h2><div class="muted">${esc(k.sub)} · ${fmtPop(k.pop0)} people</div></div></div>
+    <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP per person</span><b>${fmtMoney(k.gdp0 * 1e6 / k.pop0, true)}</b></div><div><span>Neighbours</span><b>${k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).length}</b></div></div>
+    <p class="muted small">${k.wealth > 1.2 ? 'Rich market: high prices and high rents.' : k.wealth > 0.6 ? 'Middle-income market: balanced costs.' : 'Developing market: cheap to start, fast population growth.'} ${k.nb.length === 0 ? 'An island: safe from land invasion.' : ''}</p>
+    <button class="btn3d orange wide" data-a="confirmCountry">START IN ${esc(k.name.toUpperCase())}</button></div>` : ''}`;
 }
 function nameCompany() {
   const k = W.byA3[UI.pick.a3];
@@ -124,439 +267,100 @@ function nameCompany() {
 function enterGame(returning) {
   UI.pick = null; MapView.setPick(false); closeModal();
   renderHUD(); MapView.home();
-  if (returning) welcomeBack();
-  else { S.tutorial = 0; }
+  if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
 }
-
-// ---------- tutorial ----------
 const TUT = [
   { t: () => S.mode === 'infinite' ? 'Welcome! There is no goal in Infinite mode. Play as long as you like and skip ahead whenever you want.' : `Welcome! You have 100 years. Grow ${esc(cname(S.home))}'s population, grow your money, and beat the stock market.`, btn: 'Next' },
   { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
   { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
-  { t: () => 'Red FOR LEASE signs are empty storefronts. Pick one with lots of foot traffic and open your first store.', done: () => S.stores.length > 0 },
+  { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => S.mode === 'infinite' ? 'Time runs on its own. Use the speed buttons up top, or Skip to jump ahead. Wars, booms and disasters move stock prices, so watch the news.' : 'Time runs on its own. Speed it up or pause up top. Wars, booms and disasters move stock prices, so watch the news.', btn: 'Got it' },
 ];
 function renderTutorial() {
-  const el = $('tut');
-  if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { el.innerHTML = ''; return; }
+  if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
   const s = TUT[S.tutorial];
-  el.innerHTML = `<div class="tut card"><div class="row"><span class="tut-step">Getting started · ${S.tutorial + 1} / ${TUT.length}</span><button class="link" data-a="tutSkip">Skip</button></div>
-    <div class="row start tut-body"><div class="avatar">\u{1F9D1}‍\u{1F4BC}</div><p>${s.t()}</p></div>
-    <div class="tut-foot"><div class="tut-bar"><i style="width:${(S.tutorial + 1) / TUT.length * 100}%"></i></div>${s.btn ? `<button class="btn3d orange" data-a="tutNext">${s.btn.toUpperCase()}</button>` : ''}</div></div>`;
+  $('tut').innerHTML = `<div class="tut card"><p>${s.t}</p><div class="row end"><button data-a="tutSkip">Skip</button>${s.btn ? `<button class="btn" data-a="tutNext">${s.btn}</button>` : '<span class="muted small">Do this to continue</span>'}</div></div>`;
 }
-function tutCheck() { if (S && S.tutorial >= 0 && S.tutorial < TUT.length && TUT[S.tutorial].done && TUT[S.tutorial].done()) { S.tutorial++; renderTutorial(); sfx.cash(); } }
-
-// ---------- HUD ----------
-function nextMove() {
-  const home = W.byA3[S.home], cap = W.cities[home.capital];
-  if (!S.stores.length) return { ic: '\u{1F3EA}', t: 'Open your first store', s: `Lease a storefront in ${cap.name}.`, b: 'OPEN CITY', a: 'enterCity', x: cap.id };
-  const bad = S.stores.find(s => s.profit < 0 && S.day - s.opened > 28);
-  if (bad) return { ic: '⚠️', t: 'A store is losing money', s: `${W.cities[bad.city].name}: ${fmtMoney(bad.profit)}/week.`, b: 'FIX IT', a: 'storeSheet', x: bad.id };
-  const busy = S.stores.find(s => s.demand > s.cap * 1.15);
-  if (busy) return { ic: '\u{1F465}', t: 'Customers are waiting', s: `${W.cities[busy.city].name} needs more staff.`, b: 'ADD STAFF', a: 'storeSheet', x: busy.id };
-  if (!S.stats.trades) return { ic: '\u{1F4C8}', t: 'Buy your first stock', s: 'Beat the market with your portfolio.', b: 'MARKETS', a: 'panel', x: 'markets' };
-  const hc = country(S.home), tense = Object.entries(hc.rel).find(([, v]) => v < -35);
-  if (hc.war) return { ic: '⚔️', t: `${cname(S.home)} is at war`, s: 'Fund national defense to turn the tide.', b: 'NATION', a: 'panel', x: 'nation' };
-  if (tense) return { ic: '\u{1F54A}️', t: `Tension with ${cname(tense[0])}`, s: 'Pay for diplomacy before it turns into war.', b: 'NATION', a: 'panel', x: 'nation' };
-  if (!S.ipo.public && bizValue() >= IPO_MIN) return { ic: '\u{1F514}', t: 'Take your company public', s: 'Your business is big enough for an IPO.', b: 'BUSINESS', a: 'panel', x: 'business' };
-  if (S.props.length === 0 && S.cash > 600000) return { ic: '\u{1F3E2}', t: 'Buy your first building', s: 'Collect rent every week.', b: 'OPEN CITY', a: 'enterCity', x: cap.id };
-  const lv = S.stores.length < 5 ? 5 : S.stores.length < 15 ? 15 : 60;
-  return { ic: '\u{1F680}', t: `Grow to ${lv} stores`, s: `${S.stores.length} open. Find busy streets or a new country.`, b: 'BUSINESS', a: 'panel', x: 'business' };
+function tutCheck() {
+  if (S && S.tutorial >= 0 && S.tutorial < TUT.length && TUT[S.tutorial].done && TUT[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
 }
-function renderHUD() {
-  if (!S) return;
-  const nw = netWorth(), wk = weekProfit(), home = W.byA3[S.home], hc = country(S.home);
-  const nm = nextMove(), unread = Math.min(99, S.notified || 0), mr = marketReturn(), yr = myReturn();
-  $('hud').innerHTML = `
-  <button class="co-card card" data-a="panel" data-x="company">
-    ${logoHTML(46)}
-    <div class="co-info"><b class="co-name">${esc(S.company.name)}</b><span class="muted">${careerName()} · Lv ${level()}</span>
-      <div class="co-money"><span class="dollar">$</span><b>${fmtMoney(S.cash, Math.abs(S.cash) >= 1e6).replace('$', '')}</b>${wk ? `<span class="${wk >= 0 ? 'pos' : 'neg'}">${wk >= 0 ? '+' : ''}${fmtMoney(wk, true)}</span>` : ''}${S.rating ? `<span class="rating">${stars(S.rating)}</span>` : ''}</div></div>
-    <div class="xpbar"><i style="width:${Math.round(levelProgress() * 100)}%"></i></div>
-  </button>
-  <button class="goals card" data-a="panel" data-x="goals">
-    <div><span>${home.flag} Population</span><b>${fmtPop(hc.pop)}</b><em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></div>
-    <div><span>Net worth</span><b>${fmtMoney(nw, true)}</b><em class="${upCls(yr)}">${fmtPct(yr)}</em></div>
-    <div><span>vs Market</span><b class="${beatMarket() >= 0 ? 'pos' : 'neg'}">${beatMarket() >= 0 ? 'Beating' : 'Behind'}</b><em class="muted">Mkt ${fmtPct(mr)}</em></div>
-  </button>
-  <div class="move card"><div class="move-ic">${nm.ic}</div><div class="move-t"><b>${esc(nm.t)}</b><span>${esc(nm.s)}</span></div><button class="btn3d orange" data-a="${nm.a}" data-x="${nm.x}">${nm.b}</button></div>
-  <div class="tr">
-    <div class="time pill-dark"><div class="date"><b>${fmtDate(S.day)}</b>${S.mode === 'normal' ? `<span>Year ${Math.floor(S.day / 365.25) + 1} of ${NORMAL_YEARS}</span>` : '<span>Infinite</span>'}</div>
-      <div class="speeds">${[0, 1, 2, 3].map(i => `<button class="${S.speed === i ? 'on' : ''}" data-a="speed" data-x="${i}" aria-label="${['Pause', 'Normal speed', 'Fast', 'Fastest'][i]}">${[IC.pause, IC.play1, IC.play2, IC.play3][i]}</button>`).join('')}
-      ${S.mode === 'infinite' ? '<button class="skip" data-a="skipMenu">SKIP</button>' : ''}</div></div>
-    <button class="shop pill-dark" data-a="panel" data-x="shop">${IC.bag}<span>SHOP</span></button>
-    <button class="round" data-a="panel" data-x="news" aria-label="News">${IC.bell}${unread ? `<i class="badge">${unread}</i>` : ''}</button>
-    <button class="round" data-a="panel" data-x="settings" aria-label="Settings">${IC.gear}</button>
-  </div>
-  <div class="zoom"><button class="round" data-a="zoom" data-x="1.6" aria-label="Zoom in">${IC.plus}</button><button class="round" data-a="zoom" data-x="0.625" aria-label="Zoom out">${IC.minus}</button><button class="round" data-a="locate" aria-label="Home">${IC.locate}</button></div>
-  <nav class="nav card">${[['markets', 'Markets'], ['business', 'Business'], ['nation', 'Nation'], ['more', 'More']].map(([k, l]) => `<button class="${UI.panel === k ? 'on' : ''}" data-a="panel" data-x="${k}"><span class="nav-ic ${k === 'business' ? 'brand-ic' : ''}" ${k === 'business' ? `style="background:${S.company.color}"` : ''}>${IC[k]}</span>${l}</button>`).join('')}</nav>`;
-}
-
-// ---------- panels ----------
-function panelShell(icon, title, sub, body, tint) {
-  return `<div class="ph"><span class="ph-ic" style="background:${tint || '#fff4d6'}">${icon}</span><div class="ph-t"><h2>${title}</h2>${sub ? `<span class="muted">${sub}</span>` : ''}</div><button class="xbtn" data-a="closePanel" aria-label="Close">${IC.close}</button></div><div class="pb">${body}</div>`;
-}
-function subShell(title, sub, body) {
-  return `<div class="ph"><button class="xbtn" data-a="panelBack" aria-label="Back">${IC.back}</button><div class="ph-t"><h2>${title}</h2>${sub ? `<span class="muted">${sub}</span>` : ''}</div><button class="xbtn" data-a="closePanel" aria-label="Close">${IC.close}</button></div><div class="pb">${body}</div>`;
-}
-function openPanel(name, args) { closePopup(); UI.panel = name; UI.stack = args ? [args] : []; if (name === 'news') S.notified = 0; renderPanel(); renderHUD(); }
-function pushPanel(args) { UI.stack.push(args); renderPanel(); const pb = $('panel').querySelector('.pb'); if (pb) pb.scrollTop = 0; }
-function closePanel() { UI.panel = null; UI.stack = []; $('panel').classList.remove('open'); renderHUD(); }
-function renderPanel() {
-  const el = $('panel'); if (!UI.panel) { el.classList.remove('open'); return; }
-  const top = UI.stack[UI.stack.length - 1];
-  const old = el.querySelector('.pb'), scroll = old ? old.scrollTop : 0, key = UI.panel + (top ? top.s + (top.sym || '') : '');
-  el.innerHTML = top ? SUB[top.s](top) : PANELS[UI.panel]();
-  el.classList.add('open');
-  const pb = el.querySelector('.pb'); if (pb && UI.panelKey === key) pb.scrollTop = scroll;
-  UI.panelKey = key; UI.lastPanel = performance.now();
-}
-const PANELS = {}, SUB = {};
-
-PANELS.markets = () => {
-  const mr = marketReturn(), yr = myReturn();
-  const tabs = `<div class="tabs">${[['overview', 'Overview'], ['portfolio', 'Portfolio'], ['all', 'All stocks']].map(([k, l]) => `<button class="${UI.mktTab === k ? 'on' : ''}" data-a="mktTab" data-x="${k}">${l}</button>`).join('')}</div>`;
-  let body = '';
-  if (UI.mktTab === 'overview') {
-    const h = seriesFor(S.idx.h, UI.range), ch = chg(h[h.length - 1], h[0]);
-    const movers = W.companies.map(c => { const d = S.co[c.sym].h.d; return { c, ch: d.length > 1 ? chg(d[d.length - 1], d[d.length - 2]) : 0 }; }).sort((a, b) => b.ch - a.ch);
-    const rt = S.regime.type;
-    body = `<div class="card in"><div class="row"><div><span class="muted small">World Index</span><div class="big">${S.idx.v.toFixed(2)}</div><span class="${upCls(ch)}">${fmtPct(ch)} · ${UI.range}</span></div><span class="tagp ${rt === 'bull' || rt === 'bubble' ? 'green' : rt === 'calm' ? 'blue' : 'red'}">${REGIMES[rt].name}</span></div>
-      ${chart(h, { axis: true, money: false })}${rangeSeg(['1M', '6M', '1Y', '5Y', 'ALL'], UI.range, 'range')}</div>
-      <h3 class="sec">Benchmarks</h3>
-      <div class="card in bench"><div><span class="muted">Your performance</span><b class="${upCls(yr)}">${fmtPct(yr)}</b><span class="${upCls(yr)}">${fmtMoney(netWorth() - S.stats.startNet, true)}</span></div>
-        <div class="r"><span class="muted">Market performance</span><b class="${upCls(mr)}">${fmtPct(mr)}</b><span class="muted">since ${START_YEAR}</span></div></div>
-      <p class="muted small">${beatMarket() >= 0 ? `You're beating the market by ${fmtPct(beatMarket())}.` : `You're ${fmtPct(-beatMarket()).replace('+', '')} behind the market.`} Your performance counts everything you own: stocks, stores and buildings.</p>
-      <h3 class="sec">Today's movers</h3>
-      <div class="card in list">${movers.slice(0, 4).concat(movers.slice(-4).reverse()).map(m => stockRow(m.c)).join('')}</div>`;
-  } else if (UI.mktTab === 'portfolio') {
-    const rows = Object.keys(S.holdings).map(sym => { const c = companyInfo(sym); return c ? stockRow(c, true) : ''; }).join('');
-    body = `<div class="card in"><span class="muted small">Portfolio value</span><div class="big">${fmtMoney(holdingsValue())}</div></div>
-      <div class="card in list">${rows || '<div class="empty">No stocks yet. Open <b>All stocks</b> to buy your first one.</div>'}</div>`;
-  } else {
-    body = `<input id="msearch" class="search" placeholder="Search stocks or countries" value="${esc(UI.q)}" autocomplete="off">
-      <div class="chips">${['All'].concat(Object.keys(SECTOR_INFO)).map(s => `<button class="chip ${UI.sector === s ? 'on' : ''}" data-a="sector" data-x="${s}">${s}</button>`).join('')}</div>
-      <div class="card in list" id="mlist">${stockList()}</div>`;
+function welcomeBack() {
+  const info = dailyRewardInfo();
+  if (S.lastSeen && Date.now() - S.lastSeen > 864e5 && !info.claimed) {
+    openModal(`<h2>Welcome back!</h2><p class="muted">Day ${S.day} · ${fmtDate(S.day)} · ${careerName()}</p>
+      <div class="stats3 box"><div><span>Net worth</span><b>${fmtMoney(netWorth(), true)}</b></div><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>vs Market</span><b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></div></div>
+      <button class="btn3d orange wide" data-a="claimDaily">CLAIM DAILY REWARD · ${fmtMoney(info.amount, true)}</button>
+      <button class="btn wide" data-a="closeModal">CONTINUE</button>`, 'sheet');
   }
-  return panelShell(IC.markets, 'Markets', `${W.companies.length} companies in ${new Set(W.companies.map(c => c.a3)).size} countries · ${marketOpen() ? 'Open' : 'Closed for the weekend'}`, tabs + body, '#e6f0ff');
-};
-function stockList() {
-  const q = UI.q.trim().toLowerCase();
-  const list = W.companies.filter(c => (UI.sector === 'All' || c.sector === UI.sector) && (!q || c.sym.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || W.byA3[c.a3].name.toLowerCase().includes(q)));
-  if (S.ipo.public && UI.sector === 'All' && !q) list.unshift(companyInfo(S.ipo.sym));
-  return list.slice(0, 80).map(c => stockRow(c)).join('') || '<div class="empty">No matches.</div>';
-}
-function stockRow(c, showPos) {
-  const o = S.co[c.sym], d = o.h.d, ch = d.length > 1 ? chg(d[d.length - 1], d[d.length - 2]) : 0, k = W.byA3[c.a3];
-  const pos = S.holdings[c.sym], st = countryStatus(c.a3);
-  return `<button class="srow" data-a="stock" data-x="${c.sym}"><span class="flag">${k.flag}</span><div class="sinfo"><b>${c.sym}</b><span>${esc(c.name)}${showPos && pos ? ` · ${pos.qty.toLocaleString()} sh` : ` · ${esc(k.name)}`}${st && st.cls === 'red' ? ' <em class="warn">⚔</em>' : ''}</span></div><span class="pbtn ${ch > 0 ? 'up' : ch < 0 ? 'down' : 'flat'}">${UI.showPct ? fmtPct(ch) : '$' + o.price.toFixed(2)}</span></button>`;
-}
-SUB.stock = ({ sym }) => {
-  const c = companyInfo(sym), o = S.co[sym], k = W.byA3[c.a3], city = W.cities[c.city];
-  const h = seriesFor(o.h, UI.range), ch = chg(o.price, h[0]);
-  const pos = S.holdings[sym], st = countryStatus(c.a3), info = SECTOR_INFO[c.sector] || SECTOR_INFO.Consumer;
-  const fresh = o.res && o.res.day > S.day - 7, fair = intelOn() ? fairValue(sym) : fresh ? o.res.fair : null;
-  return subShell(c.sym, `${k.flag} ${esc(c.name)} · ${esc(city.name)}`, `
-    <div class="card in"><div class="row"><div><div class="big">$${o.price.toFixed(2)}</div><span class="${upCls(ch)}">${fmtPct(ch)} · ${UI.range}</span></div>
-      <span class="tagp ${st.cls}">${st.t}</span></div>${chart(h, { axis: true })}${rangeSeg(['1M', '6M', '1Y', '5Y', 'ALL'], UI.range, 'range')}</div>
-    <div class="card in"><h4>${c.mine ? 'Your company’s stock' : 'Your position'}</h4>
-      ${pos ? `<div class="kv"><span>Shares</span><b>${pos.qty.toLocaleString()}${pos.qty < 0 ? ' (short)' : ''}</b></div><div class="kv"><span>Value</span><b>${fmtMoney(Math.abs(pos.qty) * o.price)}</b></div><div class="kv"><span>Return</span><b class="${upCls((o.price - pos.cost) * pos.qty)}">${fmtMoney((o.price - pos.cost) * pos.qty)}</b></div>` : `<p class="muted small">You don't own any. Cash ${fmtMoney(S.cash)}.</p>`}
-      <div class="grid2"><button class="btn3d green" data-a="tradeSheet" data-x="${sym}|buy">BUY</button><button class="btn3d orange" data-a="tradeSheet" data-x="${sym}|sell">SELL</button><button class="btn" data-a="tradeSheet" data-x="${sym}|short">Short</button><button class="btn" data-a="tradeSheet" data-x="${sym}|cover">Cover</button></div>
-      ${marketOpen() ? '' : '<p class="muted small">Markets are closed on weekends.</p>'}</div>
-    ${c.mine ? '' : `<div class="card in"><h4>Research</h4>
-      ${fresh ? `<div class="kv"><span>Outlook</span><b class="${o.res.dir > 0 ? 'up' : 'down'}">${o.res.strength} ${o.res.dir > 0 ? 'bullish' : 'bearish'}</b></div>${o.res.pattern ? `<div class="kv"><span>Pattern</span><b class="warn">${PATTERN_HINTS[o.res.pattern]}</b></div>` : ''}` : ''}
-      ${fair ? `<div class="kv"><span>Fair value${intelOn() ? ' (intel)' : ' estimate'}</span><b>$${fair.toFixed(2)} <span class="${fair > o.price ? 'up' : 'down'}">(${fair > o.price ? 'under' : 'over'}valued ${fmtPct(Math.abs(fair / o.price - 1)).replace('+', '')})</span></b></div>` : ''}
-      <button class="btn wide" data-a="research" data-x="${sym}">Research for ${fmtMoney(researchCost())}</button>
-      <p class="muted small">Prices drift toward fair value over weeks. Wars, sanctions and disasters in ${esc(k.name)} hit this stock hard.</p></div>`}
-    <div class="card in"><h4>About</h4>
-      <div class="kv"><span>Sector</span><b>${c.sector}</b></div><div class="kv"><span>Headquarters</span><b><button class="link" data-a="flyCity" data-x="${city.id}">${esc(city.name)}, ${esc(k.name)}</button></b></div>
-      <div class="kv"><span>Market cap</span><b>${fmtMoney(o.price * o.shares, true)}</b></div><div class="kv"><span>P/E</span><b>${o.eps > 0 ? (o.price / o.eps).toFixed(1) : '—'}</b></div>
-      <div class="kv"><span>Dividend</span><b>${(info.div * 100).toFixed(1)}%</b></div></div>`);
-};
-function tradeSheet(sym, side) {
-  const o = S.co[sym], label = { buy: 'Buy', sell: 'Sell', short: 'Short', cover: 'Cover' }[side];
-  const pos = S.holdings[sym], max = Math.max(0, side === 'buy' ? Math.floor(S.cash / (o.price * 1.01)) : side === 'sell' ? (pos ? pos.qty : 0) : side === 'cover' ? (pos ? -pos.qty : 0) : Math.floor((Math.max(0, netWorth()) * 0.5 - shortValue()) / o.price));
-  UI.tradeSym = sym;
-  openModal(`<h2>${label} ${sym}</h2><p class="muted">$${o.price.toFixed(2)} per share · up to ${max.toLocaleString()} shares</p>
-    <div class="qty"><button class="btn" data-a="qty" data-x="-10">-10</button><input id="qty" type="number" inputmode="numeric" value="${Math.min(10, Math.max(1, max))}" min="1"><button class="btn" data-a="qty" data-x="10">+10</button></div>
-    <div class="grid3"><button class="btn" data-a="qtySet" data-x="${Math.floor(max / 4)}">25%</button><button class="btn" data-a="qtySet" data-x="${Math.floor(max / 2)}">50%</button><button class="btn" data-a="qtySet" data-x="${max}">Max</button></div>
-    <div class="kv"><span>Total</span><b id="est">—</b></div><div class="kv"><span>Your price impact</span><b id="imp">—</b></div>
-    <button class="btn3d ${side === 'buy' || side === 'cover' ? 'green' : 'orange'} wide" data-a="doTrade" data-x="${sym}|${side}">${label.toUpperCase()}</button>`, 'sheet');
-  updEst();
-}
-function updEst() {
-  const q = $('qty'), e = $('est'), im = $('imp'); if (!q || !e) return;
-  const sym = UI.tradeSym, d = (+q.value || 0) * S.co[sym].price, imp = impactFor(sym, d);
-  e.textContent = fmtMoney(d * (1 + imp / 2)); im.textContent = (imp * 100).toFixed(2) + '%'; im.className = imp > 0.02 ? 'down' : '';
 }
 
-PANELS.business = () => {
-  const countries = Object.keys(S.biz), tab = S.biz[UI.bizTab] ? UI.bizTab : 'all';
-  const list = S.stores.filter(s => (tab === 'all' || s.a3 === tab) && (!UI.needs || s.profit < 0 || s.demand > s.cap * 1.1 || s.sat < 3));
-  const wk = S.week || { profit: 0 };
-  const body = `
-    <div class="row gap"><button class="chip-big ${UI.needs ? 'on' : ''}" data-a="needs">${IC.markets} NEEDS ACTION</button><button class="btn3d orange" data-a="newStore">+ NEW STORE</button></div>
-    ${countries.length ? `<div class="tabs">${['all'].concat(countries).map(a3 => `<button class="${tab === a3 ? 'on' : ''}" data-a="bizTab" data-x="${a3}">${a3 === 'all' ? 'All' : W.byA3[a3].flag + ' ' + esc(W.byA3[a3].name)}</button>`).join('')}</div>` : ''}
-    ${tab !== 'all' ? bizSettings(tab) : countries.length ? `<p class="muted small">Pick a country tab to change prices, quality, wages and marketing.</p>` : ''}
-    ${list.map(storeRow).join('') || `<div class="card in empty">${S.stores.length ? 'Nothing needs your attention.' : 'No stores yet. Tap a city dot on the map, then ENTER CITY and lease a storefront.'}</div>`}
-    <h3 class="sec">Buildings you own</h3>
-    ${S.props.map(p => `<button class="card in srow2" data-a="propSheet" data-x="${p.id}"><div><b>${esc(W.cities[p.city].name)} · ${p.units} units</b><span class="muted">${Math.round(p.occ * 100)}% occupied · worth ${fmtMoney(p.value, true)}</span></div><b class="${upCls(p.income)}">${fmtMoney(p.income, true)}/wk</b></button>`).join('') || '<div class="card in empty">No buildings yet. Look for blue FOR SALE pins in any city.</div>'}
-    <h3 class="sec">Company upgrades</h3>
-    <div class="card in list">${UPGRADES.map(u => `<div class="urow"><div><b>${u.name}</b><span class="muted">${u.desc}</span></div>${S.upgrades[u.id] ? '<span class="tagp green">OWNED</span>' : `<button class="btn" data-a="upgrade" data-x="${u.id}">${fmtMoney(u.cost, true)}</button>`}</div>`).join('')}</div>
-    <h3 class="sec">Finance</h3>
-    <div class="card in"><h4>Stock market listing</h4>
-      ${S.ipo.public ? `<p class="muted small">${esc(S.company.name)} trades as <b>${S.ipo.sym}</b> at $${S.co[S.ipo.sym].price.toFixed(2)}. Outside investors own ${(S.ipo.outside * 100).toFixed(0)}% and get that share of your store profits.</p>${S.ipo.outside > 0.001 ? `<button class="btn wide" data-a="buyback">Buy back 5% (${fmtMoney(S.co[S.ipo.sym].price * 10e6 * Math.min(0.05, S.ipo.outside) * 1.05, true)})</button>` : ''}`
-      : `<p class="muted small">Business value ${fmtMoney(bizValue(), true)}. At ${fmtMoney(IPO_MIN, true)} you can sell part of your company to the public for cash now. You give up that share of future store profits.</p><div class="grid3">${[0.1, 0.25, 0.4].map(p => `<button class="btn" data-a="ipo" data-x="${p}" ${bizValue() < IPO_MIN ? 'disabled' : ''}>Sell ${p * 100}%<br><small>${fmtMoney(bizValue() * p * 0.93, true)}</small></button>`).join('')}</div>`}</div>
-    <div class="card in"><h4>Bank loan</h4><div class="kv"><span>Owed</span><b>${fmtMoney(S.loan)}</b></div><div class="kv"><span>Can borrow</span><b>${fmtMoney(maxLoan(), true)}</b></div><p class="muted small">8% a year, charged weekly. You can borrow up to half of what your stores and buildings are worth.</p>
-      <div class="grid2"><button class="btn" data-a="borrow" ${maxLoan() < 10000 ? 'disabled' : ''}>Borrow ${fmtMoney(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4)), true)}</button><button class="btn" data-a="repay" ${S.loan <= 0 ? 'disabled' : ''}>Repay ${fmtMoney(Math.min(S.loan, Math.max(0, S.cash)), true)}</button></div></div>`;
-  return panelShell(IC.business, 'Business', `${S.stores.length} stores · ${countries.length} ${countries.length === 1 ? 'country' : 'countries'} · ${wk.profit >= 0 ? '+' : ''}${fmtMoney(wk.profit, true)} last week`, body, '#e6faf4');
-};
-function storeRow(st) {
-  const city = W.cities[st.city], b = S.biz[st.a3], T = BIZ_TYPES[b.type];
-  const grade = st.sat >= 4.2 ? ['GREAT', 'green'] : st.sat >= 3.4 ? ['GOOD', 'blue'] : ['POOR', 'red'];
-  const fill = Math.min(1, st.demand / Math.max(1, st.cap));
-  return `<button class="card in store" data-a="storeSheet" data-x="${st.id}" style="--edge:${st.profit >= 0 ? 'var(--green)' : 'var(--orange)'}">
-    <div class="row"><b class="route">${city.code} <span>${T.icon}</span> ${esc(city.name)}</b><span class="tagp ${grade[1]}">★ ${grade[0]}</span></div>
-    <span class="muted">${T.name} · ${['Basic', 'Modern', 'Luxury'][st.interior]} · ${st.staff} staff</span>
-    <div class="row"><b>${Math.round(fill * 100)}% busy · <span class="${upCls(st.profit)}">${st.profit >= 0 ? '+' : ''}${fmtMoney(st.profit)}</span> / week</b><span class="bars">${[0, 1, 2, 3, 4, 5].map(i => `<i class="${i < Math.round(st.sat / 5 * 6) ? 'on' : ''}"></i>`).join('')}</span></div></button>`;
+// ---------- map / city popups ----------
+function onCityTap(id) {
+  if (UI.pick || !S) return;
+  MapView.select(id); UI.popup = { type: 'city', id }; renderPopup(); tutCheck();
 }
-function bizSettings(a3) {
-  const b = S.biz[a3], T = BIZ_TYPES[b.type], hist = b.hist.slice(-26);
-  return `<div class="card in"><div class="row"><h4>${T.icon} ${T.name} in ${esc(W.byA3[a3].name)}</h4><b class="${upCls(b.last || 0)}">${fmtMoney(b.last || 0, true)}/wk</b></div>
-    ${hist.length > 1 ? chart(hist, { h: 70 }) : ''}
-    <div class="setting"><span>Prices</span><input type="range" min="0.7" max="1.5" step="0.05" value="${b.price}" data-in="price" data-x="${a3}"><b>${Math.round(b.price * 100)}%</b></div>
-    <div class="setting"><span>Quality</span><input type="range" min="1" max="5" step="1" value="${b.quality}" data-in="quality" data-x="${a3}"><b>${'★'.repeat(b.quality)}</b></div>
-    <div class="setting"><span>Wages</span><div class="seg small">${[[0.85, 'Low'], [1, 'Fair'], [1.25, 'High']].map(([v, l]) => `<button class="${b.wage === v ? 'on' : ''}" data-a="wage" data-x="${a3}|${v}">${l}</button>`).join('')}</div></div>
-    <div class="setting"><span>Marketing</span><div class="seg small">${[0, 2000, 10000, 50000, 250000].map(v => `<button class="${b.mkt === v ? 'on' : ''}" data-a="mkt" data-x="${a3}|${v}">${v ? fmtMoney(v, true) : 'None'}</button>`).join('')}</div></div>
-    <p class="muted small">Marketing is per week, shared by all stores in this country. Cheaper prices and better quality bring more customers; long waits and high prices hurt your rating. Corporate tax here: ${Math.round(country(a3).tax * 100)}%.</p></div>`;
-}
-function storeSheet(id) {
-  const st = S.stores.find(s => s.id === id); if (!st) return;
-  const city = W.cities[st.city], b = S.biz[st.a3], T = BIZ_TYPES[b.type];
-  const up = st.interior < 2 ? buildCost(b.type, st.interior + 1, st.a3) - buildCost(b.type, st.interior, st.a3) : 0;
-  openModal(`<div class="row"><h2>${T.icon} ${esc(city.name)}</h2><span class="tagp ${st.profit >= 0 ? 'green' : 'red'}">${st.profit >= 0 ? '+' : ''}${fmtMoney(st.profit)}/wk</span></div>
-    <p class="muted">${T.name} · ${['Basic', 'Modern', 'Luxury'][st.interior]} interior · opened ${fmtDate(st.opened)}</p>
-    <div class="stats3 box"><div><span>Foot traffic</span><b>${st.traffic.toLocaleString()}/wk</b></div><div><span>Customers</span><b>${st.cust.toLocaleString()}</b></div><div><span>Rating</span><b>${stars(st.sat)}</b></div></div>
-    <div class="kv"><span>Revenue</span><b>${fmtMoney(st.rev)}</b></div><div class="kv"><span>Rent</span><b>${st.rent ? fmtMoney(st.rent) : 'You own the building'}</b></div>
-    <div class="kv"><span>Demand vs capacity</span><b class="${st.demand > st.cap * 1.1 ? 'down' : ''}">${Math.round(st.demand)} / ${Math.round(st.cap)}</b></div>
-    ${st.opened > S.day - 7 ? '<p class="muted small">First results arrive at the end of the week.</p>' : st.demand > st.cap * 1.1 ? '<p class="warnbox">Customers are leaving because of long waits. Add staff.</p>' : st.demand < st.cap * 0.5 && st.staff > 1 ? '<p class="warnbox">Staff are standing around. You can cut a shift.</p>' : ''}
-    <div class="setting"><span>Staff</span><div class="qty"><button class="btn" data-a="staff" data-x="${id}|-1">−</button><b class="qv">${st.staff}</b><button class="btn" data-a="staff" data-x="${id}|1">+</button></div></div>
-    <div class="grid2">${st.interior < 2 ? `<button class="btn" data-a="interior" data-x="${id}">Upgrade interior ${fmtMoney(up, true)}</button>` : '<span></span>'}<button class="btn danger" data-a="closeStore" data-x="${id}">Close store</button></div>`, 'sheet');
-}
-
-PANELS.nation = () => {
-  const k = W.byA3[S.home], c = country(S.home), st = countryStatus(S.home);
-  const proj = PROJECTS.map(d => { const run = c.proj.find(p => p.id === d.id && p.until > S.day); return `<div class="urow"><div><b>${d.icon} ${d.name}</b><span class="muted">${d.desc}${run ? ` Runs until ${yearOf(run.until)}.` : ` Lasts ${d.years} years.`}</span></div>${run ? '<span class="tagp green">ACTIVE</span>' : `<button class="btn" data-a="project" data-x="${d.id}">${fmtMoney(projectCost(d), true)}</button>`}</div>`; }).join('');
-  const rel = Object.entries(c.rel).sort((a, b) => a[1] - b[1]).map(([a3, v]) => { const atWar = S.wars.some(w => (w.a === a3 && w.b === S.home) || (w.b === a3 && w.a === S.home)); const lab = atWar ? ['WAR', 'red'] : v < -35 ? ['HOSTILE', 'red'] : v < 5 ? ['TENSE', 'orange'] : v > 50 ? ['ALLY', 'green'] : ['NEUTRAL', 'blue']; return `<div class="urow"><div><b>${W.byA3[a3].flag} ${esc(W.byA3[a3].name)}</b><div class="meter"><i style="width:${(v + 100) / 2}%;background:${v < -35 ? 'var(--red)' : v < 5 ? 'var(--orange)' : 'var(--green)'}"></i></div></div><span class="tagp ${lab[1]}">${lab[0]}</span><button class="btn small" data-a="diplomacy" data-x="${a3}">${fmtMoney(diplomacyCost(a3), true)}</button></div>`; }).join('');
-  const wars = S.wars.map(w => `<div class="urow"><div><b>⚔️ ${W.byA3[w.a].flag} ${esc(cname(w.a))} vs ${W.byA3[w.b].flag} ${esc(cname(w.b))}</b><span class="muted">Since ${fmtDate(w.start)} · ${esc(cname(w.a))} controls ${Math.round(w.front)}% of the front</span></div></div>`).join('');
-  const ranking = Object.keys(S.countries).map(a3 => [a3, S.countries[a3].pop]).sort((a, b) => b[1] - a[1]);
-  const myRank = ranking.findIndex(r => r[0] === S.home) + 1;
-  const jobs = S.stores.filter(s => s.a3 === S.home).reduce((a, s) => a + s.staff, 0);
-  return panelShell(IC.nation, `${k.flag} ${esc(k.name)}`, `Your home country · ${st.t}`, `
-    <div class="card in bench"><div><span class="muted small">Population</span><b>${fmtPop(c.pop)}</b><span class="${upCls(popGrowth())}">${fmtPct(popGrowth())} since ${START_YEAR}</span></div>
-      <div class="r"><span class="muted small">World rank</span><b>#${myRank}</b><span class="muted">of ${ranking.length}</span></div></div>
-    <div class="stats3 box"><div><span>GDP</span><b>${fmtMoney(c.gdp * 1e6, true)}</b></div><div><span>Growth</span><b class="${upCls(c.growth)}">${fmtPct(c.growth)}/yr</b></div><div><span>Stability</span><b>${Math.round(c.stab)}/100</b></div></div>
-    <p class="muted small">Population grows with prosperity, stability and the ${jobs} jobs your stores create here. War and occupation shrink it; refugees from nearby wars move to stable countries.</p>
-    <h3 class="sec">Fund national projects</h3><div class="card in list">${proj}</div>
-    <h3 class="sec">Neighbours</h3><div class="card in list">${rel || '<div class="empty">No land borders. Only the sea protects you.</div>'}</div>
-    <p class="muted small">Pay for diplomacy to improve relations. Hostile neighbours can declare war.</p>
-    <h3 class="sec">Wars around the world</h3><div class="card in list">${wars || '<div class="empty">The world is at peace. For now.</div>'}</div>
-    <h3 class="sec">Most populous countries</h3><div class="card in list">${ranking.slice(0, 8).map(([a3, p], i) => `<div class="kv ${a3 === S.home ? 'me' : ''}"><span>#${i + 1} ${W.byA3[a3].flag} ${esc(cname(a3))}</span><b>${fmtPop(p)}</b></div>`).join('')}${myRank > 8 ? `<div class="kv me"><span>#${myRank} ${k.flag} ${esc(k.name)}</span><b>${fmtPop(c.pop)}</b></div>` : ''}</div>`, '#fde8e8');
-};
-
-PANELS.more = () => panelShell(IC.more, 'More', '', [
-  ['company', IC.trophy, 'Your company', 'Career goals, rating and stats', '#fff4d6'],
-  ['goals', IC.markets, 'Goals', S.mode === 'normal' ? 'Population, money and beating the market' : 'Your records (no goal in Infinite)', '#e6f0ff'],
-  ['news', IC.news, 'World news', 'Wars, booms, disasters and your milestones', '#e6f0ff'],
-  ['leaders', IC.trophy, 'Leaderboard', 'How you rank against rival empires', '#f1e8ff'],
-  ['shop', IC.bag, 'Shop', 'Free power-ups, one of each per day', '#fff4d6'],
-  ['settings', IC.gear, 'Settings', 'Sound, motion, save and restart', '#eef1f5'],
-  ['help', IC.news, 'How to play', 'The rules in two minutes', '#e6faf4'],
-].map(([k, ic, t, s, bg]) => `<button class="card in mrow" data-a="panel" data-x="${k}"><span class="ph-ic" style="background:${bg}">${ic}</span><div><b>${t}</b><span class="muted">${s}</span></div>${IC.chev}</button>`).join(''), '#eef1f5');
-
-PANELS.company = () => {
-  const stage = CAREER[S.career];
-  const done = stage ? stage.goals.filter((g, i) => S.goalsDone.includes(S.career + ':' + i)).length : 4;
-  const rb = rivalBoard(), me = rb.findIndex(r => r.you);
-  return panelShell(IC.trophy, 'Your company', '', `
-    <div class="hero" style="background:${S.company.color}"><div class="hero-in">${logoHTML(72)}<div><h2>${esc(S.company.name)}</h2><span class="tagp light">${careerName()}</span><div>Based in ${W.byA3[S.home].flag} ${esc(cname(S.home))}</div><div>Cash <b>${fmtMoney(S.cash)}</b></div></div></div>
-      <div class="hero-stats"><div><b>${S.stores.length}</b><span>stores</span></div><div><b>${Object.keys(S.biz).length}</b><span>countries</span></div><div><b>${S.props.length}</b><span>buildings</span></div><div><b>★ ${(S.rating || 0).toFixed(1)}</b><span>rating</span></div></div></div>
-    ${stage ? `<div class="card in"><span class="kicker orange">Career</span><h4>${done} of 4 goals for ${CAREER[S.career + 1] ? CAREER[S.career + 1].name : 'Legend'}</h4><span class="muted">Stage ${S.career + 1} of ${CAREER.length}</span><div class="meter"><i style="width:${done * 25}%;background:var(--orange)"></i></div>
-      ${stage.goals.map((g, i) => `<div class="goal ${S.goalsDone.includes(S.career + ':' + i) ? 'done' : ''}"><span>${S.goalsDone.includes(S.career + ':' + i) ? '✓' : '○'}</span>${g.t}</div>`).join('')}</div>` : '<div class="card in"><h4>Legend status reached \u{1F451}</h4></div>'}
-    <div class="card in"><div class="row start"><div class="star-ic">★</div><div><h4>Improve your rating</h4><span class="muted">You're at ★ ${(S.rating || 0).toFixed(1)}. Better quality, nicer interiors, fair wages and short waits raise it.</span></div></div></div>
-    <button class="card in mrow" data-a="panel" data-x="leaders"><span class="ph-ic" style="background:#fff4d6">${IC.trophy}</span><div><span class="kicker gold">Global leaderboard</span><b>You're #${me + 1} of ${rb.length}</b><span class="muted">Ranked by net worth</span></div>${IC.chev}</button>
-    <div class="card in"><h4>Company name & colour</h4><input id="rename" class="text-in" maxlength="24" value="${esc(S.company.name)}"><div class="swatches">${LOGO_COLORS.map((c, i) => `<button class="sw ${S.company.color === c ? 'on' : ''}" style="background:${c}" data-a="recolor" data-x="${c}" aria-label="colour ${i + 1}"></button>`).join('')}</div></div>`, '#fff4d6');
-};
-PANELS.goals = () => {
-  const yr = myReturn(), mr = marketReturn(), pg = popGrowth();
-  const nh = S.nh.m.length > 3 ? S.nh.m : S.nh.w;
-  return panelShell(IC.markets, 'Goals', S.mode === 'normal' ? `Year ${Math.floor(S.day / 365.25) + 1} of ${NORMAL_YEARS}` : 'Infinite mode: no goal, just records', `
-    ${S.mode === 'normal' ? `<div class="card in"><span class="muted small">Time used</span><div class="meter"><i style="width:${S.day / NORMAL_DAYS * 100}%;background:var(--blue)"></i></div><span class="muted small">${fmtDate(S.day)} → ${fmtDate(NORMAL_DAYS)}</span></div>` : '<div class="card in"><b>There is no goal in Infinite.</b><p class="muted small">These are here so you can still see how you are doing.</p></div>'}
-    <div class="card in"><h4>\u{1F465} Grow your nation</h4><div class="big">${fmtPop(country(S.home).pop)}</div><span class="${upCls(pg)}">${fmtPct(pg)} since ${START_YEAR}</span><p class="muted small">Open stores at home, fund housing, hospitals and immigration, and keep the peace.</p></div>
-    <div class="card in"><h4>\u{1F4B0} Grow your money</h4><div class="big">${fmtMoney(netWorth(), true)}</div>${chart(nh.map(x => x[1]), { h: 90 })}</div>
-    <h3 class="sec">\u{1F4C8} Beat the market</h3>
-    <div class="card in bench"><div><span class="muted">You</span><b class="${upCls(yr)}">${fmtPct(yr)}</b></div><div class="r"><span class="muted">Market</span><b class="${upCls(mr)}">${fmtPct(mr)}</b></div></div>
-    <p class="muted small">${beatMarket() >= 0 ? `You're beating the market by ${fmtPct(beatMarket())}.` : `The market is ahead of you by ${fmtPct(-beatMarket()).replace('+', '')}.`}</p>`, '#e6f0ff');
-};
-PANELS.news = () => {
-  const cats = { Market: ['#e6f0ff', '\u{1F4CA}', 'blue'], World: ['#eef1f5', '\u{1F30D}', 'slate'], War: ['#fde8e8', '⚔️', 'red'], Business: ['#e6faf4', '\u{1F3EA}', 'teal'], Milestone: ['#fff4d6', '⭐', 'gold'], Property: ['#f1e8ff', '\u{1F3E2}', 'purple'], Nation: ['#fde8e8', '\u{1F3DB}️', 'red'] };
-  const ago = d => S.day - d <= 0 ? 'today' : S.day - d === 1 ? 'yesterday' : (S.day - d) + 'd ago';
-  return panelShell(IC.news, 'World News', '', `
-    <h3 class="sec">Active now</h3>${S.live.slice(-6).reverse().map(e => `<div class="card in live"><span class="livetag">⏱ LIVE</span><b>${esc(e.title)}</b><span class="muted">${e.until > S.day + 3000 ? 'ongoing' : (e.until - S.day) + ' days left'}</span></div>`).join('') || '<div class="card in empty">Nothing happening right now.</div>'}
-    <h3 class="sec">Recent</h3>${S.news.slice(0, 40).map(n => { const c = cats[n.cat] || cats.World; return `<div class="card in newsrow"><span class="ph-ic" style="background:${c[0]}">${c[1]}</span><div><span class="kicker ${c[2]}">${n.cat} <em>${ago(n.d)}</em></span><b>${esc(n.text)}</b></div></div>`; }).join('')}`, '#e6f0ff');
-};
-PANELS.leaders = () => {
-  const rb = rivalBoard(), best = storeGet(BOARD_KEY) || [];
-  const cols = ['#2f7cf6', '#7c4dff', '#12a150', '#0ea5b7', '#f5b301', '#e5484d', '#111827', '#ff6b2c'];
-  return panelShell(IC.trophy, 'Leaderboard', 'Rival empires, ranked by net worth', `
-    <div class="card in list">${rb.map((r, i) => `<div class="lrow ${r.you ? 'me' : ''}"><b>#${i + 1}</b><span class="ldot" style="background:${r.you ? S.company.color : cols[i % 8]}"></span><span>${esc(r.name)}${r.you ? ' (you)' : ''}</span><b>${fmtMoney(r.nw, true)}</b></div>`).join('')}</div>
-    <h3 class="sec">Your best finished runs</h3><div class="card in list">${best.map((b, i) => `<div class="kv"><span>#${i + 1} ${esc(b.name)} ${W.byA3[b.home] ? W.byA3[b.home].flag : ''}</span><b>${b.score} pts</b></div>`).join('') || '<div class="empty">Finish a Normal game to post a score.</div>'}</div>`, '#fff4d6');
-};
-PANELS.shop = () => panelShell(IC.bag, 'Shop', 'Every power-up is free. One of each per day.', `
-  <div class="shopgrid">${SHOP.map(it => `<div class="card in shopitem"><div class="shop-ic">${it.icon}</div><b>${it.name}</b><span class="muted small">${it.desc}</span><button class="btn3d ${shopReady(it.id) ? 'orange' : 'grey'}" data-a="shop" data-x="${it.id}" ${shopReady(it.id) ? '' : 'disabled'}>${shopReady(it.id) ? 'FREE' : 'TOMORROW'}</button></div>`).join('')}</div>
-  ${S.boosts.rush > S.day ? `<p><span class="tagp green">Rush hour: ${S.boosts.rush - S.day} more days</span></p>` : ''}${intelOn() ? `<p><span class="tagp blue">Market intel: ${S.boosts.intel - S.day} more days</span></p>` : ''}`, '#fff4d6');
-PANELS.settings = () => panelShell(IC.gear, 'Settings', '', `
-  <h3 class="sec">Audio</h3><div class="card in">
-    <div class="setting"><span>Master volume</span><input type="range" min="0" max="1" step="0.01" value="${S.settings.vol}" data-in="vol"><b>${Math.round(S.settings.vol * 100)}%</b></div>
-    <div class="setting"><span>UI sounds</span><input type="range" min="0" max="1" step="0.01" value="${S.settings.ui}" data-in="ui"><b>${Math.round(S.settings.ui * 100)}%</b></div></div>
-  <h3 class="sec">Motion & visuals</h3><div class="card in">
-    <div class="setting"><span>Planes and ships</span><button class="toggle ${S.settings.motion ? 'on' : ''}" data-a="toggleMotion" aria-label="Planes and ships"><i></i></button></div></div>
-  <h3 class="sec">Game</h3><div class="card in"><div class="kv"><span>Mode</span><b>${S.mode === 'normal' ? 'Normal (100 years)' : 'Infinite'}</b></div>
-    <div class="grid2"><button class="btn" data-a="exportSave">Copy save</button><button class="btn" data-a="importSave">Load save</button></div>
-    <button class="btn danger wide" data-a="restart">Restart game</button></div>
-  <p class="muted small">Map data: Natural Earth (public domain). Airport codes: OurAirports (public domain). Companies, people and events in the game are fictional.</p>`, '#eef1f5');
-PANELS.help = () => panelShell(IC.news, 'How to play', '', `<div class="card in prose">
-  <p><b>The map.</b> Every dot is a real city. Tap one to see its companies, then ENTER CITY to walk its streets.</p>
-  <p><b>Stores.</b> Red FOR LEASE signs are storefronts. Busy streets cost more rent but bring more customers. You run one kind of business in each country. Set prices, quality, wages and marketing in Business.</p>
-  <p><b>Buildings.</b> Blue FOR SALE pins are buildings you can buy and rent out. You can also open your own store in a building you own and pay no rent.</p>
-  <p><b>Markets.</b> Every company trades on the world market. Prices follow earnings, the mood of the market, and what happens in their country.</p>
-  <p><b>The world.</b> Neighbours can fall out and go to war. War crashes stock prices and store sales in both countries, and an invader can seize your stores. Peace deals, trade deals and booms send prices up.</p>
-  <p><b>Your nation.</b> Fund projects at home and pay for diplomacy to grow your population and avoid war.</p>
-  <p><b>Winning.</b> ${S.mode === 'normal' ? 'In Normal you have 100 years. Your score counts population growth, net worth and how far you beat the market.' : 'Infinite has no goal. Play however you like.'}</p></div>`, '#e6faf4');
-
-// ---------- popups ----------
-function onCityTap(id) { if (UI.pick || !S) return; MapView.select(id); sfx.tap(); UI.popup = { type: 'city', id }; renderPopup(); tutCheck(); }
 function onCountryTap(a3) {
-  if (UI.pick) { UI.pick.a3 = a3; MapView.setPick(true, a3); renderPick(); sfx.tap(); return; }
-  if (!S) return; MapView.select(null); UI.popup = { type: 'country', a3 }; renderPopup();
+  if (UI.pick) { UI.pick.a3 = a3; MapView.setPick(true, a3); MapView.flyToCountry(a3); renderPick(); return; }
+  if (!S) return;
+  const city = W.byA3[a3].capital;
+  if (city != null) onCityTap(city);
 }
 function closePopup() { UI.popup = null; MapView.select(null); $('popup').innerHTML = ''; }
 function renderPopup() {
-  const p = UI.popup, el = $('popup'); if (!p) { el.innerHTML = ''; return; }
+  if (!UI.popup) { $('popup').innerHTML = ''; return; }
+  const p = UI.popup;
   if (p.type === 'city') {
-    const c = W.cities[p.id], k = W.byA3[c.a3], st = countryStatus(c.a3), biz = S.biz[c.a3];
-    const cos = W.companies.filter(x => x.city === c.id);
-    const mine = S.stores.filter(s => s.city === c.id).length, props = S.props.filter(x => x.city === c.id).length;
-    const lots = cityLots(c.id), avail = lots.filter(l => l.kind === 'lease').length, sale = lots.filter(l => l.kind === 'sale').length;
-    const tags = [];
-    if (c.a3 === S.home && c.capital) tags.push(['HOME CAPITAL', 'blue']);
-    if (mine) tags.push([`${mine} STORE${mine > 1 ? 'S' : ''}`, 'green']); else tags.push([biz ? 'NEW MARKET' : 'NEW COUNTRY', 'grey']);
-    if (st.cls !== 'green') tags.push([st.t.toUpperCase(), st.cls]);
-    if (S.cityHit[c.id] > S.day) tags.push(['DISASTER RECOVERY', 'orange']);
-    const comp = biz ? rivalCount(c.id, biz.type) : null;
-    el.innerHTML = `<div class="pop card"><button class="xbtn" data-a="closePopup" aria-label="Close">${IC.close}</button>
-      <div class="row start"><h2>${esc(c.name)}</h2><span class="codepill">${c.code}</span></div>
-      <div class="muted">${k.flag} ${esc(k.name)} · ${PERSONAS[hashStr(c.name) % PERSONAS.length]}</div>
-      <div class="tags">${tags.map(t => `<span class="tagp ${t[1]}">${t[0]}</span>`).join('')}</div>
-      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop * country(c.a3).pop / k.pop0)}</b></div><div><span>Spending power</span><b class="${k.wealth > 1.2 ? 'up' : k.wealth < 0.5 ? 'down' : 'blue'}">${k.wealth > 1.5 ? 'Very high' : k.wealth > 1 ? 'High' : k.wealth > 0.55 ? 'Medium' : 'Low'}</b></div><div><span>Competition</span><b class="${comp == null ? '' : comp > 4 ? 'down' : comp > 1 ? 'blue' : 'up'}">${comp == null ? '—' : comp > 4 ? 'High' : comp > 1 ? 'Medium' : 'Low'}</b></div></div>
-      ${cos.length ? `<div class="list mini">${cos.map(x => stockRow(x)).join('')}</div>` : ''}
-      <button class="btn3d blue wide" data-a="enterCity" data-x="${c.id}">ENTER CITY</button>
-      <p class="muted small center">${avail} storefronts for lease · ${sale} buildings for sale${props ? ` · you own ${props}` : ''}</p></div>`;
-  } else {
-    const k = W.byA3[p.a3], c = country(p.a3); if (!c) { el.innerHTML = ''; return; }
-    const st = countryStatus(p.a3);
-    el.innerHTML = `<div class="pop card"><button class="xbtn" data-a="closePopup" aria-label="Close">${IC.close}</button>
-      <div class="row start"><span class="flag-big">${k.flag}</span><div><h2>${esc(k.name)}</h2><span class="tagp ${st.cls}">${st.t}</span></div></div>
-      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>GDP</span><b>${fmtMoney(c.gdp * 1e6, true)}</b></div><div><span>Growth</span><b class="${upCls(c.growth)}">${fmtPct(c.growth)}</b></div></div>
-      <div class="kv"><span>Your business</span><b>${S.biz[p.a3] ? BIZ_TYPES[S.biz[p.a3].type].icon + ' ' + BIZ_TYPES[S.biz[p.a3].type].name : 'None yet'}</b></div>
-      <div class="kv"><span>Listed companies</span><b>${W.companies.filter(x => x.a3 === p.a3).length}</b></div>
-      <div class="kv"><span>Corporate tax</span><b>${Math.round(c.tax * 100)}%</b></div>
-      <p class="muted small">Tap a city dot to see its streets.</p></div>`;
+    const c = W.cities[p.id], k = W.byA3[c.a3], co = S.co[c.a3], st = countryStatus(c.a3);
+    const myLocs = controlled(c.a3) ? co.locs.filter(l => co.city === c.id).length : 0;
+    const myProps = S.props.filter(x => x.city === c.id).length;
+    $('popup').innerHTML = `<div class="popup card">
+      <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
+      <div class="kv"><span>${SECTORS[co.sector].icon} ${esc(co.name)}</span><b>${co.listed ? fmtMoney(co.price) + ' · ' + co.sym : 'Private'}</b></div>
+      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="stock" data-x="${c.a3}">VIEW STOCK</button></div>
+    </div>`;
+  } else if (p.type === 'pin') {
+    const lot = p.lot, city = CityView.city, co = S.co[city.a3];
+    if (p.pin.type === 'loc') {
+      const l = p.pin.loc;
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>${SECTORS[co.sector].loc.name}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <div class="stats3 box"><div><span>Profit / week</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}</b></div><div><span>Customers</span><b>${l.cust}</b></div><div><span>Satisfaction</span><b>${l.sat.toFixed(1)}★</b></div></div>
+        <p class="muted small">Staff ${l.staff} · Rent ${fmtMoney(l.rent)}/week · Traffic ${l.traffic}</p>
+        <button class="btn" data-a="closeLoc" data-x="${co.a3}|${l.id}">CLOSE LOCATION</button></div>`;
+    } else if (p.pin.type === 'lease') {
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>For lease</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">Traffic ${lot.traffic} · Rent ${fmtMoney(lotRent(co, lot))}/week · Fit-out ${fmtMoney(buildCost(co, 1))}</p>
+        <p class="muted small">Only companies you control can lease here. ${controlled(city.a3) ? '' : 'Buy a majority of ' + esc(co.name) + ' stock first, or use your home company in its own capital.'}</p>
+        <div class="row"><button class="btn3d orange flex" data-a="lease" data-x="${lot.t}|1">LEASE · BASIC</button><button class="btn flex" data-a="lease" data-x="${lot.t}|2">LEASE · PREMIUM</button></div></div>`;
+    } else if (p.pin.type === 'sale') {
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Building for sale</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <div class="stats3 box"><div><span>Price</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Units</span><b>${lot.units}</b></div><div><span>Rent / unit</span><b>${fmtMoney(lot.mrent)}</b></div></div>
+        <button class="btn3d orange wide" data-a="buyBld" data-x="${lot.t}">BUY BUILDING</button></div>`;
+    } else if (p.pin.type === 'prop') {
+      const pr = S.props.find(x => x.city === city.id && x.t === lot.t);
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Your building</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <div class="stats3 box"><div><span>Value</span><b>${fmtMoney(pr.value, true)}</b></div><div><span>Income / week</span><b>${fmtMoney(pr.income, true)}</b></div><div><span>Condition</span><b>${Math.round(pr.cond * 100)}%</b></div></div>
+        <p class="muted small">${pr.units} units · Occupancy ${Math.round(pr.occ * 100)}% · Rent level ${pr.rentLv.toFixed(1)}x</p>
+        <div class="row"><button class="btn flex" data-a="renovate" data-x="${pr.id}">RENOVATE ${fmtMoney(renoCost(pr), true)}</button><button class="btn flex" data-a="sellBld" data-x="${pr.id}">SELL</button></div></div>`;
+    }
   }
 }
-
-// ---------- city view ----------
+function onPin(pin) {
+  UI.popup = { type: 'pin', pin, lot: pin.lot }; renderPopup();
+}
 function enterCity(id) {
-  closePopup(); closePanel(); MapView.select(null);
-  document.body.classList.add('in-city');
-  CityView.open(id); renderCityHUD(); tutCheck();
-  if (!S.biz[W.cities[id].a3]) setTimeout(() => chooseBizType(W.cities[id].a3), 350);
+  closePopup(); CityView.open(id); document.body.classList.add('in-city'); renderCityHUD(); tutCheck();
 }
-function leaveCity() { CityView.close(); document.body.classList.remove('in-city'); $('chud').innerHTML = ''; renderHUD(); }
-function renderCityHUD() {
-  if (!CityView.isOpen()) return;
-  const c = CityView.city, k = W.byA3[c.a3], biz = S.biz[c.a3];
-  const filt = { all: 'All', lease: 'For lease', sale: 'For sale', mine: 'Yours' }[CityView.filter];
-  $('chud').innerHTML = `<div class="ch-top"><button class="dark-round" data-a="leaveCity" aria-label="Back to map">${IC.back}</button>
-      <div class="dark-box co">${logoHTML(42)}<div><span class="dim">${esc(S.company.name.toUpperCase())}</span><b>${fmtMoney(S.cash)}</b></div></div>
-      <div class="dark-box date"><b>${fmtDate(S.day)}</b></div></div>
-    <div class="ch-bottom"><button class="dark-box sq" data-a="cityFilter" aria-label="Filter pins">${IC.layers}<small>${filt}</small></button>
-      <div class="dark-box name"><span class="flag">${k.flag}</span><b>${esc(c.name)}</b></div>
-      <button class="dark-box sq" data-a="cityInfo" aria-label="City info">${IC.menu}</button></div>
-    ${biz ? '' : `<div class="ch-note card">Choose a business for ${esc(k.name)} to start leasing storefronts. <button class="btn3d orange" data-a="chooseBiz" data-x="${c.a3}">CHOOSE</button></div>`}`;
-}
-function chooseBizType(a3) {
-  if (S.biz[a3]) return;
-  const k = W.byA3[a3], fee = Math.round(15000 * Math.max(0.4, k.wealth));
-  openModal(`<h2>Choose your business for ${k.flag} ${esc(k.name)}</h2><p class="muted">You run one kind of business in each country. Registering costs ${fmtMoney(fee)}.</p>
-    <div class="bizgrid">${Object.entries(BIZ_TYPES).map(([id, T]) => `<button class="bizopt" data-a="startBiz" data-x="${a3}|${id}"><span class="bz-ic" style="background:${T.color}">${T.icon}</span><b>${T.name}</b><span class="muted small">${fmtMoney(buildCost(id, 0, a3), true)} to build · ~$${Math.max(1, Math.round(T.ticket * Math.pow(k.wealth, 0.6)))} per sale</span></button>`).join('')}</div>`, 'sheet');
-}
-function onPin(lot) {
-  const c = CityView.city, biz = S.biz[c.a3];
-  sfx.tap();
-  if (lot.kind === 'lease') {
-    if (!biz) return chooseBizType(c.a3);
-    const T = BIZ_TYPES[biz.type], own = S.stores.filter(s => s.city === c.id).length + 1, staff = Math.max(1, T.staff - (S.upgrades.kiosk ? 1 : 0));
-    const est = i => storeEconomics(c.a3, c.id, lot.traffic, lot.rent, i, staff, own, 0);
-    openModal(`<div class="row"><h2>Storefront for lease</h2><span class="tagp red">FOR LEASE</span></div><p class="muted">${esc(c.name)} · ${['', 'Small', 'Medium', 'Large'][lot.size]} unit</p>
-      <div class="stats3 box"><div><span>Foot traffic</span><b class="${lot.traffic > 10000 ? 'up' : lot.traffic < 5000 ? 'down' : ''}">${lot.traffic.toLocaleString()}/wk</b></div><div><span>Rent</span><b>${fmtMoney(lot.rent)}/wk</b></div><div><span>Rivals in city</span><b>${rivalCount(c.id, biz.type)}</b></div></div>
-      <h4>Pick an interior</h4>
-      <div class="intgrid">${[0, 1, 2].map(i => { const e = est(i); return `<button class="intopt" data-a="lease" data-x="${lot.t}|${i}"><b>${['Basic', 'Modern', 'Luxury'][i]}</b><span>${fmtMoney(buildCost(biz.type, i, c.a3), true)}</span><span class="${upCls(e.profit)}">${e.profit >= 0 ? '+' : ''}${fmtMoney(e.profit, true)}/wk</span><small>${Math.round(e.served)} customers</small></button>`; }).join('')}</div>
-      <p class="muted small">Forecast with ${staff} staff and your current prices. Aim for 8,000–10,000+ weekly foot traffic.</p>`, 'sheet');
-  } else if (lot.kind === 'sale') {
-    const y = (lot.units * lot.mrent * 52) / lot.price;
-    openModal(`<div class="row"><h2>Building for sale</h2><span class="tagp blue">FOR SALE</span></div><p class="muted">${esc(c.name)} · ${lot.units} rental unit${lot.units > 1 ? 's' : ''}</p>
-      <div class="stats3 box"><div><span>Price</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Market rent</span><b>${fmtMoney(lot.mrent)}/unit/wk</b></div><div><span>Yield</span><b class="up">${(y * 100).toFixed(1)}%/yr</b></div></div>
-      <div class="kv"><span>Condition</span><b>${Math.round(lot.cond * 100)}%</b></div><div class="kv"><span>Foot traffic</span><b>${lot.traffic.toLocaleString()}/wk</b></div>
-      <p class="muted small">Collect rent every week. Charge more for income, or less to fill every unit. You can also open your own store on the ground floor, rent-free.</p>
-      <button class="btn3d blue wide" data-a="buyBld" data-x="${lot.t}" ${S.cash < lot.price ? 'disabled' : ''}>BUY FOR ${fmtMoney(lot.price, true)}</button>${S.cash < lot.price ? `<p class="muted small center">You need ${fmtMoney(lot.price - S.cash, true)} more.</p>` : ''}`, 'sheet');
-  } else if (lot.store) storeSheet(lot.store);
-  else if (lot.kind === 'prop') { const p = S.props.find(x => x.city === c.id && x.t === lot.t); if (p) propSheet(p.id); }
-}
-function propSheet(id) {
-  const p = S.props.find(x => x.id === id); if (!p) return; const c = W.cities[p.city], biz = S.biz[c.a3];
-  openModal(`<div class="row"><h2>\u{1F3E0} Your building</h2><b class="${upCls(p.income)}">${fmtMoney(p.income)}/wk</b></div><p class="muted">${esc(c.name)} · ${p.units} units · bought for ${fmtMoney(p.paid, true)}</p>
-    <div class="stats3 box"><div><span>Value</span><b>${fmtMoney(p.value, true)}</b></div><div><span>Occupied</span><b>${Math.round(p.occ * 100)}%</b></div><div><span>Condition</span><b>${Math.round(p.cond * 100)}%</b></div></div>
-    <div class="setting"><span>Rent</span><input type="range" min="0.7" max="1.6" step="0.05" value="${p.rentLv}" data-in="rentLv" data-x="${id}"><b>${fmtMoney(p.mrent * p.rentLv)}/unit</b></div>
-    <p class="muted small">Market rent here is ${fmtMoney(p.mrent)} per unit per week. Charge more and units sit empty.</p>
-    <div class="grid2"><button class="btn" data-a="renovate" data-x="${id}" ${p.cond > 0.95 ? 'disabled' : ''}>Renovate ${fmtMoney(renoCost(p), true)}</button><button class="btn danger" data-a="sellBld" data-x="${id}">Sell for ${fmtMoney(p.value * 0.95, true)}</button></div>
-    ${biz && !p.store ? `<button class="btn3d orange wide" data-a="ownStore" data-x="${id}">OPEN YOUR ${BIZ_TYPES[biz.type].name.toUpperCase()} HERE, RENT-FREE</button>` : ''}`, 'sheet');
+function leaveCity() {
+  CityView.close(); document.body.classList.remove('in-city'); $('chud').innerHTML = ''; renderHUD();
 }
 
-// ---------- modals ----------
-function openModal(html, kind) { UI.modal = kind; $('modal').innerHTML = `<div class="scrim ${kind}" data-a="scrim"><div class="mbox ${kind}" data-stop>${kind === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`; }
-function closeModal() { UI.modal = null; $('modal').innerHTML = ''; }
-function toast(t, kind) { const d = document.createElement('div'); d.className = 'toast ' + (kind || ''); d.textContent = t; $('toasts').appendChild(d); setTimeout(() => d.remove(), 2800); if (kind === 'bad') sfx.bad(); }
-function welcomeBack() {
-  const r = dailyRewardInfo(), nm = nextMove(), away = S.lastSeen ? Date.now() - S.lastSeen : 0, mins = Math.round(away / 60000);
-  const awayTxt = mins >= 1440 ? Math.round(mins / 1440) + 'd' : mins >= 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + 'm';
-  const day = ((r.streak - 1) % 7) + 1;
-  openModal(`<div class="wb"><div class="wb-l">
-      <div class="row start">${logoHTML(56)}<div><span class="kicker blue">WELCOME BACK</span><h2>${esc(S.company.name)}</h2>${mins > 0 ? `<span class="muted">You were away ${awayTxt}. Time paused while you were gone.</span>` : ''}</div></div>
-      <div class="earned"><span>Your empire</span><b>${fmtMoney(netWorth(), true)}</b><span>${S.stores.length} stores · ${weekProfit() >= 0 ? '+' : ''}${fmtMoney(weekProfit(), true)} last week</span></div>
-      <div class="daily"><div class="row"><span class="kicker blue">TODAY'S OPERATIONS REWARD</span><span class="muted">Day ${day} / 7</span></div>
-        ${r.claimed ? '<b class="up claimed">Claimed ✓</b>' : `<button class="btn3d green" data-a="claimDaily">CLAIM ${fmtMoney(r.amount, true)}</button>`}
-        <span class="muted">Tomorrow: +${fmtMoney(r.tomorrow, true)}</span><div class="dots">${[0, 1, 2, 3, 4, 5, 6].map(i => `<i class="${i < day - (r.claimed ? 0 : 1) ? 'on' : ''}"></i>`).join('')}</div></div></div>
-    <div class="wb-r"><div class="card in"><span class="kicker muted">NEXT BEST MOVE</span><div class="row start"><span class="move-ic">${nm.ic}</span><div><b>${esc(nm.t)}</b><div class="muted">${esc(nm.s)}</div></div></div><button class="btn3d orange" data-a="${nm.a}" data-x="${nm.x}">${nm.b}</button></div>
-      <div class="card in list"><button class="mrow" data-a="panel" data-x="news"><span class="ph-ic" style="background:#e6f0ff">${IC.news}</span><div><b>World news</b><span class="muted">${S.live.length} live events</span></div>${IC.chev}</button>
-        <button class="mrow" data-a="panel" data-x="goals"><span class="ph-ic" style="background:#fff4d6">${IC.trophy}</span><div><b>Goals</b><span class="muted">${beatMarket() >= 0 ? 'Beating' : 'Behind'} the market</span></div>${IC.chev}</button></div></div></div>
-    <button class="btn outline wide" data-a="closeModal">BACK TO MAP</button>`, 'center wide');
-}
+// ---------- skip / game over / loop ----------
 function skipMenu() {
-  openModal(`<h2>Skip ahead</h2><p class="muted">The world keeps turning while you skip: wars, booms and your stores all play out.</p>
-    <div class="grid2">${[['1', 'A day'], ['7', 'A week'], ['30', 'A month'], ['365', 'A year']].map(([d, l]) => `<button class="btn3d blue" data-a="skip" data-x="${d}">${l.toUpperCase()}</button>`).join('')}</div>`, 'sheet');
+  openModal(`<h2>Time warp</h2><p class="muted">Infinite mode only. The world keeps moving while you skip.</p>
+    <div class="row wrap"><button class="btn" data-a="skip" data-x="1">1 day</button><button class="btn" data-a="skip" data-x="7">1 week</button><button class="btn" data-a="skip" data-x="30">1 month</button><button class="btn" data-a="skip" data-x="365">1 year</button></div>`, 'sheet');
 }
 function doSkip(days) {
   const nw0 = netWorth(), pop0 = country(S.home).pop, top = S.news[0];
@@ -574,22 +378,307 @@ function gameOver() {
   const o = S.over;
   openModal(`<h2>${o.bankrupt ? 'Bankrupt' : `${START_YEAR + NORMAL_YEARS}: the final report`}</h2><p class="muted">${o.bankrupt ? 'Your debts caught up with you.' : '100 years have passed.'}</p>
     <div class="big center">${o.score} points</div>
-    <div class="stats3 box"><div><span>\u{1F465} Population</span><b class="${upCls(o.pop)}">${fmtPct(o.pop)}</b></div><div><span>\u{1F4B0} Net worth</span><b>${fmtMoney(o.nw, true)}</b></div><div><span>\u{1F4C8} vs Market</span><b class="${upCls(o.beat)}">${fmtPct(o.beat)}</b></div></div>
+    <div class="stats3 box"><div><span>👥 Population</span><b class="${upCls(o.pop)}">${fmtPct(o.pop)}</b></div><div><span>💰 Net worth</span><b>${fmtMoney(o.nw, true)}</b></div><div><span>📈 vs Market</span><b class="${upCls(o.beat)}">${fmtPct(o.beat)}</b></div></div>
     <p class="muted">You finished as <b>${o.stage}</b>. The market returned ${fmtPct(o.mkt)}; you returned ${fmtPct(o.mine)}.</p>
     <button class="btn3d orange wide" data-a="newGame">PLAY AGAIN</button>`, 'center');
+}
+let lastT = 0;
+function loop(now) {
+  if (!S || UI.pick || S.over) { lastT = now; return; }
+  const dt = Math.min(1000, now - (lastT || now)); lastT = now;
+  const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  if (S.speed > 0 && !document.hidden && !UI.modal) {
+    UI.acc += dt;
+    const per = DAY_MS_BY_SPEED[S.speed]; let stepped = false; const wars = S.wars.length;
+    while (UI.acc >= per) { UI.acc -= per; stepDay(); stepped = true; if (S.over) break; }
+    if (stepped) {
+      if (S.wars.length !== wars || S.day % 7 === 0) MapView.redraw();
+      if (!focused && now - UI.lastDraw > 250) {
+        UI.lastDraw = now; renderHUD(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD();
+        if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus')) renderPanel();
+      }
+      if (S.over) { save(); gameOver(); }
+    }
+  } else UI.acc = 0;
+  if (now - UI.lastSave > 10000) { UI.lastSave = now; save(); }
+}
+function refreshAll() {
+  if (!S) return;
+  if (!UI.pick) renderHUD();
+  if (UI.panel) renderPanel();
+  if (UI.popup) renderPopup();
+  if (CityView.isOpen()) renderCityHUD();
+}
+
+// ---------- panels ----------
+const PANELS = {};
+function marketRows() {
+  const q = UI.q.trim().toLowerCase();
+  let list = Object.values(S.co);
+  if (UI.cat === 'Watchlist') list = list.filter(c => S.watch.includes(c.a3));
+  else if (UI.cat === 'Owned') list = list.filter(c => S.holdings[c.a3] && S.holdings[c.a3].qty !== 0);
+  else if (UI.cat === 'IPOs') list = list.filter(c => !c.listed);
+  else if (UI.cat === 'Oil') list = list.filter(c => c.sector === 'Energy');
+  else if (UI.cat !== 'All' && UI.cat !== 'Indices') list = list.filter(c => c.sector === UI.cat);
+  if (UI.starOnly) list = list.filter(c => S.watch.includes(c.a3));
+  if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q) || cname(c.a3).toLowerCase().includes(q));
+  list.sort((a, b) => companyValue(b) - companyValue(a));
+  return list;
+}
+PANELS.markets = () => {
+  const cats = ['All', 'Watchlist', 'Owned', ...SECTOR_LIST, 'IPOs', 'Indices', 'Oil'];
+  if (UI.cat === 'Indices') {
+    const idxRows = SECTOR_LIST.map(sec => {
+      const cs = Object.values(S.co).filter(c => c.sector === sec && c.listed);
+      const cap = cs.reduce((a, c) => a + companyValue(c), 0);
+      const ch = cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0;
+      return `<div class="kv"><span>${SECTORS[sec].icon} ${sec} Index</span><b>${fmtMoney(cap, true)} · <em class="${upCls(ch)}">${fmtPct(ch)}</em></b></div>`;
+    }).join('');
+    return panelShell('Markets', 'World Index ' + S.idx.v.toFixed(0), `<div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
+      <div class="card in">${idxRows}<div class="kv"><span>🌍 World Index</span><b>${S.idx.v.toFixed(0)} · <em class="${upCls(marketReturn())}">${fmtPct(marketReturn())}</em></b></div><div class="kv"><span>🛢️ Oil index</span><b>${S.oil.toFixed(2)}x</b></div></div>`);
+  }
+  const rows = marketRows();
+  return panelShell('Markets', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`,
+    `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
+    <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
+    <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
+    <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
+      const held = S.holdings[c.a3], ch = chgVs(c), starred = S.watch.includes(c.a3);
+      return `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span><span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span></button>`;
+    }).join('') || '<div class="card in empty">Nothing here yet. Try another category, or star a stock to build your Watchlist.</div>'}</div>
+    ${UI.cat === 'IPOs' ? '<p class="muted small">IPOs here means private companies you control that can go public. Your home company needs to be worth $25M to list.</p>' : ''}`);
+};
+function tradeView(a3) {
+  const c = S.co[a3]; if (!c) return panelShell('Stock', '', '<p class="muted">Company not found.</p>');
+  const held = S.holdings[a3] || { qty: 0, cost: 0 };
+  const ch = chgVs(c), val = held.qty > 0 ? held.qty * c.price : held.qty < 0 ? -held.qty * c.price : 0;
+  const pnl = held.qty !== 0 ? (c.price - held.cost) * held.qty : 0;
+  const closes = UI.tradeRange === '1M' ? c.h.d.slice(-22) : UI.tradeRange === 'All' ? c.h.d.slice() : c.h.d.slice(-130);
+  const sma20 = sma(closes, 20), sma20v = sma20.length ? sma20[sma20.length - 1] : c.price;
+  const res = c.res && c.res.day > S.day - 90 ? c.res : null;
+  return panelShell(`${c.sym} · ${c.name}`, `${SECTORS[c.sector].icon} ${c.sector} · ${cname(a3)} · ${countryStatus(a3).t}`,
+    `<div class="trade-head"><div><div class="big">${c.listed ? fmtMoney(c.price) : 'Private'}</div><div class="${upCls(ch)}">${fmtPct(ch)} today · SMA20 ${fmtMoney(sma20v)}</div></div>
+      <button class="star-btn ${S.watch.includes(a3) ? 'on' : ''}" data-a="star" data-x="${a3}">${S.watch.includes(a3) ? '★ Starred' : '☆ Star'}</button></div>
+    ${c.listed ? candleChart(closes) : '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'}
+    <p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20. Daily closes only; the engine does not record intraday volume.</p>
+    ${rangeSeg(['1M', '1Y', 'All'], UI.tradeRange, 'tradeRange')}
+    <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
+    ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
+    ${res ? `<div class="card in"><b>Research</b><p class="muted small">Fair value about ${fmtMoney(res.fair, true)} · Signal ${res.strength} ${res.dir > 0 ? 'up' : 'down'}${res.pattern ? ' · Pattern: ' + res.pattern : ''}</p></div>` : ''}
+    ${c.listed ? `<div class="trade-box">
+      <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${a3}">MAX</button></div>
+      <div class="row"><button class="btn3d sell flex" data-a="doTrade" data-x="${a3}|sell">SELL</button><button class="btn3d buy flex" data-a="doTrade" data-x="${a3}|buy">BUY</button></div>
+      <div class="row"><button class="btn flex" data-a="doTrade" data-x="${a3}|short">SHORT</button><button class="btn flex" data-a="doTrade" data-x="${a3}|cover">COVER</button><button class="btn flex" data-a="research" data-x="${a3}">RESEARCH ${fmtMoney(researchCost(), true)}</button></div>
+    </div>` : ''}
+    <h4>Takeover offer</h4><p class="muted small">Buy every remaining share at a premium. The board can say no.</p>
+    <div class="row wrap">${[0.2, 0.4, 0.6].map(p => `<button class="btn" data-a="takeover" data-x="${a3}|${p}">+${Math.round(p * 100)}% · ${fmtMoney(takeoverCost(c, p), true)} · ${Math.round(takeoverOdds(c, p) * 100)}% chance</button>`).join('')}</div>
+    <button class="btn wide" data-a="webCo" data-x="${a3}">🌐 Visit company website</button>`);
+}
+PANELS.portfolio = () => {
+  const nw = netWorth(), d = S.nh.d, w = S.nh.w, m = S.nh.m;
+  let series = d.map(x => x[1]);
+  if (UI.range === '1M') series = d.slice(-30).map(x => x[1]);
+  else if (UI.range === '1Y') series = w.length >= 26 ? w.slice(-52).map(x => x[1]) : d.slice(-130).map(x => x[1]);
+  else if (UI.range === 'All') series = m.length > 1 ? m.map(x => x[1]) : w.map(x => x[1]);
+  // Day calendar: green/red by daily net-worth change, most recent 35 days.
+  const cal = [];
+  for (let i = Math.max(1, d.length - 35); i < d.length; i++) {
+    const diff = d[i][1] - d[i - 1][1];
+    cal.push(`<div class="cal-day ${diff >= 0 ? 'green' : 'red'}" title="Day ${d[i][0]}: ${diff >= 0 ? '+' : ''}${fmtMoney(diff, true)}">${d[i][0]}</div>`);
+  }
+  const held = Object.entries(S.holdings).filter(([, h]) => h.qty !== 0);
+  return panelShell('Portfolio', `Net worth ${fmtMoney(nw, true)} · Cash ${fmtMoney(S.cash, true)} · Loan ${fmtMoney(S.loan, true)}`,
+    `${rangeSeg(['1M', '1Y', 'All'], UI.range, 'range')}${lineChart(series, { h: 160 })}
+    <div class="stats3 box"><div><span>You</span><b class="${upCls(myReturn())}">${fmtPct(myReturn())}</b></div><div><span>Market</span><b class="${upCls(marketReturn())}">${fmtPct(marketReturn())}</b></div><div><span>Beat market</span><b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></div></div>
+    <h4>Day calendar</h4><div class="cal">${cal.join('') || '<p class="muted small">Play a few days to fill the calendar.</p>'}</div>
+    <h4>Holdings</h4><div class="list">${held.map(([a3, h]) => {
+      const c = S.co[a3];
+      return `<button class="srow" data-a="stock" data-x="${a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)}</small></span><span class="sprice"><b>${h.qty.toLocaleString()} shares</b><small>${fmtMoney(h.qty * c.price, true)}</small></span></button>`;
+    }).join('') || '<p class="muted small">No open positions. Buy a stock in Markets.</p>'}</div>
+    <h4>This week</h4><div class="kv"><span>Profit</span><b class="${upCls(S.week.profit)}">${fmtMoney(S.week.profit, true)}</b></div><div class="kv"><span>Companies</span><b>${fmtMoney(S.week.companies || 0, true)}</b></div><div class="kv"><span>Rent</span><b>${fmtMoney(S.week.rent || 0, true)}</b></div>
+    <h4>Buildings</h4><div class="list">${S.props.map(p => {
+      const city = W.cities[p.city];
+      return `<button class="srow" data-a="propSheet" data-x="${p.id}"><span class="avatar">🏠</span><span class="sname"><b>${esc(city.name)}</b><small>${p.units} units · ${Math.round(p.occ * 100)}% occupied</small></span><span class="sprice"><b>${fmtMoney(p.value, true)}</b><small>${fmtMoney(p.income, true)}/week</small></span></button>`;
+    }).join('') || '<p class="muted small">No buildings yet. Buy one from a city FOR SALE pin.</p>'}</div>`);
+};
+PANELS.company = () => {
+  const mineList = mine();
+  if (!mineList.length) return panelShell('My Company', '', '<div class="card in"><p class="muted">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p></div>');
+  const body = mineList.map(c => {
+    const F = SECTORS[c.sector].fleet, wk = c.week || { profit: 0, locs: 0, fleet: 0, online: 0, ads: 0, tax: 0 };
+    return `<div class="card in"><h4>${SECTORS[c.sector].icon} ${esc(c.name)} <small class="muted">${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)}</small></h4>
+      <div class="stats3 box"><div><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div><span>Locations</span><b>${c.locs.length}</b></div><div><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div></div>
+      <div class="kv"><span>Locations profit</span><b>${fmtMoney(wk.locs, true)}</b></div><div class="kv"><span>Fleet profit</span><b>${fmtMoney(wk.fleet, true)}</b></div><div class="kv"><span>Online profit</span><b>${fmtMoney(wk.online, true)}</b></div><div class="kv"><span>Ads cost</span><b>${fmtMoney(wk.ads, true)}</b></div><div class="kv"><span>Tax</span><b>${fmtMoney(wk.tax, true)}</b></div>
+      <h5>Price, quality, wage</h5>
+      <div class="kv"><span>Price multiplier</span><span><input type="range" min="0.5" max="2" step="0.1" value="${c.set.price}" data-in="price" data-x="${c.a3}"> ${Math.round(c.set.price * 100)}%</span></div>
+      <div class="kv"><span>Quality (1–5)</span><span><input type="range" min="1" max="5" step="1" value="${c.set.quality}" data-in="quality" data-x="${c.a3}"> ${c.set.quality}★</span></div>
+      <div class="kv"><span>Wage multiplier</span><span><input type="range" min="0.5" max="2" step="0.1" value="${c.set.wage}" data-in="wage" data-x="${c.a3}"> ${Math.round(c.set.wage * 100)}%</span></div>
+      <h5>Locations</h5><div class="list">${c.locs.map(l => {
+        const city = W.cities[S.co[c.a3].city];
+        return `<div class="kv"><span>${SECTORS[c.sector].loc.name} · Staff ${l.staff} · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week <button class="btn small" data-a="closeLoc" data-x="${c.a3}|${l.id}">Close</button></b></div>`;
+      }).join('') || '<p class="muted small">No locations. Open one from a city FOR LEASE pin.</p>'}</div>
+      ${F ? `<h5>Fleet</h5><div class="kv"><span>${F.levels[c.fleet].name}</span><b>${c.fleet < F.levels.length - 1 ? `<button class="btn" data-a="fleetUp" data-x="${c.a3}">Upgrade · ${fmtMoney(F.levels[c.fleet + 1].cost, true)}</button>` : 'Biggest there is'}</b></div>${c.fleet ? `<button class="btn" data-a="fleetSell" data-x="${c.a3}">Sell fleet level · +${fmtMoney(F.levels[c.fleet].cost * 0.6, true)}</button>` : ''}` : ''}
+      <h5>Loans &amp; listing</h5>
+      <div class="kv"><span>Your loan</span><b>${fmtMoney(S.loan, true)} · Bank will lend ${fmtMoney(maxLoan(), true)}</b></div>
+      <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs $25M value)</button>` : '<span class="muted small">Listed</span>'}</div>
+    </div>`;
+  }).join('');
+  return panelShell('My Company', `${mineList.length} companies under your control`, body);
+};
+function webSiteHTML(c) {
+  const isMine = controlled(c.a3);
+  const oe = onlineEconomics(c);
+  let admin = '';
+  if (isMine) {
+    admin = `<div class="card in admin"><h4>Your site admin</h4>
+      <div class="kv"><span>Tier</span><b>${WEB_TIERS[c.web.tier].name}</b></div>
+      ${c.web.tier < 4 ? `<button class="btn" data-a="webTier" data-x="${c.a3}">Upgrade to ${WEB_TIERS[c.web.tier + 1].name} · ${fmtMoney(WEB_TIERS[c.web.tier + 1].cost, true)}</button>` : '<span class="muted small">Global platform reached.</span>'}
+      <h5>Ads (weekly spend)</h5>${WEB_ADS.map(a => `<div class="kv"><span>${a.name} · ${fmtMoney(a.cost)}/week · +${Math.round(a.effect * 100)}%</span><button class="btn ${c.web.ads[a.id] ? 'on' : ''}" data-a="webAd" data-x="${c.a3}|${a.id}">${c.web.ads[a.id] ? 'ON' : 'OFF'}</button></div>`).join('')}
+      <h5>Add-ons (one-time)</h5>${WEB_ADDONS.map(a => `<div class="kv"><span>${a.name} · ${a.desc}</span>${c.web.addons[a.id] ? '<span class="tagp green">OWNED</span>' : `<button class="btn" data-a="webAddon" data-x="${c.a3}|${a.id}">${fmtMoney(a.cost, true)}</button>`}</div>`).join('')}
+      <div class="kv"><span>Online visitors / week</span><b>${oe.visitors.toLocaleString()}</b></div><div class="kv"><span>Online profit / week</span><b>${fmtMoney(oe.profit, true)}</b></div></div>`;
+  }
+  return `<div class="website card">
+    <div class="web-hero" style="background:${c.color}"><b>${esc(c.name)}</b><span>${SECTORS[c.sector].tag}</span></div>
+    <p>${SECTORS[c.sector].products.join(' · ')}</p>
+    <div class="stats3 box"><div><span>Rating</span><b>${c.rating.toFixed(1)}★</b></div><div><span>Locations</span><b>${c.locs.length}</b></div><div><span>Website</span><b>${WEB_TIERS[c.web.tier].name}</b></div></div>
+    <button class="btn wide" data-a="stock" data-x="${c.a3}">VIEW ${c.sym} STOCK</button>${admin}</div>`;
+}
+PANELS.web = () => {
+  const w = UI.web;
+  let body = '', url = 'seek://search';
+  if (w.view === 'site' && w.a3) {
+    url = 'www.' + S.co[w.a3].name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '.com';
+    body = webSiteHTML(S.co[w.a3]);
+  } else if (w.view === 'news') {
+    url = 'worldtimes://news';
+    body = `<h4>World Times</h4><div class="list">${S.news.slice(0, 60).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No news yet.</p>'}</div>`;
+  } else if (w.view === 'mail') {
+    url = 'mail://inbox';
+    body = `<h4>Mail (${S.mail.filter(m => !m.read).length} unread)</h4><div class="list">${S.mail.map(m => `<div class="card in"><b>${esc(m.from)}</b> · <span class="muted small">${fmtDate(m.d)}</span><p>${esc(m.subject)} — ${esc(m.body)}</p>${m.offer && !m.offer.done ? `<button class="btn3d orange" data-a="acceptOffer" data-x="${m.id}">ACCEPT OFFER · ${fmtMoney(m.offer.price * stake(m.offer.a3), true)} for your stake</button>` : m.offer ? '<span class="tagp green">Offer accepted</span>' : ''}</div>`).join('') || '<p class="muted small">No mail.</p>'}</div>`;
+  } else {
+    const q = w.q.trim().toLowerCase();
+    const results = Object.values(S.co).filter(c => !q || c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q) || cname(c.a3).toLowerCase().includes(q)).sort((a, b) => companyValue(b) - companyValue(a)).slice(0, 30);
+    const sponsored = results.find(c => c.web.ads.search);
+    body = `<h4>Seek search</h4><p class="muted small">Every company has a site here. This is a fake browser inside the game.</p>
+      ${sponsored ? `<div class="card in sponsored"><span class="tagp">SPONSORED</span><button class="srow" data-a="webSite" data-x="${sponsored.a3}"><span class="avatar" style="background:${sponsored.color}">${esc(sponsored.name[0])}</span><span class="sname"><b>${esc(sponsored.name)}</b><small>${sponsored.sym} · ${esc(cname(sponsored.a3))}</small></span></button></div>` : ''}
+      <div class="list">${results.map(c => `<button class="srow" data-a="webSite" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${esc(c.name)}</b><small>${c.sym} · ${esc(cname(c.a3))} · ${SECTORS[c.sector].icon} ${c.sector}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b></span></button>`).join('') || '<p class="muted small">No matches. Try a company name or a country.</p>'}</div>`;
+  }
+  return panelShell('Web', 'Fake browser — your company website lives here, not News',
+    `<div class="browser"><div class="urlbar"><button data-a="webBack">←</button><button data-a="webHome">⌂</button><span class="url">${esc(url)}</span></div>
+    <div class="row wrap"><button class="chip" data-a="webView" data-x="search">Search</button><button class="chip" data-a="webView" data-x="news">World Times</button><button class="chip" data-a="webView" data-x="mail">Mail (${S.mail.filter(m => !m.read).length})</button><button class="chip" data-a="webView" data-x="mine">My site</button></div>
+    ${w.view === 'search' ? `<input id="wsearch" class="search" placeholder="Search companies, countries, products" value="${esc(w.q)}" autocomplete="off">` : ''}
+    ${body}</div>`);
+};
+PANELS.nation = () => {
+  const cs = country(S.home), k = W.byA3[S.home];
+  const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).map(n => {
+    const rel = getRel(S.home, n), err = canAttack(n);
+    return `<div class="kv"><span>${W.byA3[n].flag} ${esc(cname(n))} · Relations ${rel}</span><span><button class="btn small" data-a="diplomacy" data-x="${n}">${fmtMoney(diplomacyCost(n), true)}</button> ${err ? `<span class="muted small">${esc(err)}</span>` : `<button class="btn small" data-a="war" data-x="${n}">DECLARE WAR (${Math.round(warOdds(S.home, n) * 100)}%)</button>`}</span></div>`;
+  }).join('') || '<p class="muted small">No land neighbours. You need Destroyers or Stealth fighters to strike overseas.</p>';
+  const occ = Object.keys(S.countries).filter(a => S.countries[a].occ === S.home);
+  return panelShell('Nation', `${k.flag} ${esc(k.name)} · ${esc(countryStatus(S.home).t)}`,
+    `<div class="stats3 box"><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>Growth</span><b class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</b></div><div><span>Military rank</span><b>#${milRank(S.home)} of 195</b></div></div>
+    <div class="kv"><span>GDP</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div><div class="kv"><span>Stability</span><b>${Math.round(cs.stab)} / 100</b></div><div class="kv"><span>Tax rate</span><b>${Math.round(cs.tax * 100)}%</b></div><div class="kv"><span>Occupied land</span><b>${occ.length ? occ.map(a => cname(a)).join(', ') : 'None'}</b></div>
+    ${S.wars.length ? `<h4>Wars</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))} · Front ${Math.round(w.front)}%</span><button class="btn" data-a="peace">SUE FOR PEACE · ${fmtMoney(peaceCost(), true)}</button></div>`).join('')}` : ''}
+    <h4>Projects</h4>${PROJECTS.map(d => {
+      const run = cs.proj.find(p => p.id === d.id && p.until > S.day);
+      return `<div class="kv"><span>${d.icon} ${d.name} · ${d.desc}</span>${run ? '<span class="tagp green">ACTIVE</span>' : `<button class="btn" data-a="project" data-x="${d.id}">${fmtMoney(projectCost(d), true)}</button>`}</div>`;
+    }).join('')}
+    <h4>Neighbours</h4>${nbs}
+    <button class="btn wide" data-a="panel" data-x="military">OPEN MILITARY</button>`);
+};
+PANELS.military = () => {
+  const cs = country(S.home);
+  return panelShell('Military', `Power ${Math.round(milPower(S.home)).toLocaleString()} · Rank #${milRank(S.home)}`,
+    Object.entries(MILITARY).map(([b, d]) => {
+      const lv = cs.milLv[b], cost = milCost(b);
+      return `<div class="card in"><h4>${d.icon} ${d.name}</h4><p class="muted small">Now: ${d.levels[lv]}</p>${cost != null ? `<button class="btn" data-a="milUp" data-x="${b}">Upgrade to ${d.levels[lv + 1]} · ${fmtMoney(cost, true)}</button>` : '<span class="tagp green">TOP LEVEL</span>'}</div>`;
+    }).join('') +
+    `<h4>Wars</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}`);
+};
+PANELS.estate = () => {
+  return panelShell('My Estate', `${S.props.length} buildings · Value ${fmtMoney(propValue(), true)}`,
+    `<div class="list">${S.props.map(p => {
+      const city = W.cities[p.city];
+      return `<button class="srow" data-a="propSheet" data-x="${p.id}"><span class="avatar">🏠</span><span class="sname"><b>${esc(city.name)}, ${esc(cname(city.a3))}</b><small>${p.units} units · ${Math.round(p.occ * 100)}% occupied · Condition ${Math.round(p.cond * 100)}%</small></span><span class="sprice"><b>${fmtMoney(p.value, true)}</b><small>${fmtMoney(p.income, true)}/week</small></span></button>`;
+    }).join('') || '<p class="muted small">No buildings yet. Buy one from a city FOR SALE pin.</p>'}</div>`);
+};
+PANELS.goals = () => {
+  const stage = CAREER[S.career];
+  return panelShell('Daily goals', `Career: ${careerName()} · Streak ${S.daily.streak} days`,
+    `<div class="stats3 box"><div><span>Level</span><b>Lv ${level()}</b></div><div><span>XP</span><b>${S.xp}</b></div><div><span>Companies controlled</span><b>${mine().length}</b></div></div>
+    ${stage ? `<h4>${stage.name}</h4>${stage.goals.map((g, i) => `<div class="goal ${S.goalsDone.includes(S.career + ':' + i) ? 'done' : ''}"><span>${S.goalsDone.includes(S.career + ':' + i) ? '✓' : '○'}</span>${g.t}</div>`).join('')}` : '<p class="muted small">Legend status reached 👑</p>'}
+    <h4>Daily reward</h4><div class="kv"><span>Today</span><b>${fmtMoney(dailyRewardInfo().amount, true)}</b></div><button class="btn3d orange wide" data-a="claimDaily">CLAIM DAILY REWARD</button>`);
+};
+PANELS.inbox = () => {
+  S.mail.forEach(m => { m.read = true; });
+  return panelShell('Inbox', `${S.mail.length} messages · News below`,
+    `<div class="list">${S.mail.map(m => `<div class="card in"><b>${esc(m.from)}</b> · <span class="muted small">${fmtDate(m.d)}</span><p>${esc(m.subject)} — ${esc(m.body)}</p>${m.offer && !m.offer.done ? `<button class="btn3d orange" data-a="acceptOffer" data-x="${m.id}">ACCEPT OFFER</button>` : ''}</div>`).join('') || '<p class="muted small">No mail.</p>'}</div>
+    <h4>Latest news</h4><div class="list">${S.news.slice(0, 30).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('')}</div>`);
+};
+PANELS.shop = () => {
+  return panelShell('Shop', 'Every power-up is free, once per real day',
+    SHOP.map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'CLAIM FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
+};
+PANELS.search = () => {
+  const q = UI.q.trim().toLowerCase();
+  const cos = Object.values(S.co).filter(c => !q || c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q)).slice(0, 20);
+  const cts = W.countries.filter(c => c.playable && (!q || c.name.toLowerCase().includes(q))).slice(0, 20);
+  return panelShell('Search', 'Companies and countries',
+    `<input id="msearch" class="search" placeholder="Search anything" value="${esc(UI.q)}" autocomplete="off">
+    <h4>Companies</h4><div class="list">${cos.map(c => `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)}</small></span></button>`).join('') || '<p class="muted small">No matches.</p>'}</div>
+    <h4>Countries</h4><div class="list">${cts.map(c => `<button class="srow" data-a="flyCountry" data-x="${c.a3}"><span class="avatar">${c.flag}</span><span class="sname"><b>${esc(c.name)}</b><small>${fmtPop(c.pop0)} people</small></span></button>`).join('') || '<p class="muted small">No matches.</p>'}</div>`);
+};
+PANELS.leaderboard = () => {
+  const list = leaderboard();
+  const board = (() => { try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; } })();
+  return panelShell('Leaderboard', 'Most valuable companies, with you ranked among them',
+    `<div class="list">${list.slice(0, 30).map((c, i) => `<div class="kv ${c.you ? 'you' : ''}"><span>${i + 1}. ${esc(c.name)}</span><b>${fmtMoney(c.v, true)}</b></div>`).join('')}</div>
+    ${board.length ? `<h4>Past runs</h4><div class="list">${board.map(b => `<div class="kv"><span>${esc(b.name)} · ${esc(cname(b.home))}</span><b>${b.score} pts · ${fmtMoney(b.nw, true)}</b></div>`).join('')}</div>` : ''}`);
+};
+PANELS.settings = () => {
+  return panelShell('Settings', '',
+    `<div class="kv"><span>Sound volume</span><span><input type="range" min="0" max="1" step="0.1" value="${S.settings.vol}" data-in="vol" data-x=""> ${Math.round(S.settings.vol * 100)}%</span></div>
+    <div class="kv"><span>Map motion (vehicles)</span><button class="btn" data-a="toggleMotion">${S.settings.motion ? 'ON' : 'OFF'}</button></div>
+    <div class="kv"><span>Save</span><b>IndexedDB, full history, no size cap</b></div>
+    <button class="btn" data-a="exportSave">COPY SAVE TO CLIPBOARD</button>
+    <button class="btn" data-a="restart">RESTART GAME</button>`);
+};
+PANELS.help = () => {
+  return panelShell('Help', '',
+    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in its capital, buy stocks, and grow. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
+    <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
+};
+function moreSheet() {
+  const items = [
+    ['markets', '📈', 'Markets'], ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'],
+    ['nation', '🏳️', 'Nation'], ['military', '🪖', 'Military'], ['company', '🏢', 'My Company'],
+    ['estate', '🏠', 'My Estate'], ['goals', '🎯', 'Daily goals'], ['inbox', '✉️', 'Inbox'],
+    ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'], ['leaderboard', '🏆', 'Leaderboard'],
+    ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
+  ];
+  if (S.mode === 'infinite') items.push(['timewarp', '⏩', 'Time warp']);
+  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'timewarp' ? 'skipMenu' : 'panel'}" ${x === 'timewarp' ? '' : `data-x="${x}"`}><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
 
 // ---------- actions ----------
 const A = {
-  newGame: () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* storage unavailable */ } S = null; closePanel(); closePopup(); if (CityView.isOpen()) CityView.close(); document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; chooseMode(); },
+  newGame: async () => {
+    await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
+    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; chooseMode();
+  },
   pickMode: x => { UI.mode = x; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
   confirmCountry: () => nameCompany(),
   swatch: (x, el) => { UI.color = x; document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === el)); },
-  beginGame: () => { const name = ($('cname').value || '').trim() || 'Tycoon Co.'; S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false); },
-  tutNext: () => { S.tutorial++; renderTutorial(); },
-  tutSkip: () => { S.tutorial = -1; renderTutorial(); },
-  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); closeModal(); if (CityView.isOpen()) leaveCity(); openPanel(x); },
+  beginGame: () => {
+    const name = ($('cname').value || '').trim() || 'Tycoon Co.';
+    S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
+  },
+  tutNext: () => { S.tutorial++; renderTutorial(); save(); },
+  tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
+  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); openPanel(x); },
   closePanel: () => closePanel(),
   panelBack: () => { UI.stack.pop(); renderPanel(); },
   closePopup: () => closePopup(),
@@ -600,96 +689,135 @@ const A = {
   skip: x => doSkip(+x),
   zoom: x => MapView.zoom(+x),
   locate: () => MapView.home(),
-  mktTab: x => { UI.mktTab = x; UI.q = ''; renderPanel(); },
+  more: () => moreSheet(),
+  cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
+  starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
+  star: (x, el, e) => {
+    e.stopPropagation();
+    if (S.watch.includes(x)) S.watch = S.watch.filter(a => a !== x); else S.watch.push(x);
+    save(); renderPanel(); renderHUD();
+  },
   range: x => { UI.range = x; renderPanel(); },
-  sector: x => { UI.sector = x; renderPanel(); },
-  stock: (x, el, e) => {
-    if (e.target.classList.contains('pbtn') && UI.panel === 'markets' && !UI.stack.length) { UI.showPct = !UI.showPct; refreshAll(); return; }
-    if (UI.panel !== 'markets') { closePopup(); if (CityView.isOpen()) leaveCity(); UI.panel = 'markets'; UI.stack = []; renderHUD(); }
-    pushPanel({ s: 'stock', sym: x });
+  tradeRange: x => { UI.tradeRange = x; renderPanel(); },
+  stock: x => {
+    closePopup(); if (CityView.isOpen()) leaveCity();
+    UI.panel = 'stock'; UI.stack = [{ a3: x }]; renderPanel(); renderHUD();
   },
   flyCity: x => { closePanel(); MapView.flyToCity(+x); onCityTap(+x); },
-  tradeSheet: x => { const [sym, side] = x.split('|'); tradeSheet(sym, side); },
-  qty: x => { const q = $('qty'); q.value = Math.max(1, (+q.value || 0) + +x); updEst(); },
-  qtySet: x => { $('qty').value = Math.max(0, +x); updEst(); },
-  doTrade: x => { const [sym, side] = x.split('|'); const n = +$('qty').value; const err = trade(sym, side, n); if (err) return toast(err, 'bad'); sfx.cash(); closeModal(); toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${sym}`, 'good'); tutCheck(); refreshAll(); },
-  research: x => act(() => research(x)),
-  needs: () => { UI.needs = !UI.needs; renderPanel(); },
-  bizTab: x => { UI.bizTab = x; renderPanel(); },
-  newStore: () => { closePanel(); MapView.flyToCountry(Object.keys(S.biz)[0] || S.home); toast('Tap a city dot, then ENTER CITY to find a storefront.'); },
-  storeSheet: x => storeSheet(x),
-  propSheet: x => propSheet(x),
-  wage: x => { const [a3, v] = x.split('|'); S.biz[a3].wage = +v; renderPanel(); },
-  mkt: x => { const [a3, v] = x.split('|'); S.biz[a3].mkt = +v; renderPanel(); },
-  upgrade: x => act(() => { const u = UPGRADES.find(y => y.id === x); if (S.cash < u.cost) return 'Not enough cash.'; S.cash -= u.cost; S.upgrades[x] = true; if (x === 'kiosk') S.stores.forEach(s => s.staff = Math.max(1, s.staff - 1)); return null; }, 'Upgrade bought'),
-  ipo: x => act(() => goPublic(+x)),
-  buyback: () => act(() => buyback(Math.min(0.05, S.ipo.outside))),
-  borrow: () => act(() => borrow(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4)))),
-  repay: () => act(() => repay(Math.min(S.loan, Math.max(0, S.cash)))),
-  staff: x => { const [id, d] = x.split('|'); const st = S.stores.find(s => s.id === id); st.staff = clamp(st.staff + +d, 1, 4 + st.size * 4); storeSheet(id); refreshAll(); },
-  interior: x => act(() => { const st = S.stores.find(s => s.id === x), b = S.biz[st.a3]; const c = buildCost(b.type, st.interior + 1, st.a3) - buildCost(b.type, st.interior, st.a3); if (S.cash < c) return 'Not enough cash.'; S.cash -= c; st.interior++; storeSheet(x); return null; }),
-  closeStore: x => { const p = S.props.find(y => y.store === x); if (p) delete p.store; closeStore(x); closeModal(); CityView.refresh(); refreshAll(); toast('Store closed'); },
+  flyCountry: x => { closePanel(); MapView.flyToCountry(x); },
+  qty: x => { const q = $('qty'); if (q) q.value = Math.max(1, (+q.value || 0) + +x); },
+  qtyMax: x => {
+    const c = S.co[x], q = $('qty'); if (!c || !q) return;
+    q.value = Math.max(1, Math.floor(S.cash / c.price));
+  },
+  doTrade: x => {
+    const [a3, side] = x.split('|'); const n = +($('qty') ? $('qty').value : 0);
+    const err = trade(a3, side, n);
+    if (err) return toast(err, 'bad');
+    closeModal(); toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${S.co[a3].sym}`, 'good'); tutCheck(); save(); refreshAll();
+  },
+  research: x => act(() => research(x), 'Research done'),
+  takeover: x => {
+    const [a3, p] = x.split('|');
+    act(() => takeover(a3, +p), 'Takeover complete! You now own it outright.');
+  },
+  webCo: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
+  webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
+  webView: x => {
+    if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };
+    else UI.web = { view: x, q: UI.web.q, a3: null };
+    renderPanel();
+  },
+  webBack: () => { UI.web = { view: 'search', q: UI.web.q, a3: null }; renderPanel(); },
+  webHome: () => { UI.web = { view: 'search', q: '', a3: null }; renderPanel(); },
+  webTier: x => act(() => buyWebTier(x), 'Website upgraded'),
+  webAd: x => { const [a3, id] = x.split('|'); act(() => toggleAd(a3, id)); },
+  webAddon: x => { const [a3, id] = x.split('|'); act(() => buyAddon(a3, id), 'Add-on bought'); },
+  acceptOffer: x => act(() => acceptOffer(x), 'Offer accepted'),
   project: x => act(() => fundProject(x), 'Project funded'),
   diplomacy: x => act(() => diplomacy(x), 'Relations improved'),
+  war: x => act(() => declareWar(x), 'War declared'),
+  peace: () => act(() => suePeace(), 'Peace signed'),
+  milUp: x => act(() => upgradeMilitary(x), 'Military upgraded'),
+  fleetUp: x => act(() => upgradeFleet(x), 'Fleet upgraded'),
+  fleetSell: x => act(() => sellFleet(x), 'Fleet level sold'),
+  borrow: () => act(() => borrow(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4))), 'Loan taken'),
+  repay: () => act(() => repay(Math.min(S.loan, Math.max(0, S.cash))), 'Loan repaid'),
+  ipo: x => act(() => goPublic(x, 0.4), 'IPO complete! 40% sold to the public.'),
+  closeLoc: x => {
+    const [a3, id] = x.split('|');
+    act(() => { closeLoc(S.co[a3], id); return null; }, 'Location closed');
+    closePopup(); CityView.refresh();
+  },
   enterCity: x => { closeModal(); enterCity(+x); },
   leaveCity: () => leaveCity(),
-  cityFilter: () => { const f = ['all', 'lease', 'sale', 'mine']; CityView.setFilter(f[(f.indexOf(CityView.filter) + 1) % 4]); renderCityHUD(); },
-  cityInfo: () => { const c = CityView.city, k = W.byA3[c.a3], biz = S.biz[c.a3]; openModal(`<h2>${k.flag} ${esc(c.name)}</h2><p class="muted">${esc(k.name)}</p><div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your stores</span><b>${S.stores.filter(s => s.city === c.id).length}</b></div><div><span>Your buildings</span><b>${S.props.filter(p => p.city === c.id).length}</b></div></div><h4>Rival chains here</h4>${Object.keys(BIZ_TYPES).map(t => `<div class="kv"><span>${BIZ_TYPES[t].icon} ${BIZ_TYPES[t].name}${biz && biz.type === t ? ' (yours)' : ''}</span><b>${rivalCount(c.id, t)}</b></div>`).join('')}`, 'sheet'); },
-  chooseBiz: x => chooseBizType(x),
-  startBiz: x => { const [a3, type] = x.split('|'); const err = startBusiness(a3, type); if (err) return toast(err, 'bad'); sfx.cash(); closeModal(); renderCityHUD(); CityView.refresh(); toast(`${BIZ_TYPES[type].name} registered. Now lease a storefront.`, 'good'); refreshAll(); },
-  lease: x => { const [t, i] = x.split('|').map(Number); const err = leaseLot(CityView.city.id, t, i); if (err) return toast(err, 'bad'); sfx.cash(); closeModal(); CityView.refresh(); renderCityHUD(); toast('Store opened! Results arrive every week.', 'good'); tutCheck(); refreshAll(); },
-  buyBld: x => { const err = buyBuilding(CityView.city.id, +x); if (err) return toast(err, 'bad'); sfx.cash(); closeModal(); CityView.refresh(); renderCityHUD(); toast('Building bought. Rent arrives every week.', 'good'); refreshAll(); },
-  sellBld: x => { const err = sellBuilding(x); if (err) return toast(err, 'bad'); closeModal(); CityView.refresh(); refreshAll(); },
-  renovate: x => act(() => { const e = renovate(x); if (!e) propSheet(x); return e; }),
-  ownStore: x => { const p = S.props.find(y => y.id === x), biz = S.biz[W.cities[p.city].a3]; const err = leaseLot(p.city, p.t, 0); if (err) return toast(err, 'bad'); const lot = cityLots(p.city).find(l => l.t === p.t); p.store = lot.store; closeModal(); CityView.refresh(); refreshAll(); toast(`${BIZ_TYPES[biz.type].name} opened in your building`, 'good'); },
-  shop: x => act(() => claimShop(x), 'Claimed!'),
-  claimDaily: () => { const r = dailyRewardInfo(); const e = claimDaily(); if (e) return toast(e, 'bad'); sfx.cash(); toast(`+${fmtMoney(r.amount, true)} daily reward`, 'good'); welcomeBack(); refreshAll(); },
+  cityFilter: () => {
+    const f = ['all', 'lease', 'sale', 'mine'];
+    CityView.setFilter(f[(f.indexOf(CityView.filter) + 1) % f.length]); renderCityHUD();
+  },
+  lease: x => {
+    const [t, i] = x.split('|').map(Number);
+    const city = CityView.city;
+    const err = leaseLot(city.a3, t, i);
+    if (err) return toast(err, 'bad');
+    closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Location opened! Results arrive every week.', 'good'); tutCheck(); save(); refreshAll();
+  },
+  buyBld: x => {
+    const err = buyBuilding(CityView.city.id, +x);
+    if (err) return toast(err, 'bad');
+    closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Building bought. Rent arrives every week.', 'good'); save(); refreshAll();
+  },
+  sellBld: x => { act(() => sellBuilding(x), 'Building sold'); closePopup(); CityView.refresh(); },
+  renovate: x => act(() => { const e = renovate(x); if (!e) { UI.popup = { type: 'pin', pin: { type: 'prop', lot: { t: S.props.find(p => p.id === x).t } }, lot: { t: S.props.find(p => p.id === x).t } }; renderPopup(); } return e; }),
+  propSheet: x => {
+    const p = S.props.find(y => y.id === x); if (!p) return;
+    openModal(`<div class="card in"><h3>Your building</h3><p class="muted">${esc(W.cities[p.city].name)}, ${esc(cname(W.cities[p.city].a3))}</p>
+      <div class="stats3 box"><div><span>Value</span><b>${fmtMoney(p.value, true)}</b></div><div><span>Income / week</span><b>${fmtMoney(p.income, true)}</b></div><div><span>Condition</span><b>${Math.round(p.cond * 100)}%</b></div></div>
+      <p class="muted small">${p.units} units · Occupancy ${Math.round(p.occ * 100)}% · Rent level ${p.rentLv.toFixed(1)}x</p>
+      <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
+  },
+  shopBuy: x => act(() => claimShop(x), 'Claimed!'),
+  claimDaily: () => {
+    const r = dailyRewardInfo(); const e = claimDaily();
+    if (e) return toast(e, 'bad');
+    toast(`+${fmtMoney(r.amount, true)} daily reward`, 'good'); save(); refreshAll();
+  },
   toggleMotion: () => { S.settings.motion = !S.settings.motion; renderPanel(); },
-  recolor: x => { S.company.color = x; refreshAll(); },
-  exportSave: () => { const t = btoa(unescape(encodeURIComponent(JSON.stringify(S)))); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Save copied', 'good'), () => toast('Clipboard unavailable', 'bad')); },
-  importSave: () => openModal(`<h2>Load save</h2><textarea id="imp" class="text-in" rows="5" placeholder="Paste save data"></textarea><button class="btn3d orange wide" data-a="doImport">LOAD</button>`, 'sheet'),
-  doImport: () => { try { S = JSON.parse(decodeURIComponent(escape(atob($('imp').value.trim())))); save(); closeModal(); enterGame(true); } catch (e) { toast('That save data is invalid', 'bad'); } },
+  exportSave: () => {
+    const t = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Save copied', 'good'), () => toast('Clipboard unavailable', 'bad'));
+  },
   restart: () => openModal(`<h2>Restart?</h2><p class="muted">This ends your current game.</p><button class="btn3d orange wide" data-a="newGame">RESTART</button>`, 'sheet'),
 };
-function act(fn, ok) { const e = fn(); if (e) toast(e, 'bad'); else { if (ok) toast(ok, 'good'); sfx.cash(); } refreshAll(); return !e; }
 function onClick(e) {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
-  if (el.dataset.a !== 'scrim' && e.target.closest('[data-stop]') && !el.closest('[data-stop]')) return;
   const fn = A[el.dataset.a]; if (fn) fn(el.dataset.x, el, e);
 }
 function onInput(e) {
   const t = e.target;
-  if (t.id === 'csearch') { UI.q = t.value; const pos = t.selectionStart; renderPick(); const n = $('csearch'); n.focus(); n.setSelectionRange(pos, pos); return; }
-  if (t.id === 'msearch') { UI.q = t.value; $('mlist').innerHTML = stockList(); return; }
-  if (t.id === 'qty') return updEst();
-  if (t.id === 'rename') { S.company.name = t.value.slice(0, 24) || S.company.name; renderHUD(); return; }
+  if (t.id === 'csearch') { UI.q = t.value; const pos = t.selectionStart; renderPick(); const n = $('csearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
+  if (t.id === 'msearch') {
+    UI.q = t.value;
+    if (UI.panel === 'markets') { const l = $('mlist'); if (l) l.innerHTML = marketsListHTML(); }
+    else if (UI.panel === 'search') { const pos = t.selectionStart; renderPanel(); const n = $('msearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }
+    return;
+  }
+  if (t.id === 'wsearch') { UI.web.q = t.value; const pos = t.selectionStart; renderPanel(); const n = $('wsearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
   const k = t.dataset.in; if (!k) return;
-  if (k === 'price' || k === 'quality') { S.biz[t.dataset.x][k] = +t.value; t.nextElementSibling.textContent = k === 'price' ? Math.round(t.value * 100) + '%' : '★'.repeat(+t.value); }
-  if (k === 'vol' || k === 'ui') { S.settings[k] = +t.value; t.nextElementSibling.textContent = Math.round(t.value * 100) + '%'; }
-  if (k === 'rentLv') { const p = S.props.find(x => x.id === t.dataset.x); p.rentLv = +t.value; t.nextElementSibling.textContent = fmtMoney(p.mrent * p.rentLv) + '/unit'; }
+  if (k === 'price' || k === 'quality' || k === 'wage') {
+    const c = S.co[t.dataset.x]; if (c) c.set[k] = +t.value;
+    save();
+  }
+  if (k === 'vol') { S.settings.vol = +t.value; }
 }
-function refreshAll() { if (!S) return; if (!UI.pick) renderHUD(); if (UI.panel) renderPanel(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD(); }
-
-// ---------- game loop ----------
-let lastT = 0, lastSave = 0, lastDraw = 0;
-function loop(now) {
-  if (!S || UI.pick || S.over) { lastT = now; return; }
-  const dt = Math.min(1000, now - (lastT || now)); lastT = now;
-  const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.type !== 'range';
-  if (S.speed > 0 && !document.hidden && !UI.modal) {
-    UI.acc += dt;
-    const per = DAY_MS_BY_SPEED[S.speed], wars = S.wars.length; let stepped = false;
-    while (UI.acc >= per) { UI.acc -= per; stepDay(); stepped = true; if (S.over) break; }
-    if (stepped) {
-      if (S.wars.length !== wars || S.day % 7 === 0) MapView.redraw();
-      if (!focused && now - lastDraw > 250) {
-        lastDraw = now; renderHUD(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD();
-        if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus, #panel input:active')) renderPanel();
-      }
-      if (S.over) { save(); gameOver(); }
-    }
-  } else UI.acc = 0;
-  if (now - lastSave > 10000) { lastSave = now; save(); }
+function marketsListHTML() {
+  const rows = marketRows();
+  return rows.slice(0, 120).map(c => {
+    const ch = chgVs(c), starred = S.watch.includes(c.a3);
+    return `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span><span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span></button>`;
+  }).join('') || '<div class="card in empty">Nothing here yet.</div>';
 }
-
+function onChange(e) {
+  // <select> elements are not used; range inputs are handled in onInput.
+}
 boot();
