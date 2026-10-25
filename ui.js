@@ -658,7 +658,7 @@ PANELS.goals = () => {
 };
 PANELS.inbox = () => {
   S.mail.forEach(m => { m.read = true; });
-  return panelShell('Inbox', `${S.mail.length} messages · News below`,
+  return panelShell('Messages', `${S.mail.length} messages · News below`,
     `<div class="list">${S.mail.map(m => `<div class="card in"><b>${esc(m.from)}</b> · <span class="muted small">${fmtDate(m.d)}</span><p>${esc(m.subject)} — ${esc(m.body)}</p>${m.offer && !m.offer.done ? `<button class="btn3d orange" data-a="acceptOffer" data-x="${m.id}">ACCEPT OFFER</button>` : ''}</div>`).join('') || '<p class="muted small">No mail.</p>'}</div>
     <h4>Latest news</h4><div class="list">${S.news.slice(0, 30).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('')}</div>`);
 };
@@ -697,9 +697,9 @@ PANELS.help = () => {
 };
 function moreSheet() {
   const items = [
-    ['markets', '📈', 'Markets'], ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'],
-    ['nation', '🏳️', 'Nation'], ['military', '🪖', 'Military'], ['company', '🏢', 'My Company'],
-    ['estate', '🏠', 'My Estate'], ['goals', '🎯', 'Daily goals'], ['inbox', '✉️', 'Inbox'],
+    ['inbox', '✉️', 'Messages'], ['markets', '📈', 'Markets'], ['portfolio', '💼', 'Portfolio'],
+    ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['military', '🪖', 'Military'],
+    ['company', '🏢', 'My Company'], ['estate', '🏠', 'My Estate'], ['goals', '🎯', 'Daily goals'],
     ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'], ['leaderboard', '🏆', 'Leaderboard'],
     ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
