@@ -408,7 +408,7 @@ const MapView = (() => {
       if (n >= maxLabels && p < 1e11) break;
       const ct = W.cities[id], [sx, sy] = toScreen(ct.x, ct.y);
       if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
-      const isSel = id === sel, text = isSel || v.s > 2.2 ? `${ct.code} · ${ct.name}` : ct.code;
+      const isSel = id === sel, text = isSel || v.s > 2.2 ? `${ct.a3} · ${W.byA3[ct.a3].name}` : ct.a3;
       if (pill(c, sx, sy + r + 6, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL)) n++;
     }
   }

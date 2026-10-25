@@ -673,7 +673,7 @@ function showInherit() {
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal();
   const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
   $('inherit').innerHTML = `<h1>You have inherited</h1>
-    <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
+    <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
     <div id="inheritInfo" style="color:#667085;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
     <label style="color:#667085;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
     <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
