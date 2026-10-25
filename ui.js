@@ -75,7 +75,10 @@ function migrateSave(s) {
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
-  for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; }
+  if (s.extra == null) s.extra = {};
+  if (s.leader == null) s.leader = false;
+  if (s.countryName === undefined) s.countryName = null;
+  for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05; if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54; }
   for (const a3 in s.co) {
     const c = s.co[a3];
     if (!c.yearStats) c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
@@ -234,11 +237,19 @@ function renderHUD() {
   // they were removed, and Age moved to the fixed bottom bar instead of
   // living in the top-right corner where it was easy to miss and hard
   // to reach on a phone.
-  $('hud').innerHTML = `<div class="company-card card">
+  const hk = W.byA3[S.home], hcs = country(S.home);
+  const cardTop = S.leader
+    ? `<div class="company-card card">
+    <div class="cc-top"><b>${hk.flag} ${esc(cname(S.home))} — Leader</b><span class="muted small">Lv ${lv} · Stability ${Math.round(hcs.stab)} / 100</span></div>
+    <div class="cc-money"><span>Treasury <b>${fmtMoney(S.cash, true)}</b></span><span>Debt <b>${fmtMoney(hcs.debt || 0, true)}</b></span></div>
+    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 GDP <b>${fmtMoney(hcs.gdp * 1e6, true)}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
+  </div>`
+    : `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
     <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
-  </div>
+  </div>`;
+  $('hud').innerHTML = cardTop + `
   <div class="rail-bottom">
     <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
     <button class="rail-btn" data-a="zoom" data-x="0.7" aria-label="Zoom out">－</button>
@@ -462,8 +473,22 @@ async function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   const saved = await loadSave();
   if (saved) { S = saved; enterGame(true); }
-  else showTitle();
+  else showInherit();
 }
+function showInherit() {
+  $('hud').innerHTML = ''; MapView.setPick(false); closeModal();
+  const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
+  $('inherit').innerHTML = `<h1>You have inherited</h1>
+    <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
+    <label style="color:#aaa;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
+    <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
+    <p>You are now the leader of this country, as it is today. Tax its businesses, pay your people, trade, and grow — or invade a neighbour for the challenge.</p>
+    <button class="btn3d orange wide" data-a="inheritContinue">CONTINUE</button>`;
+  $('inherit').classList.add('open');
+  const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName');
+  if (sel && inp) sel.addEventListener('change', () => { const kk = W.byA3[sel.value]; if (kk) inp.value = kk.name; });
+}
+function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
 function showTitle() {
   $('hud').innerHTML = ''; MapView.setPick(false);
   openModal(`<div class="title-card">
@@ -504,9 +529,9 @@ function nameCompany() {
     <button class="btn3d orange wide" data-a="beginGame">START</button>`, 'center');
 }
 function enterGame(returning) {
-  UI.pick = null; MapView.setPick(false); closeModal();
+  UI.pick = null; MapView.setPick(false); closeModal(); hideInherit();
   S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
-  const da = autoCreditDaily(), ca = autoCreditShopCash();
+  const da = S.leader ? 0 : autoCreditDaily(), ca = S.leader ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   renderHUD(); MapView.home();
   if (returning) welcomeBack(); else S.tutorial = 0;
@@ -567,12 +592,12 @@ function renderPopup() {
     </div>`;
   } else if (p.type === 'country') {
     const k = W.byA3[p.a3], co = S.co[p.a3], st = countryStatus(p.a3), cs = country(p.a3), cap = W.cities[k.capital];
-    const biz = [co];
+    const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(p.a3) : [co];
     $('popup').innerHTML = `<div class="popup card">
-      <div class="row between"><div><b>${k.flag} ${esc(k.name)}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="row between"><div><b>${k.flag} ${esc(cname(p.a3))}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
       <h5>Businesses</h5>
-      ${biz.map(bc => `<div class="kv"><span>${SECTORS[bc.sector].icon} ${esc(bc.name)} · ★ ${bc.rating.toFixed(1)} · ${bc.locs.length} locations</span><b>${fmtMoney(companyValue(bc), true)}</b></div>`).join('')}
+      ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
       <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
     </div>`;
@@ -860,6 +885,29 @@ PANELS.nation = () => {
     <h4>Neighbours</h4>${nbs}
     <button class="btn wide" data-a="panel" data-x="military">OPEN MILITARY</button>`);
 };
+PANELS.leader = () => {
+  const cs = country(S.home), k = W.byA3[S.home], lw = cs.lastWeek || {};
+  const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(S.home) : [S.co[S.home]];
+  return panelShell('Leader', `${k.flag} ${esc(cname(S.home))} · You are the leader, as of today`,
+    `<div class="stats3 box"><div><span>Treasury</span><b>${fmtMoney(S.cash, true)}</b></div><div><span>Debt</span><b>${fmtMoney(cs.debt || 0, true)}</b></div><div><span>Debt / GDP</span><b>${Math.round((cs.debt || 0) / Math.max(1, cs.gdp * 1e6) * 100)}%</b></div></div>
+    <div class="kv"><span>Population</span><b>${fmtPop(nationPop())}</b></div><div class="kv"><span>GDP</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div><div class="kv"><span>Stability</span><b>${Math.round(cs.stab)} / 100</b></div>
+    <h4>Last week — economy, straight</h4><p class="muted small">Every payment has a payer and a recipient. Taxes go to the treasury, the treasury pays people, services, military upkeep and debt interest. No free money in leader mode.</p>
+    <div class="kv"><span>Revenue</span><b>${fmtMoney(lw.revenue || 0, true)} / week</b></div>
+    <div class="kv"><span>— Corporate tax</span><b>${fmtMoney(lw.corpTax || 0, true)}</b></div>
+    <div class="kv"><span>— Income tax</span><b>${fmtMoney(lw.incomeTax || 0, true)}</b></div>
+    <div class="kv"><span>— VAT</span><b>${fmtMoney(lw.vat || 0, true)}</b></div>
+    <div class="kv"><span>— Trade tax</span><b>${fmtMoney(lw.tradeTax || 0, true)}</b></div>
+    <div class="kv"><span>Spending</span><b>${fmtMoney(lw.spending || 0, true)} / week</b></div>
+    <div class="kv"><span>— Pay people (wages)</span><b>${fmtMoney(lw.payPeople || 0, true)}</b></div>
+    <div class="kv"><span>— Services</span><b>${fmtMoney(lw.services || 0, true)}</b></div>
+    <div class="kv"><span>— Military upkeep</span><b>${fmtMoney(lw.milUpkeep || 0, true)}</b></div>
+    <div class="kv"><span>— Debt interest</span><b>${fmtMoney(lw.interest || 0, true)}</b></div>
+    <div class="kv"><span>Net / week</span><b class="${upCls(lw.net || 0)}">${fmtMoney(lw.net || 0, true)}</b></div>
+    <p class="muted small">Bilateral trade (who trades with whom) is not in this build yet — trade tax above is the government part, business revenues already include trade. Extra businesses below are real economic businesses, not yet separate stocks in Markets — that is next.</p>
+    <h4>Your country's businesses (${biz.length})</h4>
+    ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}${bc.week && bc.week.profit ? ' · ' + fmtMoney(bc.week.profit, true) + '/week' : ''}</b></div>`).join('')}
+    <div class="row"><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="military">MILITARY</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button></div>`);
+};
 PANELS.military = () => {
   const cs = country(S.home);
   return panelShell('Military', `Power ${Math.round(milPower(S.home)).toLocaleString()} · Rank #${milRank(S.home)}`,
@@ -924,7 +972,7 @@ PANELS.help = () => {
 };
 function moreSheet() {
   const items = [
-    ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
+    ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
@@ -938,7 +986,7 @@ const A = {
   newGame: async () => {
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
     S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
-    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; chooseMode();
+    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; showInherit();
   },
   pickMode: x => { UI.mode = x; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
@@ -947,6 +995,11 @@ const A = {
   beginGame: () => {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
+  },
+  inheritContinue: () => {
+    const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
+    const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
+    S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName }); save(); enterGame(false);
   },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
