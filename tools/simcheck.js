@@ -5,7 +5,8 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = path.join(__dirname, '..');
 const ctx = vm.createContext({ Math, Set, JSON, Date, console, atob, Uint8Array, Float32Array, Int32Array, String, Object, Array,
   Path2D: class { moveTo() {} lineTo() {} closePath() {} }, localStorage: { getItem: () => null, setItem: () => {} } });
-vm.runInContext(['data.js', 'world-data.js', 'world.js', 'sim.js', 'world-events.js'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + '\nvar W, S;', ctx);
+const _worldFiles = ['data.js', 'world-data.js', 'world-data-a.js', 'world-data-b.js', 'world-data-c.js', 'world.js', 'sim.js', 'world-events.js'].filter(f => fs.existsSync(path.join(dir, f)));
+vm.runInContext(_worldFiles.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + '\nvar W, S;', ctx);
 const years = +process.argv[2] || 20, home = process.argv[3] || 'USA';
 console.log(vm.runInContext(`(() => {
   const t0 = Date.now(); W = buildWorld(); const tw = Date.now() - t0;
