@@ -255,8 +255,6 @@ function renderHUD() {
   </div>`;
   $('hud').innerHTML = cardTop + `
   <div class="rail-bottom">
-    <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
-    <button class="rail-btn" data-a="zoom" data-x="0.7" aria-label="Zoom out">－</button>
     <button class="rail-btn" data-a="locate" aria-label="Go home">⌖</button>
   </div>
   <div class="bottombar card">
