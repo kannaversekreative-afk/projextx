@@ -409,13 +409,26 @@ const MapView = (() => {
         const scr = nodes.map(n => { const [sx, sy] = toScreen(n.xy[0], n.xy[1]); return { ...n, sx, sy }; }).filter(n => n.sx > -30 && n.sy > -30 && n.sx < vw + 30 && n.sy < vh + 30);
         if (!scr.length) return;
         const [cx, cy] = toScreen(f.cap.x, f.cap.y);
+        // Real roads, not straight fastest-path lines: each link follows
+        // a land A* path, so the thin white line winds around water and
+        // along the coast like a road. Falls back to a straight line only
+        // if no land route exists (e.g. across a strait).
+        const road = (fromCell, toCell, a, b) => {
+          if (fromCell == null || toCell == null) return [a, b];
+          if (fromCell === toCell) return [a, b];
+          const pts = roadPath(k.a3, fromCell, toCell);
+          if (!pts || pts.length < 2) return [a, b];
+          return pts.map(p => toScreen(p[0], p[1]));
+        };
         const links = [];
-        scr.forEach(n => links.push([[cx, cy], [n.sx, n.sy]]));
         const portN = scr.find(n => n.kind === 'port'), milN = scr.find(n => n.kind === 'milPort');
-        if (portN && milN) links.push([[portN.sx, portN.sy], [milN.sx, milN.sy]]);
-        links.forEach(([a, b]) => {
-          c.strokeStyle = 'rgba(47,124,246,0.35)'; c.lineWidth = 3; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
-          c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+        if (portN) links.push(road(f.capLandCell, f.portLandCell, [cx, cy], [portN.sx, portN.sy]));
+        if (milN) links.push(road(f.capLandCell, f.milPortLandCell, [cx, cy], [milN.sx, milN.sy]));
+        if (portN && milN && f.portLandCell !== f.milPortLandCell) links.push(road(f.portLandCell, f.milPortLandCell, [portN.sx, portN.sy], [milN.sx, milN.sy]));
+        links.forEach(pts => {
+          const stroke = (style, width) => { c.strokeStyle = style; c.lineWidth = width; c.lineJoin = 'round'; c.lineCap = 'round'; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); };
+          stroke('rgba(47,124,246,0.35)', 3);
+          stroke('rgba(255,255,255,0.95)', 1.4);
         });
         scr.forEach(n => {
           const bg = n.kind === 'port' ? '#2f7cf6' : n.kind === 'milPort' ? '#b9362f' : '#1f5fd0';

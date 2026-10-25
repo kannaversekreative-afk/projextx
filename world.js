@@ -154,22 +154,32 @@ function ownCoastWater(a3, lon, lat, maxR) {
 // the country's own land cell if one is found, any neighbouring land
 // cell otherwise, the capital itself for a tiny island with no land
 // cell in the grid. Never the water cell centre out at sea.
-function coastPoint(a3, cell, cap) {
+function coastCell(a3, cell, cap) {
   const G = W.ww, x = cell % G, y = (cell / G) | 0;
   let anyLand = null;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     if (!dx && !dy) continue;
     const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= W.wh) continue;
     const nc = ny * G + nx; if (W.water[nc]) continue;
-    const lxy = cellXY(W, nc);
-    if (!anyLand) anyLand = lxy;
+    if (!anyLand) anyLand = nc;
     const k = W.byA3[a3];
     if (k && k.path && FAC_CTX && typeof FAC_CTX.isPointInPath === 'function') {
-      try { if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return lxy; } catch (e) {}
+      try { const lxy = cellXY(W, nc); if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return nc; } catch (e) {}
     }
   }
-  if (anyLand) return anyLand;
-  return cap ? [cap.x, cap.y] : cellXY(W, cell);
+  if (anyLand != null) return anyLand;
+  // No land cell in the grid (tiny island): use the capital's cell.
+  if (cap) return Math.floor((90 - cap.lat) / 2) * G + Math.floor((cap.lon + 180) / 2);
+  return cell;
+}
+function nearestLandCell(lon, lat) {
+  const G = W.ww, x0 = Math.floor((lon + 180) / 2), y0 = Math.floor((90 - lat) / 2);
+  for (let r = 0; r <= 10; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const X = (x0 + dx + G) % G, Y = y0 + dy; if (Y < 0 || Y >= W.wh) continue;
+    const c = Y * G + X; if (!W.water[c]) return c;
+  }
+  return y0 * G + x0;
 }
 let FAC_CACHE = {};
 function facilitiesFor(a3) {
@@ -181,7 +191,7 @@ function facilitiesFor(a3) {
     if (typeof S !== 'undefined' && S && S.facilities && S.facilities[a3] && Array.isArray(S.facilities[a3].bases)) {
       S.facilities[a3].bases.forEach(b => { if (b && isFinite(b.x) && isFinite(b.y)) bases.push(b); });
     }
-    return { a3, cap, portCell: c.portCell, milPortCell: c.milPortCell, portXY: c.portXY, milPortXY: c.milPortXY, bases };
+    return { a3, cap, portCell: c.portCell, milPortCell: c.milPortCell, portXY: c.portXY, milPortXY: c.milPortXY, bases, portLandCell: c.portLandCell, milPortLandCell: c.milPortLandCell, capLandCell: c.capLandCell };
   }
   // Port: nearest water that touches this country's own coast, not just
   // nearest water anywhere. Fall back to nearest water only if no own
@@ -207,11 +217,14 @@ function facilitiesFor(a3) {
   if (typeof S !== 'undefined' && S && S.facilities && S.facilities[a3] && Array.isArray(S.facilities[a3].bases)) {
     S.facilities[a3].bases.forEach(b => { if (b && isFinite(b.x) && isFinite(b.y)) bases.push(b); });
   }
-  const portXY = portCell != null ? coastPoint(a3, portCell, cap) : null;
-  let milPortXY = milPortCell != null ? coastPoint(a3, milPortCell, cap) : null;
+  const portLandCell = portCell != null ? coastCell(a3, portCell, cap) : null;
+  const milPortLandCell = milPortCell != null ? coastCell(a3, milPortCell, cap) : null;
+  const capLandCell = nearestLandCell(cap.lon, cap.lat);
+  const portXY = portLandCell != null ? cellXY(W, portLandCell) : null;
+  let milPortXY = milPortLandCell != null ? cellXY(W, milPortLandCell) : null;
   if (milPortXY && portXY && milPortXY[0] === portXY[0] && milPortXY[1] === portXY[1]) milPortXY = [portXY[0] + 18, portXY[1] - 10];
-  FAC_CACHE[a3] = { portCell, milPortCell, portXY, milPortXY, base: bases[0] };
-  return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases };
+  FAC_CACHE[a3] = { portCell, milPortCell, portXY, milPortXY, base: bases[0], portLandCell, milPortLandCell, capLandCell };
+  return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases, portLandCell, milPortLandCell, capLandCell };
 }
 function facilityCount(a3) { const f = facilitiesFor(a3); return f ? f.bases.length : 1; }
 function purchasedBaseCount(a3) { const f = facilitiesFor(a3); return f ? Math.max(0, f.bases.length - 1) : 0; }
@@ -238,6 +251,44 @@ function seaPath(W, s, t) {
   if (from[t] < 0 && s !== t) return null;
   const cells = []; for (let c = t; c >= 0; c = from[c]) { cells.push(c); if (c === s) break; }
   return cells.reverse().map(c => cellXY(W, c));
+}
+
+// A* over land between two cells — the road between two places. Unlike a
+// straight line (the fastest path), a road follows the land: it winds
+// around water, lakes and bays, so the white line on the map looks like
+// a real road, not a ruler line. Cached per country in ROAD_CACHE.
+let ROAD_CACHE = {};
+function landPathCells(W, s, t) {
+  if (s == null || t == null) return null;
+  if (s === t) return [s];
+  const G = W.ww, H = W.wh, tx = t % G, ty = (t / G) | 0;
+  const g = new Float32Array(G * H).fill(Infinity), from = new Int32Array(G * H).fill(-1), heap = [];
+  const h = c => Math.hypot(c % G - tx, ((c / G) | 0) - ty);
+  const push = (f, c) => { heap.push([f, c]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+  g[s] = 0; push(h(s), s);
+  while (heap.length) {
+    const [f, c] = pop(); if (c === t) break; if (f > g[c] + h(c) + 1e-6) continue;
+    const x = c % G, y = (c / G) | 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue; const ny = y + dy, nx = x + dx; if (ny < 0 || ny >= H || nx < 0 || nx >= G) continue;
+      const nc = ny * G + nx; if (W.water[nc] && nc !== t) continue;
+      const ng = g[c] + (dx && dy ? 1.414 : 1);
+      if (ng < g[nc]) { g[nc] = ng; from[nc] = c; push(ng + h(nc), nc); }
+    }
+  }
+  if (from[t] < 0 && s !== t) return null;
+  const cells = []; for (let c = t; c >= 0; c = from[c]) { cells.push(c); if (c === s) break; }
+  return cells.reverse();
+}
+function roadPath(a3, s, t) {
+  if (s == null || t == null) return null;
+  const key = a3 + ':' + s + '-' + t;
+  if (ROAD_CACHE[key]) return ROAD_CACHE[key];
+  const cells = landPathCells(W, s, t);
+  const pts = cells ? cells.map(c => cellXY(W, c)) : null;
+  ROAD_CACHE[key] = pts;
+  return pts;
 }
 
 // ---------- city layout ----------
