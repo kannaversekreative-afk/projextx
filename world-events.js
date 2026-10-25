@@ -240,6 +240,7 @@ function businessWeek() {
   own.forEach(c => c.locs.forEach(l => { satW += l.sat * Math.max(1, l.cust); satN += Math.max(1, l.cust); }));
   if (satN > 1) S.rating = +(satW / satN).toFixed(2);
   S.week = { profit, companies: mineProfit, rent, interest, overdraft };
+  if (S.leader && typeof leaderWeek === 'function') leaderWeek();
   S.stats.bestWeek = Math.max(S.stats.bestWeek, profit);
   if (profit > 0) S.xp += Math.min(150, Math.sqrt(profit) / 4);
   // Monthly: lots churn; rival companies sometimes bid for yours.

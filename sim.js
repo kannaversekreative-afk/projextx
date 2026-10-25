@@ -36,7 +36,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 // ---------- new game ----------
 function newGame(opt) {
   const s = {
-    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, home: opt.home, day: 0, speed: 1,
+    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
@@ -58,25 +58,49 @@ function newGame(opt) {
     const cs = { pop: k.pop0, pop0: k.pop0, gdp: k.gdp0, growth: clamp(0.045 - 0.012 * Math.log10(gdpPc / 1000), 0.008, 0.06),
       stab: clamp(48 + k.wealth * 14 + gauss() * 12, 12, 95), mil: Math.sqrt(k.gdp0) * (0.6 + rand() * 0.8), tax: +(0.15 + rand() * 0.2).toFixed(2),
       incTax: 0.20, vat: 0.05, taxRev: 0,
-      milLv: { air: lv(), navy: k.coastal ? lv() : 0, army: lv() }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0 };
+      milLv: { air: lv(), navy: k.coastal ? lv() : 0, army: lv() }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0, treasury: k.gdp0 * 1e6 * 0.05, debt: k.gdp0 * 1e6 * 0.54, lastWeek: null };
     k.nb.forEach(b => { if (W.byA3[b] && W.byA3[b].playable) cs.rel[b] = Math.round(clamp(30 + gauss() * 25, -40, 90)); });
     s.countries[k.a3] = cs;
   });
   for (const a in s.countries) for (const b in s.countries[a].rel) if (s.countries[b]) s.countries[b].rel[a] = s.countries[a].rel[b];
-  // One company per country: 39 per sector, shuffled.
-  const deck = []; SECTOR_LIST.forEach(sec => { for (let i = 0; i < Math.ceil(W.playable.length / SECTOR_LIST.length); i++) deck.push(sec); });
-  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
   const usedNames = new Set(), usedSyms = new Set();
-  W.playable.forEach((k, i) => {
-    const sector = deck[i], c = makeCompany(k, sector, usedNames, usedSyms);
-    s.co[k.a3] = c;
-  });
-  // You start with a fresh startup in your home country.
+  if (opt.leader) {
+    // Leader game: 2–3 businesses per country. Flagship is a full company,
+    // extras are economic businesses (see leader.js). Flagship sector and
+    // extra sectors come from the realism pool, never a random global sector.
+    // Count is random (2 vs 3), sectors are realism-picked.
+    W.playable.forEach(k => {
+      const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k) : SECTOR_LIST.slice();
+      const used = [];
+      const pickSector = () => { const avail = pool.filter(x => !used.includes(x)); const sec = avail.length ? pick(avail) : pick(pool); used.push(sec); return sec; };
+      const flagSector = pickSector();
+      s.co[k.a3] = makeCompany(k, flagSector, usedNames, usedSyms);
+      const extraCount = rand() < 0.5 ? 1 : 2;
+      for (let i = 0; i < extraCount; i++) {
+        const sec = pickSector();
+        const ex = makeExtraBusiness(k, sec, usedNames, usedSyms, i + 1);
+        s.extra[ex.id] = ex;
+      }
+    });
+  } else {
+    // Tycoon (legacy, old saves / old mode): one company per country.
+    const deck = []; SECTOR_LIST.forEach(sec => { for (let i = 0; i < Math.ceil(W.playable.length / SECTOR_LIST.length); i++) deck.push(sec); });
+    for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+    W.playable.forEach((k, i) => {
+      const sector = deck[i], c = makeCompany(k, sector, usedNames, usedSyms);
+      s.co[k.a3] = c;
+    });
+  }
+  // You start with a fresh startup in your home country (tycoon only).
+  // Leader games do NOT own the flagship: you inherit the country, you
+  // tax its businesses, you do not own 100% of one of them.
   const home = s.co[opt.home];
-  if (opt.company) { home.name = opt.company; home.sym = tickerFor(opt.company, usedSyms); }
-  home.color = s.you.color; home.locs.forEach(l => setLot(home.city, l.t, null)); home.locs = [];
-  home.fleet = SECTORS[home.sector].fleet ? 1 : 0; home.web = { tier: 0, ads: {}, addons: {} }; home.ai = false;
-  home.listed = false; home.avg = 0; home.rating = 3.5; home.hist = [];
+  if (!opt.leader) {
+    if (opt.company) { home.name = opt.company; home.sym = tickerFor(opt.company, usedSyms); }
+    home.color = s.you.color; home.locs.forEach(l => setLot(home.city, l.t, null)); home.locs = [];
+    home.fleet = SECTORS[home.sector].fleet ? 1 : 0; home.web = { tier: 0, ads: {}, addons: {} }; home.ai = false;
+    home.listed = false; home.avg = 0; home.rating = 3.5; home.hist = [];
+  }
   // Seed market history for listed companies.
   for (const a3 in s.co) {
     const c = s.co[a3];
@@ -89,13 +113,27 @@ function newGame(opt) {
     path.forEach((p, i) => { const v = +p.toFixed(2); c.h.d.push(v); c.h.v.push(Math.round(c.shares * 0.003 * (0.5 + rand()))); if (i % 5 === 4) c.h.w.push(v); if (i % 21 === 20) c.h.m.push(v); });
     c.price = path[path.length - 1];
   }
-  s.holdings[opt.home] = { qty: home.shares, cost: 0 };
+  if (opt.leader) {
+    // Current-day start: treasury is 5% of real GDP, debt is 54% of GDP.
+    // Struggling countries start struggling — that is the challenge.
+    const homeCs = s.countries[opt.home];
+    s.cash = homeCs.treasury;
+    s.holdings = {};
+  } else {
+    s.holdings[opt.home] = { qty: home.shares, cost: 0 };
+  }
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
   s.stats.startNet = netWorth();
   s.nh.w.push([0, s.stats.startNet, 1000]); s.nh.m.push([0, s.stats.startNet, 1000]);
   s.homeTaxPrev = { tax: s.countries[opt.home].tax, incTax: s.countries[opt.home].incTax, vat: s.countries[opt.home].vat };
-  news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
-  mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
+  if (opt.leader) {
+    const biz = businessesInCountry(opt.home);
+    news('World', `You have inherited ${cname(opt.home)}. Treasury ${fmtMoney(s.cash, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}.`, opt.home);
+    mail('Welcome', `You have inherited ${cname(opt.home)}`, `You are now the leader of ${cname(opt.home)}, as it is today. Treasury ${fmtMoney(s.cash, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}, population ${fmtPop(s.countries[opt.home].pop)}. Businesses: ${biz.map(b => b.name + ' (' + b.sector + ')').join(', ')}. Tax them, pay your people, trade, and grow — or invade a neighbour for the challenge.`);
+  } else {
+    news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
+    mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
+  }
   return s;
 }
 function tickerFor(name, used) {
@@ -128,7 +166,7 @@ const country = a3 => S.countries[a3];
 function topCities(a3, n) { return W.cities.filter(c => c.a3 === a3).sort((a, b) => b.pop - a.pop).slice(0, n || 5); }
 function businessesInCity(cityId) { const out = []; for (const a3 in S.co) { const c = S.co[a3]; c.locs.forEach(l => { if ((l.city || c.city) === cityId) out.push({ c, l }); }); } return out; }
 const co = a3 => S.co[a3];
-const cname = a3 => W.byA3[a3].name;
+const cname = a3 => (S && S.countryName && a3 === S.home) ? S.countryName : W.byA3[a3].name;
 const homeCo = () => S.co[S.home];
 function stake(a3) { const h = S.holdings[a3]; return h && h.qty > 0 ? h.qty / S.co[a3].shares : 0; }
 const controlled = a3 => stake(a3) >= 0.5;
