@@ -390,11 +390,11 @@ const MapView = (() => {
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);
     st.wars.forEach(w => [w.a, w.b].forEach(a3 => { const cap = W.cities[W.byA3[a3].capital]; const [sx, sy] = toScreen(cap.x, cap.y); c.strokeStyle = `rgba(229,72,77,${0.4 + pulse * 0.5})`; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 14 + pulse * 8, 0, 7); c.stroke(); }));
     for (const id in st.cityHit) if (st.cityHit[id] > st.day) { const ct = W.cities[id]; const [sx, sy] = toScreen(ct.x, ct.y); c.strokeStyle = `rgba(255,140,40,${0.4 + pulse * 0.5})`; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, 11 + pulse * 6, 0, 7); c.stroke(); }
-    // Facilities network: ports, military ports and military bases, joined
-    // by small white lines (with a faint blue edge so the white shows on
-    // white land and blue sea). Shown for your home country always, and
-    // for every country once you zoom in — at world zoom 196 networks
-    // would just be clutter.
+    // Facilities network: ports only — no base/shield icons, per the
+    // user's instruction. Ports are joined by small white lines (with a
+    // faint blue edge so the white shows on white land and blue sea).
+    // Shown for your home country always, and for every country once
+    // you zoom in — at world zoom 196 networks would just be clutter.
     if (st && !pickMode) {
       const showFac = v.s > 1.0;
       W.playable.forEach(k => {
@@ -403,7 +403,6 @@ const MapView = (() => {
         const nodes = [];
         if (f.portXY) nodes.push({ xy: f.portXY, kind: 'port' });
         if (f.milPortXY) nodes.push({ xy: f.milPortXY, kind: 'milPort' });
-        f.bases.forEach(b => nodes.push({ xy: [b.x, b.y], kind: 'base' }));
         const scr = nodes.map(n => { const [sx, sy] = toScreen(n.xy[0], n.xy[1]); return { ...n, sx, sy }; }).filter(n => n.sx > -30 && n.sy > -30 && n.sx < vw + 30 && n.sy < vh + 30);
         if (!scr.length) return;
         const [cx, cy] = toScreen(f.cap.x, f.cap.y);
@@ -419,7 +418,7 @@ const MapView = (() => {
           const bg = n.kind === 'port' ? '#2f7cf6' : n.kind === 'milPort' ? '#b9362f' : '#1f5fd0';
           c.fillStyle = bg; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(n.sx, n.sy, 13, 0, 7); c.fill(); c.stroke();
           c.fillStyle = '#ffffff'; c.font = '13px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
-          c.fillText(n.kind === 'base' ? '🛡' : '⚓', n.sx, n.sy + 1);
+          c.fillText('⚓', n.sx, n.sy + 1);
         });
       });
     }
