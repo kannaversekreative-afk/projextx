@@ -25,7 +25,10 @@ const MapView = (() => {
   function fit() { v.s = Math.max(vw / MAP_W, vh / MAP_H); v.x = (vw - MAP_W * v.s) / 2; v.y = (vh - MAP_H * v.s) / 2; }
   function clampView() {
     v.s = Math.max(Math.max(vw / MAP_W, vh / MAP_H) * 0.98, Math.min(60, v.s));
-    v.x = Math.min(0, Math.max(vw - MAP_W * v.s, v.x)); v.y = Math.min(0, Math.max(vh - MAP_H * v.s, v.y));
+    // Allow half a screen of sea beyond the map edge, so a western capital
+    // like Washington can actually be centred: the old 0 cap forced
+    // v.x to 0 and left the Atlantic in the centre at world zoom.
+    v.x = Math.min(vw / 2, Math.max(vw - MAP_W * v.s - vw / 2, v.x)); v.y = Math.min(vh / 2, Math.max(vh - MAP_H * v.s - vh / 2, v.y));
   }
   const toScreen = (x, y) => [x * v.s + v.x, y * v.s + v.y];
   const toMap = (sx, sy) => [(sx - v.x) / v.s, (sy - v.y) / v.s];
