@@ -424,7 +424,7 @@ function tickWatch() {
 // Only two editions are kept: this one and the last one. When a new
 // edition arrives, older ones rotate out on their own.
 let paperPage = 0, paperEdIdx = 0;
-const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS'];
+const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS', 'YOUR YEAR'];
 function ensurePapers() {
   if (!Array.isArray(S.papers)) S.papers = [];
   if (!S.papers.length) S.papers.push(makePaperEdition(yearOf(S.day)));
@@ -441,6 +441,35 @@ function paperChg(h) {
   if (!h || !h.w || h.w.length < 2) return 0;
   const n = h.w.length, base = h.w[Math.max(0, n - 53)];
   return base ? h.w[n - 1] / base - 1 : 0;
+}
+function playerSnapshot() {
+  try {
+    const yr = S.yearReport || {}, st = S.stats || {};
+    const nw = netWorth();
+    let yearAgo = null;
+    if (S.nh && S.nh.w && S.nh.w.length) {
+      const past = S.nh.w.filter(w => w[0] <= S.day - 365);
+      yearAgo = past.length ? past[past.length - 1][1] : S.nh.w[0][1];
+    }
+    const cs = country(S.home) || {};
+    const controlled = (typeof mine === 'function' ? mine() : []).map(c => {
+      const e = (yr.entries || []).find(x => x.a3 === c.a3);
+      return { name: c.name, sym: c.sym, rating: c.rating, old: e ? e.old : null, nw: e ? e.new : null, reasons: e ? e.reasons : [], locs: (c.locs || []).length, fleet: c.fleet || 0 };
+    });
+    const holdings = Object.entries(S.holdings || {}).filter(([, h]) => h.qty > 0 && S.co[h.a3 || '']).map(([a3, h]) => ({ name: S.co[a3] ? S.co[a3].name : a3, sym: S.co[a3] ? S.co[a3].sym : a3, qty: h.qty })).slice(0, 8);
+    const projects = (cs.proj || []).filter(p => p.until > S.day).map(p => { const d = (typeof PROJECTS !== 'undefined' ? PROJECTS : []).find(x => x.id === p.id); return d ? d.name : p.id; });
+    const mil = cs.milLv ? Object.entries(cs.milLv).map(([b, lv]) => ({ b: (typeof MILITARY !== 'undefined' && MILITARY[b]) ? MILITARY[b].name : b, lv })) : [];
+    const warsHome = (S.wars || []).filter(w => w.a === S.home || w.b === S.home).map(w => `${cname(w.a === S.home ? w.b : w.a)} (front ${Math.round(w.front)}%)`);
+    return {
+      netWorth: nw, yearAgo, cash: S.cash, loan: S.loan || 0, holdingsValue: holdingsValue(), propValue: propValue(),
+      xp: S.xp || 0, level: (typeof level === 'function' ? level() : 1), career: (typeof careerName === 'function' ? careerName() : ''), goalsDone: (S.goalsDone || []).length,
+      trades: st.trades || 0, takeovers: st.takeovers || 0, ipos: st.ipos || 0, warsStarted: st.wars || 0, bestWeek: st.bestWeek || 0,
+      controlled, holdings, holdingsCount: Object.keys(S.holdings || {}).filter(a3 => S.holdings[a3].qty > 0).length,
+      props: (S.props || []).length, projects, mil, warsHome,
+      yearEntries: yr.entries || [], taxLines: yr.taxLines || [], taxRev: yr.taxRev || 0,
+      leader: S.leader ? { treasury: cs.treasury || 0, debt: cs.debt || 0, lastWeek: cs.lastWeek || null } : null,
+    };
+  } catch (e) { return null; }
 }
 function makePaperEdition(year) {
   const playable = W.playable.filter(k => S.countries[k.a3]);
@@ -506,6 +535,7 @@ function makePaperEdition(year) {
     business: { idx: S.idx.v, idxChg, oil: S.oil, gainers, losers, tip, stories: bizStories },
     sports: { leagues: sports, story: `Champions are crowned in every league this year, from the gridiron to the diamond to the ice. The ${sports[0].champ} took the ${sports[0].l} crown, and the ${sports[1].champ} did the same in the ${sports[1].l}. New stars, old rivalries, and one more season for the history books.` },
     numbers: { worldGdp, worldPop, avgStab: playable.length ? stabSum / playable.length : 0, wars: S.wars.length, booms, unrest, topGrowth: growth.slice(0, 5), slowest: growth.slice(-3).reverse(), idx: S.idx.v, idxChg },
+    player: playerSnapshot(),
   };
 }
 function paperEdition() { ensurePapers(); paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx)); return S.papers[paperEdIdx]; }
@@ -518,7 +548,7 @@ function paperTicker(ed) {
   return `<div class="pticker"><div class="pticker-inner"><span>${line}</span><span>${line}</span></div></div>`;
 }
 function paperHTML() {
-  const ed = paperEdition(), total = 4, page = Math.min(paperPage, 3); paperPage = page;
+  const ed = paperEdition(), total = 5, page = Math.min(paperPage, 4); paperPage = page;
   let body = '';
   if (page === 0) {
     body = `<div class="pfront">
@@ -540,6 +570,30 @@ function paperHTML() {
       <div class="psportgrid">${ed.sports.leagues.map(s => `<div class="pscore"><b>${esc(s.l)}</b><div class="pscore-team">${esc(s.champ)}</div><div class="pscore-line">beat ${esc(s.runner)} · ${esc(s.score)}</div><div class="psmall">MVP: ${esc(s.mvp)}</div></div>`).join('')}</div>
       <p class="psmall">NFL · NBA · NHL · WNBA · MLB · KBO · NPB · CPBL — simulated seasons in this world, not real-world results.</p>
     </div>`;
+  } else if (page === 4) {
+    const pl = ed.player;
+    if (!pl) {
+      body = `<div class="pfront"><div class="pheadline"><div class="pkicker">YOUR YEAR</div><h2>Your ledger starts next year</h2><p class="pdrop">This edition was made before the player page existed. Age up once more and this page will fill with your actions, your outcomes, and your numbers.</p></div></div>`;
+    } else {
+      const chg = pl.yearAgo != null ? pl.netWorth - pl.yearAgo : null;
+      body = `<div class="pfront">
+      <div class="pheadline"><div class="pkicker">YOUR YEAR · THE INDIVIDUAL LEDGER</div><h2>Your year, in numbers</h2><p class="pdrop">Not the world. You. What you built, what you bought, what you ran, and what it was worth at the end of the year.</p></div>
+      <div class="pbox"><b>THE BOTTOM LINE</b><span>Net worth ${fmtMoney(pl.netWorth, true)}${chg != null ? ` · ${chg >= 0 ? '+' : ''}${fmtMoney(chg, true)} this year (${fmtPct(pl.yearAgo ? chg / pl.yearAgo : 0)})` : ''}</span><span>Cash ${fmtMoney(pl.cash, true)} · Loans ${fmtMoney(pl.loan, true)}</span><span>Stocks held ${fmtMoney(pl.holdingsValue, true)} · Buildings ${fmtMoney(pl.propValue, true)}</span></div>
+      <h3 class="psec">COMPANIES YOU RUN</h3>${pl.controlled.length ? `<div class="ptable">${pl.controlled.map(c => `<div class="prow"><span>${esc(c.name)} (${esc(c.sym)}) · ${c.locs} locations${c.fleet ? ` · fleet ${c.fleet}` : ''}</span><b>${c.old != null ? `${c.old.toFixed(1)} → ${c.nw.toFixed(1)} stars` : `${c.rating.toFixed(1)} stars`}</b></div>`).join('')}</div>${pl.controlled.filter(c => c.reasons.length).map(c => `<p class="psmall">${esc(c.name)}: ${esc(c.reasons[0])}</p>`).join('')}` : '<p class="psmall">You do not control a company yet. Buy a majority stake or take one over, then age up.</p>'}
+      <h3 class="psec">OUTCOMES THIS YEAR</h3>${pl.yearEntries.length ? `<div class="ptable">${pl.yearEntries.map(e => `<div class="prow"><span>${esc(e.name)}</span><b>${e.old.toFixed(1)} → ${e.new.toFixed(1)} stars</b></div>`).join('')}</div>` : '<p class="psmall">No year-end ratings yet for companies you run.</p>'}${pl.taxLines.length ? `<p class="psmall">${esc(pl.taxLines.join(' '))}</p>` : ''}${pl.taxRev ? `<p class="psmall">Government corporate-tax revenue this year: ${fmtMoney(pl.taxRev, true)}.</p>` : ''}
+      ${pl.leader ? `<h3 class="psec">YOUR NATION</h3><div class="pbox"><b>TREASURY & DEBT</b><span>Treasury ${fmtMoney(pl.leader.treasury, true)} · Debt ${fmtMoney(pl.leader.debt, true)}</span>${pl.leader.lastWeek ? `<span>Last week: revenue ${fmtMoney(pl.leader.lastWeek.revenue, true)} · spending ${fmtMoney(pl.leader.lastWeek.spending, true)} · net ${fmtMoney(pl.leader.lastWeek.net, true)}</span>` : ''}</div>` : ''}
+      <h3 class="psec">YOUR NUMBERS</h3><div class="ptable">
+        <div class="prow"><span>Level · XP</span><b>Lv ${pl.level} · ${pl.xp} XP</b></div>
+        <div class="prow"><span>Career</span><b>${esc(pl.career)} · ${pl.goalsDone} goals done</b></div>
+        <div class="prow"><span>Trades · Takeovers · IPOs</span><b>${pl.trades} · ${pl.takeovers} · ${pl.ipos}</b></div>
+        <div class="prow"><span>Wars started · Best week profit</span><b>${pl.warsStarted} · ${fmtMoney(pl.bestWeek, true)}</b></div>
+        <div class="prow"><span>Stock positions · Buildings</span><b>${pl.holdingsCount} · ${pl.props}</b></div>
+        ${pl.projects.length ? `<div class="prow"><span>Projects running</span><b>${esc(pl.projects.join(', '))}</b></div>` : ''}
+        ${pl.mil.length ? `<div class="prow"><span>Military</span><b>${pl.mil.map(m => `${m.b} Lv ${m.lv}`).join(' · ')}</b></div>` : ''}
+        ${pl.warsHome.length ? `<div class="prow"><span>Wars you are in</span><b>${esc(pl.warsHome.join(', '))}</b></div>` : ''}
+      </div>
+    </div>`;
+    }
   } else {
     body = `<div class="pfront">
       <div class="pheadline"><div class="pkicker">THE NUMBERS</div><h2>The world, by the numbers</h2></div>
@@ -555,12 +609,12 @@ function paperHTML() {
   ${page === 0 ? paperTicker(ed) : ''}
   <div class="paper-body">${body}</div>
   <div class="pedition"><button class="btn" data-a="paperEdPrev" ${paperEdIdx >= S.papers.length - 1 ? 'disabled' : ''}>← LAST EDITION</button><span class="ppage">${edLabel}</span><button class="btn" data-a="paperEdNext" ${paperEdIdx === 0 ? 'disabled' : ''}>THIS EDITION →</button></div>
-  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of 4 · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= 3 ? 'disabled' : ''}>NEXT →</button></div>
+  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of 5 · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= 4 ? 'disabled' : ''}>NEXT →</button></div>
   <button class="btn wide paper-return" data-a="closePaper">✕ CLOSE — RETURN TO MAP</button>`;
 }
 function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
 function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
-function flipPaper(d) { paperPage = Math.max(0, Math.min(3, paperPage + d)); $('paper').innerHTML = paperHTML(); }
+function flipPaper(d) { paperPage = Math.max(0, Math.min(4, paperPage + d)); $('paper').innerHTML = paperHTML(); }
 function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx + d)); paperPage = 0; $('paper').innerHTML = paperHTML(); }
 
 // ---------- boot / onboarding ----------
