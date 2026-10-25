@@ -251,13 +251,11 @@ function renderHUD() {
   const cardTop = S.leader
     ? `<div class="company-card card">
     <div class="cc-top"><b>${hk.flag} ${esc(cname(S.home))} — Leader</b><span class="muted small">Lv ${lv} · Stability ${Math.round(hcs.stab)} / 100</span></div>
-    <div class="cc-money"><span>Treasury <b>${fmtMoney(S.cash, true)}</b></span><span>Debt <b>${fmtMoney(hcs.debt || 0, true)}</b></span></div>
-    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 GDP <b>${fmtMoney(hcs.gdp * 1e6, true)}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
+    <div class="cc-line"><span>Treasury <b>${fmtMoney(S.cash, true)}</b></span><span>Debt <b>${fmtMoney(hcs.debt || 0, true)}</b></span><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 GDP <b>${fmtMoney(hcs.gdp * 1e6, true)}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
   </div>`
     : `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
-    <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
-    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
+    <div class="cc-line"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
   </div>`;
   $('hud').innerHTML = cardTop + `
   <div class="rail-bottom">
@@ -266,10 +264,10 @@ function renderHUD() {
   <div class="bottombar card">
     <button class="bb-btn" data-a="panel" data-x="markets"><span>📈</span>Markets</button>
     <button class="bb-btn" data-a="panel" data-x="portfolio"><span>💼</span>Portfolio</button>
+    <div class="bb-center"><button class="bb-age" data-a="ageUp" aria-label="Age up one year">+</button><button class="bb-week" data-a="ageWeek" aria-label="Advance one week">WEEK</button></div>
     <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Companies</button>
     <button class="bb-btn" data-a="more"><span>•••</span>More</button>
-  </div>
-  <div class="agebar card"><button class="btn small" data-a="ageDown" aria-label="Age down one year">−</button><span>Age · ${yearOf(S.day)}</span><button class="btn small" data-a="ageUp" aria-label="Age up one year">+</button><button class="btn small" data-a="ageWeek" aria-label="Advance one week">WEEK</button></div>`;
+  </div>`;
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
