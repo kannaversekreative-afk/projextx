@@ -531,7 +531,7 @@ const MapView = (() => {
     reset() { builtFor = null; dirty = true; },
     redraw() { dirty = true; },
     flyToCity(id, s) { const c = W.cities[id]; flyTo(c.x, c.y, s || Math.max(v.s, 2.4)); },
-    flyToCountry(a3) { const k = W.byA3[a3]; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); flyTo((k.box[0] + k.box[2]) / 2, (k.box[1] + k.box[3]) / 2, Math.min(8, Math.min(vw / (w * 2.2), vh / (h * 2.6)))); },
+    flyToCountry(a3) { const k = W.byA3[a3]; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; flyTo(cx, cy, Math.min(8, Math.min(vw / (w * 2.2), vh / (h * 2.6)))); },
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
     home() { const st = S_(); if (st) this.flyToCountry(st.home); else fit(); },
     world() { flyTo(MAP_W / 2, MAP_H / 2, 0); },

@@ -711,10 +711,10 @@ function startPick() {
 }
 function renderPick() {
   const a3 = UI.pick.a3, k = a3 && W.byA3[a3];
-  const q = UI.q.trim().toLowerCase();
+  const q = (UI.pq || '').trim().toLowerCase();
   const list = q ? W.countries.filter(c => c.playable && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
   $('hud').innerHTML = `<div class="pick-top card"><b>Pick your country</b><span class="muted">Tap a country on the map, or search.</span>
-    <input id="csearch" class="search" placeholder="Search countries" value="${esc(UI.q)}" autocomplete="off">
+    <input id="csearch" class="search" placeholder="Search countries" value="${esc(UI.pq || '')}" autocomplete="off">
     <div class="sugg">${list.map(c => `<button class="chip" data-a="pickCountry" data-x="${c.a3}">${c.flag} ${esc(c.name)}</button>`).join('')}</div></div>
   ${k ? `<div class="pick-card card">
     <div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(k.name)}</h2><div class="muted">${esc(k.sub)} · ${fmtPop(k.pop0)} people</div></div></div>
@@ -731,7 +731,7 @@ function nameCompany() {
     <button class="btn3d orange wide" data-a="beginGame">START</button>`, 'center');
 }
 function enterGame(returning) {
-  UI.pick = null; MapView.setPick(false); closeModal(); hideInherit();
+  UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit();
   S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
   const da = S.leader ? 0 : autoCreditDaily(), ca = S.leader ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
@@ -800,7 +800,7 @@ function renderPopup() {
     const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(p.a3) : [co];
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${k.flag} ${esc(cname(p.a3))}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
-      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
+      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
       <h5>Businesses</h5>
       ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
@@ -963,6 +963,7 @@ function tradeView(a3) {
     ${c.listed && vols.length ? `<div class="kv"><span>Shares traded today</span><b>${(vols[vols.length - 1] || 0).toLocaleString()}</b></div>` : ''}
     ${rangeSeg(['1M', '1Y', 'All'], UI.tradeRange, 'tradeRange')}
     <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
+    ${S.lastTrade && S.lastTrade.a3 === a3 ? `<div class="kv"><span>Last trade</span><b class="${upCls(S.lastTrade.pnl)}">${S.lastTrade.side.toUpperCase()} ${S.lastTrade.qty.toLocaleString()} ${S.lastTrade.sym} · Realised P&amp;L ${fmtMoney(S.lastTrade.pnl, true)}</b></div><p class="muted small">That realised P&amp;L is just this trade. Net worth also moves with cash, loans, other holdings and weekly costs, so it will not match this number exactly.</p>` : ''}
     ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
     ${res ? `<div class="card in"><b>Research</b><p class="muted small">Fair value about ${fmtMoney(res.fair, true)} · Signal ${res.strength} ${res.dir > 0 ? 'up' : 'down'}${res.pattern ? ' · Pattern: ' + res.pattern : ''}</p></div>` : ''}
     ${c.listed ? `<div class="trade-box">
@@ -1416,7 +1417,7 @@ const A = {
     S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
     document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; showInherit();
   },
-  pickMode: x => { UI.mode = x; UI.q = ''; startPick(); },
+  pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
   confirmCountry: () => nameCompany(),
   swatch: (x, el) => { UI.color = x; document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === el)); },
@@ -1480,7 +1481,7 @@ const A = {
     const [a3, side] = x.split('|'); const n = +($('qty') ? $('qty').value : 0);
     const err = trade(a3, side, n);
     if (err) return toast(err, 'bad');
-    closeModal(); toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${S.co[a3].sym}`, 'good'); tutCheck(); save(); refreshAll();
+    closeModal(); const lt = S.lastTrade && S.lastTrade.a3 === a3 ? ` · Realised ${fmtMoney(S.lastTrade.pnl, true)}` : ''; toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${S.co[a3].sym}${lt}`, 'good'); tutCheck(); save(); refreshAll();
   },
   research: x => act(() => research(x), 'Research done'),
   takeover: x => {
@@ -1643,7 +1644,7 @@ function onClick(e) {
 }
 function onInput(e) {
   const t = e.target;
-  if (t.id === 'csearch') { UI.q = t.value; const pos = t.selectionStart; renderPick(); const n = $('csearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
+  if (t.id === 'csearch') { UI.pq = t.value; const pos = t.selectionStart; renderPick(); const n = $('csearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
   if (t.id === 'msearch') {
     UI.q = t.value;
     if (UI.panel === 'markets') { const l = $('mlist'); if (l) l.innerHTML = marketsListHTML(); }

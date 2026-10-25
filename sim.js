@@ -388,6 +388,12 @@ function trade(a3, side, qty) {
   const sign = side === 'buy' || side === 'cover' ? 1 : -1;
   const imp = impactFor(c, qty * c.price), px = c.price * (1 + sign * imp / 2) * (1 + sign * 0.002);
   const pos = S.holdings[a3] || { qty: 0, cost: 0 };
+  if (side === 'sell' && pos.qty > 0) S.lastTrade = { a3, side, qty, price: 0, pnl: 0 };
+  if (side === 'cover' && pos.qty < 0) S.lastTrade = { a3, side, qty, price: 0, pnl: 0 };
+  if (S.lastTrade && S.lastTrade.a3 === a3 && (side === 'sell' || side === 'cover')) {
+    const unit = side === 'sell' ? (px - pos.cost) : (pos.cost - px);
+    S.lastTrade.price = px; S.lastTrade.pnl = Math.round(unit * qty); S.lastTrade.sym = c.sym;
+  }
   if (side === 'buy') { if (pos.qty < 0) return 'Cover your short first.'; if (pos.qty + qty > c.shares) return 'You can’t buy more shares than exist.'; if (qty * px > S.cash) return 'Not enough cash.'; pos.cost = (pos.cost * pos.qty + qty * px) / (pos.qty + qty); pos.qty += qty; S.cash -= qty * px; }
   else if (side === 'sell') { if (pos.qty < qty) return 'You don’t own that many shares.'; pos.qty -= qty; S.cash += qty * px; }
   else if (side === 'short') { if (pos.qty > 0) return 'Sell your shares first.'; if (qty * px > Math.max(0, netWorth()) * 0.5 - shortValue()) return 'You can short up to half your net worth.'; const n = -pos.qty; pos.cost = (pos.cost * n + qty * px) / (n + qty); pos.qty -= qty; S.cash += qty * px; }
@@ -577,4 +583,4 @@ function fmtMoney(n, compact) {
   return (neg ? '-' : '') + s;
 }
 const fmtPct = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(x !== 0 && Math.abs(x) < 0.1 ? 2 : 1) + '%';
-function fmtPop(n) { return n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : Math.round(n) + ''; }
+function fmtPop(n) { if (!isFinite(n)) return '—'; return n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : Math.round(n) + ''; }
