@@ -295,11 +295,15 @@ function dailyRewardInfo() {
   return { claimed: S.daily.last === t, streak, amount: amt(streak), tomorrow: amt(streak + 1) };
 }
 function claimDaily() { const i = dailyRewardInfo(); if (i.claimed) return 'Already claimed today.'; S.daily = { streak: i.streak, last: todayStr() }; S.cash += i.amount; return null; }
+// No claim buttons: daily money goes straight to cash. Returns the amount added, or 0.
+function autoCreditDaily() { const i = dailyRewardInfo(); if (i.claimed) return 0; S.daily = { streak: i.streak, last: todayStr() }; S.cash += i.amount; return i.amount; }
+// Shop cash grant is also automatic, not claimed. Power-ups in the Shop stay as free daily picks.
+function autoCreditShopCash() { if (S.shop.cash === todayStr()) return 0; const amt = Math.max(250000, netWorth() * 0.02); S.shop.cash = todayStr(); S.cash += amt; return amt; }
 const shopReady = id => S.shop[id] !== todayStr();
 function claimShop(id) {
+  if (id === 'cash') return 'Cash grants are added to your cash automatically each day.';
   if (!shopReady(id)) return 'Come back tomorrow for another free one.';
   S.shop[id] = todayStr();
-  if (id === 'cash') S.cash += Math.max(250000, netWorth() * 0.02);
   if (id === 'rush') S.boosts.rush = S.day + 7;
   if (id === 'rating') mine().forEach(c => c.locs.forEach(l => l.boost = 1.5));
   if (id === 'intel') S.boosts.intel = S.day + 30;

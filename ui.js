@@ -206,22 +206,41 @@ function renderPanel() {
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
 function renderHUD() {
   if (!S || UI.pick) return;
-  const nw = netWorth(), lv = level(), dr = dailyRewardInfo();
-  const goals = `<div class="goals card"><span>👥 Population <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 Net worth <b>${fmtMoney(nw, true)}</b></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>`;
-  $('hud').innerHTML = `<div class="topbar card">
-    <button class="logo-btn" data-a="locate" aria-label="Go home"><span class="logo" style="background:${homeCo().color}">${LOGO_SVG}</span></button>
-    <div class="nw"><span>Net worth</span><b>${fmtMoney(nw, true)}</b><small>Cash ${fmtMoney(S.cash, true)}</small></div>
-    <div class="lv"><span>Level</span><b>Lv ${lv}</b><small>${careerName()}</small></div>
-    <button class="claim ${dr.claimed ? 'done' : ''}" data-a="claimDaily">${dr.claimed ? 'Claimed ✓' : `Claim ${fmtMoney(dr.amount, true)}`}</button>
-    <button class="shop-btn" data-a="panel" data-x="shop">🛍️ Shop</button>
-    <button class="more-btn" data-a="more" aria-label="More">${IC.more}</button>
-  </div>${goals}
-  <div class="timebar card">
+  const nw = netWorth(), lv = level(), unread = S.mail.filter(m => !m.read).length;
+  const co = homeCo();
+  // HUD like the airline screenshot: dark pill top-left, company card under it,
+  // settings + zoom + locate on the right, and a bottom bar. The map fills
+  // the whole screen behind all of it. No Claim button and no Shop button
+  // up here: daily money is added to cash automatically, and Shop lives
+  // only in the More (…) menu.
+  $('hud').innerHTML = `<div class="topleft-pill">
+    <button class="pill-btn logo-btn" data-a="locate" aria-label="Go home"><span class="logo" style="background:${co.color}">${LOGO_SVG}</span></button>
+    <button class="pill-btn" data-a="more" aria-label="Menu">☰</button>
+    <button class="pill-btn" data-a="panel" data-x="inbox" aria-label="Inbox">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
+    <button class="pill-btn" data-a="panel" data-x="help" aria-label="Help">?</button>
+  </div>
+  <div class="company-card card">
+    <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
+    <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
+    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
+  </div>
+  <div class="rail-top">
+    <button class="rail-btn" data-a="panel" data-x="settings" aria-label="Settings">⚙</button>
+  </div>
+  <div class="rail-bottom">
+    <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
+    <button class="rail-btn" data-a="zoom" data-x="0.7" aria-label="Zoom out">－</button>
+    <button class="rail-btn" data-a="locate" aria-label="Go home">⌖</button>
+  </div>
+  <div class="speedpill card">
     <div class="speeds">${[0, 1, 2, 3].map(i => `<button class="${S.speed === i ? 'on' : ''}" data-a="speed" data-x="${i}" aria-label="${['Pause', 'Normal speed', 'Fast', 'Fastest'][i]}">${[IC.pause, IC.play1, IC.play2, IC.play3][i]}</button>`).join('')}</div>
     ${S.mode === 'infinite' ? '<button class="skip" data-a="skipMenu">SKIP ⏩</button>' : '<span class="muted small">Normal mode: time never skips</span>'}
-    <button class="icon-btn" data-a="zoom" data-x="1.4">＋</button>
-    <button class="icon-btn" data-a="zoom" data-x="0.7">－</button>
-    <button class="icon-btn" data-a="locate" aria-label="Go home">⌖</button>
+  </div>
+  <div class="bottombar card">
+    <button class="bb-btn" data-a="panel" data-x="markets"><span>📈</span>Markets</button>
+    <button class="bb-btn" data-a="panel" data-x="portfolio"><span>💼</span>Portfolio</button>
+    <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Company</button>
+    <button class="bb-btn" data-a="more"><span>•••</span>More</button>
   </div>`;
   if (UI.panel) $('panel').classList.add('open');
 }
@@ -293,6 +312,8 @@ function nameCompany() {
 }
 function enterGame(returning) {
   UI.pick = null; MapView.setPick(false); closeModal();
+  const da = autoCreditDaily(), ca = autoCreditShopCash();
+  if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   renderHUD(); MapView.home();
   if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
@@ -314,11 +335,10 @@ function tutCheck() {
   if (S && S.tutorial >= 0 && S.tutorial < TUT.length && TUT[S.tutorial].done && TUT[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
 }
 function welcomeBack() {
-  const info = dailyRewardInfo();
-  if (S.lastSeen && Date.now() - S.lastSeen > 864e5 && !info.claimed) {
+  if (S.lastSeen && Date.now() - S.lastSeen > 864e5) {
     openModal(`<h2>Welcome back!</h2><p class="muted">Day ${S.day} · ${fmtDate(S.day)} · ${careerName()}</p>
       <div class="stats3 box"><div><span>Net worth</span><b>${fmtMoney(netWorth(), true)}</b></div><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>vs Market</span><b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></div></div>
-      <button class="btn3d orange wide" data-a="claimDaily">CLAIM DAILY REWARD · ${fmtMoney(info.amount, true)}</button>
+      <p class="muted small">Today's daily reward was added to your cash automatically, no claiming needed.</p>
       <button class="btn wide" data-a="closeModal">CONTINUE</button>`, 'sheet');
   }
 }
@@ -412,6 +432,9 @@ function gameOver() {
 let lastT = 0;
 function loop(now) {
   if (!S || UI.pick || S.over) { lastT = now; return; }
+  // Daily money is automatic, even if the game stays open past midnight.
+  const _da = autoCreditDaily(), _ca = autoCreditShopCash();
+  if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
   const dt = Math.min(1000, now - (lastT || now)); lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
   if (S.speed > 0 && !document.hidden && !UI.modal) {
@@ -637,7 +660,7 @@ PANELS.goals = () => {
   return panelShell('Daily goals', `Career: ${careerName()} · Streak ${S.daily.streak} days`,
     `<div class="stats3 box"><div><span>Level</span><b>Lv ${level()}</b></div><div><span>XP</span><b>${S.xp}</b></div><div><span>Companies controlled</span><b>${mine().length}</b></div></div>
     ${stage ? `<h4>${stage.name}</h4>${stage.goals.map((g, i) => `<div class="goal ${S.goalsDone.includes(S.career + ':' + i) ? 'done' : ''}"><span>${S.goalsDone.includes(S.career + ':' + i) ? '✓' : '○'}</span>${g.t}</div>`).join('')}` : '<p class="muted small">Legend status reached 👑</p>'}
-    <h4>Daily reward</h4><div class="kv"><span>Today</span><b>${fmtMoney(dailyRewardInfo().amount, true)}</b></div><button class="btn3d orange wide" data-a="claimDaily">CLAIM DAILY REWARD</button>`);
+    <h4>Daily reward</h4><div class="kv"><span>Today</span><b>${fmtMoney(dailyRewardInfo().amount, true)}</b></div><p class="muted small">Added to your cash automatically each day, no claiming needed.</p>`);
 };
 PANELS.inbox = () => {
   S.mail.forEach(m => { m.read = true; });
@@ -646,8 +669,8 @@ PANELS.inbox = () => {
     <h4>Latest news</h4><div class="list">${S.news.slice(0, 30).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('')}</div>`);
 };
 PANELS.shop = () => {
-  return panelShell('Shop', 'Every power-up is free, once per real day',
-    SHOP.map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'CLAIM FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
+  return panelShell('Shop', 'Every power-up is free, once per real day. The cash grant is added to your cash automatically each day.',
+    SHOP.filter(s => s.id !== 'cash').map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'GET FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
 };
 PANELS.search = () => {
   const q = UI.q.trim().toLowerCase();
