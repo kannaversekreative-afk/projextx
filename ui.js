@@ -7,15 +7,18 @@
 let W = null, S = null;
 const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: false,
   range: '1Y', tradeRange: '1Y', web: { view: 'search', q: '', a3: null }, pick: null,
-  mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0 };
+  mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0, expandedCompany: null, companyInit: false };
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const upCls = x => x >= 0 ? 'up' : 'down';
 // Time does NOT move on its own, and there is no age limit. The game
-// year only moves when the player presses the small Age button, which
-// runs stepYear(). Vehicles animate on the map's own requestAnimationFrame
-// loop, independent of game time, so they keep moving while the player
-// waits between Age presses. A player can live 100 years, or 1000.
+// year only moves on the fixed Age bar at the bottom: + ages up one year
+// (free, runs stepYear()), − ages down one year (ad-gated, restores the
+// year snapshot taken before the last Age up, session only, up to 10
+// years back). Swiping the Age bar right / left does the same. Vehicles
+// animate on the map's own requestAnimationFrame loop, independent of
+// game time, so they keep moving while the player waits between Age
+// presses. A player can live 100 years, or 1000.
 const DAY_MS_BY_SPEED = [0, 0, 0, 0];
 const IC = {
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
@@ -221,20 +224,20 @@ function renderHUD() {
   if (!S || UI.pick) return;
   const nw = netWorth(), lv = level();
   const co = homeCo();
-  // HUD: company card top-left, a small Age button top-right, zoom +
-  // locate on the right, and a bottom bar. The map fills the whole screen
-  // behind all of it. No top-left pill, no Claim button, no Shop button
-  // up here: daily money is added to cash automatically, and Shop lives
-  // only in the More (…) menu. Messages and Settings are also only in
-  // More now — the top-right envelope and gear were duplicates of those,
-  // so they were removed and Age took their spot.
+  // HUD: company card top-left, zoom + locate on the right, a fixed
+  // Age stepper at the bottom (above the bottom bar, thumb-reachable,
+  // always in the same spot), and a bottom bar. The map fills the whole
+  // screen behind all of it. No top-left pill, no Claim button, no Shop
+  // button up here: daily money is added to cash automatically, and Shop
+  // lives only in the More (…) menu. Messages and Settings are also only
+  // in More now — the top-right envelope and gear were duplicates, so
+  // they were removed, and Age moved to the fixed bottom bar instead of
+  // living in the top-right corner where it was easy to miss and hard
+  // to reach on a phone.
   $('hud').innerHTML = `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
     <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
-  </div>
-  <div class="rail-top">
-    <button class="btn small" data-a="ageUp">Age +1</button>
   </div>
   <div class="rail-bottom">
     <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
@@ -244,9 +247,10 @@ function renderHUD() {
   <div class="bottombar card">
     <button class="bb-btn" data-a="panel" data-x="markets"><span>📈</span>Markets</button>
     <button class="bb-btn" data-a="panel" data-x="portfolio"><span>💼</span>Portfolio</button>
-    <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Company</button>
+    <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Companies</button>
     <button class="bb-btn" data-a="more"><span>•••</span>More</button>
-  </div>`;
+  </div>
+  <div class="agebar card"><button class="btn small" data-a="ageDown" aria-label="Age down one year">−</button><span>Age · ${yearOf(S.day)}</span><button class="btn small" data-a="ageUp" aria-label="Age up one year">+</button></div>`;
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
@@ -254,7 +258,7 @@ function renderCityHUD() {
   const c = CityView.city, k = W.byA3[c.a3], co = S.co[c.a3];
   // A company's locations are all in its own capital city (co.city), by construction
   // in addLocation(), so the count here is exact, not a filter that happens to work.
-  const myLocs = (controlled(c.a3) && co.city === c.id) ? co.locs.length : 0;
+  const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
   $('chud').innerHTML = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
 }
@@ -445,6 +449,13 @@ async function boot() {
   let paperX = null;
   $('paper').addEventListener('pointerdown', e => { paperX = e.clientX; });
   $('paper').addEventListener('pointerup', e => { if (paperX == null) return; const dx = e.clientX - paperX; paperX = null; if (Math.abs(dx) > 70 && $('paper').classList.contains('open')) flipPaper(dx < 0 ? 1 : -1); });
+  // Swipe the fixed Age bar right to age up, left to age down (ad-gated).
+  // This only fires on the Age bar itself, never on the map, so swiping
+  // to pan the map still works. A tap on + / − is handled by the click
+  // handler, not by this, because a tap moves less than 70 px.
+  let ageX = null;
+  $('hud').addEventListener('pointerdown', e => { if (e.target.closest('.agebar')) ageX = e.clientX; });
+  $('hud').addEventListener('pointerup', e => { if (ageX == null) return; const dx = e.clientX - ageX; ageX = null; if (Math.abs(dx) > 70) { if (dx > 0) A.ageUp(); else A.ageDown(); } });
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
   addEventListener('pagehide', save);
@@ -534,8 +545,10 @@ function onCityTap(id) {
 function onCountryTap(a3) {
   if (UI.pick) { UI.pick.a3 = a3; MapView.setPick(true, a3); MapView.flyToCountry(a3); renderPick(); return; }
   if (!S) return;
-  const city = W.byA3[a3].capital;
-  if (city != null) onCityTap(city);
+  // A country tap is a country, not a stock: a country can have more
+  // than one business, so tapping it no longer opens one company's
+  // stock. It opens the country itself, with its businesses listed.
+  UI.popup = { type: 'country', a3 }; renderPopup(); tutCheck();
 }
 function closePopup() { UI.popup = null; MapView.select(null); $('popup').innerHTML = ''; }
 function renderPopup() {
@@ -548,9 +561,20 @@ function renderPopup() {
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
-      <div class="kv"><span>${SECTORS[co.sector].icon} ${esc(co.name)}</span><b>${co.listed ? fmtMoney(co.price) + ' · ' + co.sym : 'Private'}</b></div>
-      ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('')}
-      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="stock" data-x="${c.a3}">VIEW STOCK</button></div>
+      <h5>Businesses here</h5>
+      ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('') || `<p class="muted small">No businesses here yet. ${esc(co.name)} is this country's main business — see it in Markets if you want its stock.</p>`}
+      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
+    </div>`;
+  } else if (p.type === 'country') {
+    const k = W.byA3[p.a3], co = S.co[p.a3], st = countryStatus(p.a3), cs = country(p.a3), cap = W.cities[k.capital];
+    const biz = [co];
+    $('popup').innerHTML = `<div class="popup card">
+      <div class="row between"><div><b>${k.flag} ${esc(k.name)}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
+      <h5>Businesses</h5>
+      ${biz.map(bc => `<div class="kv"><span>${SECTORS[bc.sector].icon} ${esc(bc.name)} · ★ ${bc.rating.toFixed(1)} · ${bc.locs.length} locations</span><b>${fmtMoney(companyValue(bc), true)}</b></div>`).join('')}
+      <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
+      <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
     </div>`;
   } else if (p.type === 'pin') {
     const lot = p.lot, city = CityView.city, co = S.co[city.a3];
@@ -737,10 +761,15 @@ PANELS.portfolio = () => {
 };
 PANELS.company = () => {
   const mineList = mine();
-  if (!mineList.length) return panelShell('My Company', '', '<div class="card in"><p class="muted">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p></div>');
+  if (!mineList.length) return panelShell('My Companies', '', '<div class="card in"><p class="muted">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p></div>');
+  if (!UI.companyInit) { UI.expandedCompany = mineList[0].a3; UI.companyInit = true; }
+  if (UI.expandedCompany && !mineList.some(c => c.a3 === UI.expandedCompany)) UI.expandedCompany = mineList[0].a3;
   const body = mineList.map(c => {
-    const F = SECTORS[c.sector].fleet, wk = c.week || { profit: 0, locs: 0, fleet: 0, online: 0, ads: 0, tax: 0 };
-    return `<div class="card in"><h4>${SECTORS[c.sector].icon} ${esc(c.name)} <small class="muted">${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)}</small></h4>
+    const F = SECTORS[c.sector].fleet, wk = c.week || { profit: 0, locs: 0, fleet: 0, online: 0, ads: 0, tax: 0 }, oe = onlineEconomics(c);
+    const expanded = UI.expandedCompany === c.a3;
+    const summary = `<button class="srow" data-a="companyExpand" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${esc(c.name)}</b><small>${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)}</small></span><span class="sprice"><b>${fmtMoney(companyValue(c), true)}</b><small class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}/week · ${c.locs.length} locs</small></span><span>${expanded ? '▾' : '▸'}</span></button>`;
+    if (!expanded) return `<div class="card in">${summary}</div>`;
+    return `<div class="card in">${summary}
       <div class="stats3 box"><div><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div><span>Locations</span><b>${c.locs.length}</b></div><div><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div></div>
       <div class="kv"><span>Locations profit</span><b>${fmtMoney(wk.locs, true)}</b></div><div class="kv"><span>Fleet profit</span><b>${fmtMoney(wk.fleet, true)}</b></div><div class="kv"><span>Online profit</span><b>${fmtMoney(wk.online, true)}</b></div><div class="kv"><span>Ads cost</span><b>${fmtMoney(wk.ads, true)}</b></div><div class="kv"><span>Tax</span><b>${fmtMoney(wk.tax, true)}</b></div>
       <div class="kv"><span>Rating (updates yearly)</span><b>${c.rating.toFixed(1)}★</b></div>${c.ratingReasons && c.ratingReasons.length ? `<p class="muted small">Last year: ${esc(c.ratingReasons.join(' '))}</p>` : ''}
@@ -756,9 +785,13 @@ PANELS.company = () => {
       <h5>Loans &amp; listing</h5>
       <div class="kv"><span>Your loan</span><b>${fmtMoney(S.loan, true)} · Bank will lend ${fmtMoney(maxLoan(), true)}</b></div>
       <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs $25M value)</button>` : '<span class="muted small">Listed</span>'}</div>
+      <h5>Website, stock &amp; tax</h5>
+      <div class="kv"><span>Website</span><b>${WEB_TIERS[c.web.tier].name} · ${oe.visitors.toLocaleString()} visitors/week · ${fmtMoney(oe.profit, true)}/week</b></div>
+      <div class="kv"><span>Tax in ${esc(cname(c.a3))}</span><b>${Math.round(country(c.a3).tax * 100)}% corporate — change it in Nation</b></div>
+      <div class="row"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button></div>
     </div>`;
   }).join('');
-  return panelShell('My Company', `${mineList.length} companies under your control`, body);
+  return panelShell('My Companies', `${mineList.length} companies under your control · Tap a company to open it, tap again to close it`, body);
 };
 function webSiteHTML(c) {
   const isMine = controlled(c.a3);
@@ -886,14 +919,14 @@ PANELS.settings = () => {
 };
 PANELS.help = () => {
   return panelShell('Help', '',
-    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves when you press Age, one year at a time, vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
+    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
 function moreSheet() {
   const items = [
     ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
-    ['military', '🪖', 'Military'], ['company', '🏢', 'My Company'], ['estate', '🏠', 'My Estate'],
+    ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
     ['leaderboard', '🏆', 'Leaderboard'], ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
@@ -926,7 +959,7 @@ const A = {
   routeVehicle: x => openRouteSheet(x),
   infoVehicle: x => openVehicleInfo(x),
   followVehicle: x => { const vd = MapView.vehicle(x); closeModal(); if (vd) { MapView.flyToXY(vd.x, vd.y, 3); toast(`Following ${vTripId(vd)}`); } },
-  vehicleCompany: x => openPanel('stock', { a3: x }),
+  vehicleCompany: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
   closeWatch: () => closeWatch(),
   paper: () => openPaper(),
   closePaper: () => closePaper(),
@@ -1027,7 +1060,33 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
-  ageUp: () => { stepYear(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
+  ageUp: () => { ageUp(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
+  ageDown: () => {
+    if (!canAgeDown()) return toast('No earlier year to go back to in this session. Age up first, then age down.', 'bad');
+    if (window.AD_TIMER) clearInterval(window.AD_TIMER);
+    openModal(`<div class="card in"><h3>Ad required to age down</h3><p class="muted small">Age up is free. Age down needs an ad. Watch this sponsor card, then you can go back one year.</p>
+      <div class="card in sponsored"><span class="tagp">SPONSORED</span><h4>☕ Skyline Coffee</h4><p class="muted small">Fuel for late-night tycoons. A fictional in-game sponsor — no real ad network is connected yet.</p></div>
+      <p class="muted small" id="adCount">Ad ends in 5s…</p>
+      <button class="btn3d orange wide" id="adContinue" data-a="doAgeDown" disabled>Watching ad…</button></div>`, 'sheet');
+    let left = 5;
+    window.AD_TIMER = setInterval(() => {
+      left -= 1;
+      const el = document.getElementById('adCount'), btn = document.getElementById('adContinue');
+      if (!el || !btn) { clearInterval(window.AD_TIMER); return; }
+      if (left <= 0) { el.textContent = 'Ad finished.'; btn.disabled = false; btn.textContent = 'Continue — go back a year'; clearInterval(window.AD_TIMER); }
+      else el.textContent = `Ad ends in ${left}s…`;
+    }, 1000);
+  },
+  doAgeDown: () => {
+    if (window.AD_TIMER) clearInterval(window.AD_TIMER);
+    closeModal();
+    const err = ageDown();
+    if (err) return toast(err, 'bad');
+    save(); renderHUD(); if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD();
+    toast(`Went back a year — now ${yearOf(S.day)}.`, 'good');
+  },
+  companyExpand: x => { UI.expandedCompany = (UI.expandedCompany === x ? null : x); renderPanel(); },
+  countryMarkets: x => { closePopup(); UI.q = cname(x); UI.cat = 'All'; openPanel('markets'); },
   claimDaily: () => {
     const r = dailyRewardInfo(); const e = claimDaily();
     if (e) return toast(e, 'bad');
