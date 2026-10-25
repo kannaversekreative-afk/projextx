@@ -256,6 +256,100 @@ function businessWeek() {
   }
 }
 
+// ---------- year end: rating, tax reactions ----------
+/*
+Rating, thought through (per business, once a year, never weekly):
+  A business's star rating is customers' + investors' verdict on the year
+  just finished, not a live mood. Four parts, all from numbers the game
+  already tracks in companyWeek:
+    40% customer satisfaction — average location satisfaction, weighted by
+        customers served. Price, quality, wages, queues and reviews feed it.
+    30% financial health — profit margin (margin 0% = 3 stars, +20% = 5,
+        -20% = 1), blended with profit growth vs last year.
+    15% value — the price the business charges. Normal price (~100%) = 3.5
+        stars, cheap = higher, expensive = lower, even if margin looks good.
+    15% reliability — website tier and fleet level, i.e. can it actually
+        serve people, online and in person.
+  A high rating then pays: rating already lifts demand in locEconomics
+  (brand factor), fleet demand and online sales, so a well-rated business
+  earns more, its fair value rises, and its stock is pulled up. A low
+  rating does the reverse. Rating is NOT a free boost: raising price to
+  lift margin cuts value and satisfaction, cutting price lifts satisfaction
+  but cuts margin, and raising wages lifts satisfaction but cuts profit.
+  Tax changes are reported in the same year-end report, with separate
+  reactions from businesses, households and the government, so a tax rise
+  is never just "rating down": it also raises government revenue.
+*/
+function ratingForYear(c) {
+  const ys = c.yearStats || { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
+  const sat = ys.satN > 0 ? ys.satW / ys.satN : c.rating;
+  const margin = ys.rev > 0 ? ys.profit / ys.rev : 0;
+  const marginScore = clamp(3 + margin * 10, 1, 5);
+  let growthScore = 3;
+  if (c.lastYearProfit != null && Math.abs(c.lastYearProfit) > 0) growthScore = clamp(3 + (ys.profit - c.lastYearProfit) / Math.abs(c.lastYearProfit) * 5, 1, 5);
+  const fin = 0.7 * marginScore + 0.3 * growthScore;
+  const value = clamp(3.5 - (c.set.price - 1) * 2, 1, 5);
+  const rel = clamp(3 + c.web.tier * 0.2 + (c.fleet ? 0.3 : 0), 1, 5);
+  const newR = Math.round(clamp(0.40 * sat + 0.30 * fin + 0.15 * value + 0.15 * rel, 1, 5) * 10) / 10;
+  const reasons = [];
+  if (sat >= 4.2) reasons.push('Customers loved it — high satisfaction across its locations.');
+  else if (sat <= 2.5) reasons.push('Customers complained — low satisfaction dragged it down.');
+  else if (sat > c.rating + 0.2) reasons.push('Customers were happier than last year.');
+  else if (sat < c.rating - 0.2) reasons.push('Customers were less happy than last year.');
+  if (c.lastYearProfit != null && ys.profit > c.lastYearProfit * 1.1) reasons.push('Profits grew year on year, so investors bid it up.');
+  else if (ys.profit < 0) reasons.push('It lost money this year, so investors marked it down.');
+  else if (c.lastYearProfit != null && ys.profit < c.lastYearProfit * 0.9) reasons.push('Profits fell year on year, so investors cooled on it.');
+  if (c.set.price >= 1.5) reasons.push('High prices hurt its value score, even though margins looked good.');
+  else if (c.set.price <= 0.7) reasons.push('Low prices won customers, at the cost of margin.');
+  if (c.set.wage >= 1.5) reasons.push('Higher wages kept staff, which helped service.');
+  else if (c.set.wage <= 0.7) reasons.push('Low wages hurt service and staff retention.');
+  if (!reasons.length) reasons.push('A steady year: no single change stood out.');
+  return { newR, sat, margin, reasons };
+}
+function yearEnd(year) {
+  const entries = [];
+  for (const a3 in S.co) {
+    const c = S.co[a3], old = c.rating, r = ratingForYear(c);
+    c.rating = r.newR; c.ratingReasons = r.reasons;
+    c.lastYearProfit = c.yearStats ? c.yearStats.profit : null;
+    c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
+    if (controlled(a3) || a3 === S.home) entries.push({ a3, name: c.name, sym: c.sym, old, new: r.newR, reasons: r.reasons });
+  }
+  const cs = country(S.home), prev = S.homeTaxPrev || { tax: cs.tax, incTax: cs.incTax, vat: cs.vat };
+  const taxLines = [];
+  const dCorp = cs.tax - prev.tax, dInc = (cs.incTax || 0.20) - (prev.incTax || 0.20), dVat = (cs.vat || 0.05) - (prev.vat || 0.05);
+  if (Math.abs(dCorp) >= 0.01) taxLines.push(dCorp > 0 ? `Corporate tax rose ${Math.round(prev.tax * 100)}% to ${Math.round(cs.tax * 100)}%. Businesses grumbled, profits fell, and business ratings took a small hit.` : `Corporate tax fell ${Math.round(prev.tax * 100)}% to ${Math.round(cs.tax * 100)}%. Businesses kept more profit, which helped ratings.`);
+  if (Math.abs(dInc) >= 0.01) taxLines.push(dInc > 0 ? `Income tax rose ${Math.round(prev.incTax * 100)}% to ${Math.round(cs.incTax * 100)}%. Households had less to spend, so shops saw fewer customers.` : `Income tax fell ${Math.round(prev.incTax * 100)}% to ${Math.round(cs.incTax * 100)}%. Households had more to spend, so demand rose.`);
+  if (Math.abs(dVat) >= 0.01) taxLines.push(dVat > 0 ? `VAT rose ${Math.round(prev.vat * 100)}% to ${Math.round(cs.vat * 100)}%. Prices felt higher, so value ratings dipped.` : `VAT fell ${Math.round(prev.vat * 100)}% to ${Math.round(cs.vat * 100)}%. Prices felt lower, so value ratings lifted.`);
+  if (!taxLines.length) taxLines.push('Tax rates did not change this year, so there was no tax reaction.');
+  const taxRevYear = (cs.taxRev || 0) - (S.taxRevAtLastYearEnd || 0);
+  S.taxRevAtLastYearEnd = cs.taxRev || 0;
+  taxLines.push(`Government corporate-tax revenue this year: ${fmtMoney(taxRevYear, true)}.`);
+  S.yearReport = { year, entries, taxLines, taxRev: taxRevYear };
+  S.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax, vat: cs.vat };
+  const body = entries.map(e => `${e.name} (${e.sym}): ${e.old.toFixed(1)} star to ${e.new.toFixed(1)} star. ${e.reasons.join(' ')}`).join('\n') + '\nTax: ' + taxLines.join(' ');
+  mail('Year in review', `Year ${year} in review`, body);
+  if (entries.length) news('Business', `Year ${year} ratings are in: ${entries.map(e => `${e.name} ${e.new.toFixed(1)} star`).join(', ')}. See Messages for what people thought.`, S.home);
+}
+function stepYear() { const y0 = yearOf(S.day); while (!S.over && yearOf(S.day) === y0) stepDay(); }
+function setTax(kind, value) {
+  const cs = country(S.home); if (!cs) return 'No home nation.';
+  const limits = { tax: [0.05, 0.50], incTax: [0, 0.40], vat: [0, 0.20] };
+  if (!limits[kind]) return 'Unknown tax.';
+  cs[kind] = clamp(value, limits[kind][0], limits[kind][1]);
+  const label = kind === 'tax' ? 'Corporate tax' : kind === 'incTax' ? 'Income tax' : 'VAT';
+  news('Nation', `${label} in ${cname(S.home)} is now ${Math.round(cs[kind] * 100)}%. Reactions will be reported at year end.`, S.home);
+  return null;
+}
+function buyYears() {
+  if (S.mode === 'infinite') return 'Infinite mode has no time limit.';
+  const cost = Math.round(Math.max(250000, netWorth() * 0.05) * Math.pow(1.5, S.yearsBought || 0) / 1000) * 1000;
+  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  S.cash -= cost; S.yearsBought = (S.yearsBought || 0) + 1; S.maxDays = (S.maxDays || NORMAL_DAYS) + Math.round(25 * 365.25);
+  news('Business', `You bought 25 more years. The game now runs to about ${START_YEAR + Math.round(S.maxDays / 365.25)}.`, S.home);
+  return null;
+}
+
 // ---------- day loop ----------
 function stepDay() {
   if (S.over) return;
@@ -267,12 +361,13 @@ function stepDay() {
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
   if (S.day % 7 === 6) businessWeek();
   S.day++;
+  if (yearOf(S.day) !== yearOf(S.day - 1)) yearEnd(yearOf(S.day));
   if (S.day % 7 === 0) { S.nh.w.push([S.day, Math.round(netWorth()), +S.idx.v.toFixed(2)]); if (S.nh.w.length > 260) S.nh.w.shift(); }
   if (dateOf(S.day).getUTCDate() === 1) S.nh.m.push([S.day, Math.round(netWorth()), +S.idx.v.toFixed(2)]);
   S.netWorth = netWorth();
   S.nh.d.push([S.day, Math.round(S.netWorth)]); if (S.nh.d.length > 400) S.nh.d.shift();
   checkCareer();
-  if (S.mode === 'normal' && S.day >= NORMAL_DAYS) finishGame();
+  if (S.mode === 'normal' && S.day >= (S.maxDays || NORMAL_DAYS)) finishGame();
   if (S.netWorth < -Math.max(2e6, S.stats.startNet)) { S.broke = (S.broke || 0) + 1; if (S.broke === 1) news('Business', 'Warning: you are close to bankruptcy. Close losing locations or sell assets.'); if (S.broke > 60) finishGame(true); } else S.broke = 0;
 }
 

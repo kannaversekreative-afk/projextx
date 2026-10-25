@@ -43,6 +43,7 @@ function newGame(opt) {
     holdings: {}, props: [], lotState: {},
     regime: regimeOf('calm'), nextRate: 30 + Math.floor(rand() * 40), oil: 1, trade: 1,
     wars: [], live: [], news: [], mail: [], cityHit: {}, boosts: {}, pandemic: 0,
+    maxDays: NORMAL_DAYS, yearsBought: 0, yearReport: null, homeTaxPrev: null,
     nh: { d: [], w: [], m: [] }, watch: [], stats: { trades: 0, bestWeek: 0, startNet: 0, takeovers: 0, ipos: 0, wars: 0 },
     career: 0, goalsDone: [], daily: { streak: 0, last: null }, shop: {}, tutorial: 0, notified: 0,
     settings: { vol: 0.5, ui: 0.8, motion: true }, over: null, week: { profit: 0 },
@@ -56,6 +57,7 @@ function newGame(opt) {
     const lv = () => clamp((rank < 5 ? 4 : rank < 15 ? 3 : rank < 40 ? 2 : rank < 90 ? 1 : 0) + (rand() < 0.25 ? 1 : 0) - (rand() < 0.2 ? 1 : 0), 0, 5);
     const cs = { pop: k.pop0, pop0: k.pop0, gdp: k.gdp0, growth: clamp(0.045 - 0.012 * Math.log10(gdpPc / 1000), 0.008, 0.06),
       stab: clamp(48 + k.wealth * 14 + gauss() * 12, 12, 95), mil: Math.sqrt(k.gdp0) * (0.6 + rand() * 0.8), tax: +(0.15 + rand() * 0.2).toFixed(2),
+      incTax: 0.20, vat: 0.05, taxRev: 0,
       milLv: { air: lv(), navy: k.coastal ? lv() : 0, army: lv() }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0 };
     k.nb.forEach(b => { if (W.byA3[b] && W.byA3[b].playable) cs.rel[b] = Math.round(clamp(30 + gauss() * 25, -40, 90)); });
     s.countries[k.a3] = cs;
@@ -91,6 +93,7 @@ function newGame(opt) {
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
   s.stats.startNet = netWorth();
   s.nh.w.push([0, s.stats.startNet, 1000]); s.nh.m.push([0, s.stats.startNet, 1000]);
+  s.homeTaxPrev = { tax: s.countries[opt.home].tax, incTax: s.countries[opt.home].incTax, vat: s.countries[opt.home].vat };
   news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
   mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
   return s;
@@ -109,7 +112,8 @@ function makeCompany(k, sector, usedNames, usedSyms) {
     price: 1, p0: 1, shares: 1, listed: true, ai: true, pe: info.pe * (0.85 + rand() * 0.3), vol: info.vol * (0.85 + rand() * 0.4) * (k.wealth < 0.6 ? 1.2 : 1),
     beta: info.beta * (0.8 + rand() * 0.4), mood: gauss() * 0.3, moodT: gauss() * 0.4, tmp: 0, shock: 0, pattern: null,
     set: { price: 1, quality: 3, wage: 1 }, locs: [], fleet: 0, web: { tier: clamp(Math.round(k.wealth * 1.4 + rand() * 1.2 - 0.4), 0, 4), ads: {}, addons: {} },
-    rating: 3.4 + rand() * 0.5, avg: 0, hist: [], week: { profit: 0 }, h: { d: [], w: [], m: [], v: [] }, tradedToday: 0, dayVol: 0, founded: 0 };
+    rating: 3.4 + rand() * 0.5, avg: 0, hist: [], week: { profit: 0 }, h: { d: [], w: [], m: [], v: [] }, tradedToday: 0, dayVol: 0, founded: 0,
+    yearStats: { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 }, lastYearProfit: null, ratingReasons: [] };
   if (info.fleet) c.fleet = clamp(Math.round(g - 2.6 + rand() * 0.8), 1, 6);
   if (c.web.tier >= 2 && rand() < 0.5) c.web.ads.search = true;
   if (c.web.tier >= 3 && rand() < 0.4) c.web.ads.social = true;
@@ -121,6 +125,8 @@ function makeCompany(k, sector, usedNames, usedSyms) {
 
 // ---------- lookups ----------
 const country = a3 => S.countries[a3];
+function topCities(a3, n) { return W.cities.filter(c => c.a3 === a3).sort((a, b) => b.pop - a.pop).slice(0, n || 5); }
+function businessesInCity(cityId) { const out = []; for (const a3 in S.co) { const c = S.co[a3]; c.locs.forEach(l => { if ((l.city || c.city) === cityId) out.push({ c, l }); }); } return out; }
 const co = a3 => S.co[a3];
 const cname = a3 => W.byA3[a3].name;
 const homeCo = () => S.co[S.home];
@@ -180,12 +186,15 @@ function webF(c) { return 1 + WEB_TIERS[c.web.tier].boost + (c.web.addons.seo ? 
 // One location for one week. Shared by the simulation and the lease forecast.
 function locEconomics(c, loc, nLocs) {
   const k = W.byA3[c.a3], w = k.wealth, L = SECTORS[c.sector].loc, s = c.set;
-  const m = bizMult(c.a3, c.city), brandF = 0.6 + (c.rating || 3.5) * 0.09, qualityF = 0.7 + 0.15 * s.quality, interiorF = [1, 1.15, 1.3][loc.interior];
+  const m = bizMult(c.a3, loc.city || c.city), brandF = 0.6 + (c.rating || 3.5) * 0.09, qualityF = 0.7 + 0.15 * s.quality, interiorF = [1, 1.15, 1.3][loc.interior];
+  // Tax demand, normalised so the default rates (20% income, 5% VAT) change
+  // nothing: raising them cuts household spending, cutting them lifts it.
+  const _cs = country(c.a3), taxDemand = (1 - ((_cs.incTax || 0.20) - 0.20) * 0.5) * (1 - ((_cs.vat || 0.05) - 0.05) * 1.0);
   const wageSpeed = s.wage < 1 ? 0.85 : s.wage > 1 ? 1.15 : 1, rush = S.boosts.rush > S.day && controlled(c.a3) ? 2 : 1;
   const extraSat = (c.web.addons.reviews ? 0.3 : 0) + (loc.boost || 0);
   if (L.mode === 'traffic') {
     const priceF = Math.pow(1 / s.price, 1.7), comp = 1 / (1 + 0.12 * Math.max(0, nLocs - 1));
-    const demand = loc.traffic * L.capture * 1.4 * priceF * qualityF * interiorF * adsF(c) * webF(c) * brandF * comp * m * rush;
+    const demand = loc.traffic * L.capture * 1.4 * priceF * qualityF * interiorF * adsF(c) * webF(c) * brandF * comp * m * rush * taxDemand;
     const cap = loc.staff * L.throughput * wageSpeed;
     const served = Math.min(demand, cap), over = demand / Math.max(1, cap);
     const sat = clamp(3 + (qualityF - 1) * 4 + (interiorF - 1) * 3 - Math.min(1.5, Math.max(0, over - 1) * 2.5) + (s.wage - 1) * 2.5 - (s.price - 1) * 2 + extraSat, 1, 5);
@@ -198,7 +207,7 @@ function locEconomics(c, loc, nLocs) {
   const totalStaff = c._staff != null ? c._staff : c.locs.reduce((a, l) => a + l.staff, 0);
   const sat0 = 1 / (1 + totalStaff / (8 * Math.sqrt(k.gdp0 / 1000) + 5));
   const fleetBoost = c.sector === 'Shipping' ? 1 + c.fleet * 0.08 : 1;
-  const dF = m * webF(c) * Math.sqrt(adsF(c)) * brandF * (0.8 + 0.1 * s.quality) * Math.pow(1 / s.price, 0.6) * s.price * sat0 * fleetBoost * interiorF * rush * Math.pow(econ(c), 0.7);
+  const dF = m * webF(c) * Math.sqrt(adsF(c)) * brandF * (0.8 + 0.1 * s.quality) * Math.pow(1 / s.price, 0.6) * s.price * sat0 * fleetBoost * interiorF * rush * Math.pow(econ(c), 0.7) * taxDemand;
   const rev = loc.staff * L.perStaff * Math.pow(w, 0.7) * dF;
   const wages = loc.staff * L.wage * Math.pow(w, 0.8) * s.wage;
   const sat = clamp(3 + (s.wage - 1) * 2.5 + (s.quality - 3) * 0.3 + (interiorF - 1) * 3 - (s.price - 1) * 1.5 + extraSat, 1, 5);
@@ -239,9 +248,13 @@ function companyWeek(c, quiet) {
   rev += f.rev + o.rev; profit += f.profit + o.profit - ads - upkeep;
   const tax = Math.max(0, profit) * country(c.a3).tax;
   profit -= tax;
-  if (satN > 1) c.rating = satW / satN;
+  const _cs2 = country(c.a3); _cs2.taxRev = (_cs2.taxRev || 0) + tax;
+  // Rating changes only at year end (see yearEnd in world-events.js), from
+  // a full year of these stats. It is deliberately NOT overwritten here,
+  // or it would jitter every week and the year-end report would mean nothing.
+  if (!c.yearStats) c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
+  c.yearStats.satW += satW; c.yearStats.satN += satN; c.yearStats.rev += rev; c.yearStats.profit += profit; c.yearStats.weeks++;
   const R = Math.round;
-  c.rating = Math.round(c.rating * 100) / 100;
   c.week = { rev: R(rev), profit: R(profit), tax: R(tax), locs: c.locs.reduce((a, l) => a + l.profit, 0), fleet: R(f.profit), online: R(o.profit), onlineRev: R(o.rev), visitors: o.visitors, ads: R(ads), cust };
   if (!quiet) { c.hist.push(Math.round(profit)); if (c.hist.length > 52) c.hist.shift(); }
   c.avg = Math.round(c.avg ? c.avg * 0.8 + profit * 0.2 : profit);
@@ -262,28 +275,33 @@ function aiWeek(c) {
   }
 }
 function aiOpenLocation(c) {
-  const lots = cityLots(c.city).filter(l => l.kind === 'lease');
+  // A country's businesses live in its cities, not only its capital: pick
+  // one of its three biggest cities, then the best lot there.
+  const cities = topCities(c.a3, 5), city = cities.length ? cities[Math.floor(rand() * Math.min(3, cities.length))] : null;
+  const cityId = city ? city.id : c.city;
+  const lots = cityLots(cityId).filter(l => l.kind === 'lease');
   if (!lots.length) return false;
   const score = locMode(c) === 'size' ? l => l.size * 10000 - l.srent : l => l.traffic / (l.rent + 300);
   lots.sort((a, b) => score(b) - score(a));
   const lot = lots[Math.floor(rand() * Math.min(3, lots.length))];
-  addLocation(c, lot, 1);
+  addLocation(c, lot, 1, cityId);
   return true;
 }
-function addLocation(c, lot, interior) {
-  const L = SECTORS[c.sector].loc, owned = lot.kind === 'prop';
-  const loc = { id: uid(), t: lot.t, traffic: lot.traffic, size: lot.size, interior, staff: 1, sat: 3.5, rent: owned ? 0 : lotRent(c, lot), opened: S.day, cust: 0, rev: 0, profit: 0, avg: 0, demand: 0, cap: 0 };
+function addLocation(c, lot, interior, cityId) {
+  const L = SECTORS[c.sector].loc, owned = lot.kind === 'prop', city = cityId != null ? cityId : c.city;
+  const loc = { id: uid(), t: lot.t, city, traffic: lot.traffic, size: lot.size, interior, staff: 1, sat: 3.5, rent: owned ? 0 : lotRent(c, lot), opened: S.day, cust: 0, rev: 0, profit: 0, avg: 0, demand: 0, cap: 0 };
   if (L.mode === 'traffic') { const e = locEconomics(c, Object.assign({}, loc, { staff: 1 }), c.locs.length + 1); loc.staff = clamp(Math.ceil(e.demand / (e.cap || 1)), Math.max(1, L.staff - 1), maxStaff(c, loc)); }
   else loc.staff = Math.max(2, Math.round(maxStaff(c, loc) * 0.6));
   c.locs.push(loc);
-  if (!owned) setLot(c.city, lot.t, 'loc'); else { const p = S.props.find(x => x.city === c.city && x.t === lot.t); if (p) p.loc = loc.id; }
+  if (!owned) setLot(city, lot.t, 'loc'); else { const p = S.props.find(x => x.city === city && x.t === lot.t); if (p) p.loc = loc.id; }
   return loc;
 }
 function closeLoc(c, id) {
   const l = c.locs.find(x => x.id === id); if (!l) return;
   c.locs = c.locs.filter(x => x !== l);
-  const p = S.props.find(x => x.city === c.city && x.t === l.t);
-  if (p) delete p.loc; else setLot(c.city, l.t, null);
+  const city = l.city || c.city;
+  const p = S.props.find(x => x.city === city && x.t === l.t);
+  if (p) delete p.loc; else setLot(city, l.t, null);
 }
 
 // ---------- valuation ----------
@@ -372,8 +390,10 @@ function marketDay() {
   const sec = {}; SECTOR_LIST.forEach(k => sec[k] = gauss() * 0.006 * R.vol);
   let rate = 0;
   if (S.day >= S.nextRate) { const d = pickW({ cut: 0.3, hold: 0.45, hike: 0.25 }); rate = d === 'cut' ? 0.012 : d === 'hike' ? -0.014 : 0; news('Market', d === 'cut' ? 'Global central banks cut interest rates. Stocks rally.' : d === 'hike' ? 'Central banks hike interest rates. Stocks slide.' : 'Central banks hold rates steady.'); S.nextRate = S.day + 40 + Math.floor(rand() * 25); }
-  // Market-cap weighted, chain-linked index of listed companies.
-  let capBefore = 0, capAfter = 0;
+  // Vs Market is an equal-weighted algo: it buys the same dollar amount of
+  // every listed stock, so its return is the AVERAGE stock return, not the
+  // biggest companies' return. The World Index below follows that algo.
+  let eqSum = 0, eqN = 0;
   for (const a3 in S.co) {
     const c = S.co[a3], cs = country(a3);
     if (!c.listed) { c.dayVol = 0; c.tradedToday = 0; c.price = companyFairTotal(c) / c.shares; continue; }
@@ -385,13 +405,12 @@ function marketDay() {
     if (!c.pattern) { if (c.vol >= 0.024 && rand() < 0.002) c.pattern = { type: 'pump', seq: [0.07, 0.09, 0.1, 0.05, -0.18, -0.16, -0.09] }; else if (rand() < 0.0012) c.pattern = { type: 'squeeze', seq: [0.11, 0.13, 0.07, -0.06] }; }
     if (c.pattern) { r += c.pattern.seq.shift(); if (!c.pattern.seq.length) c.pattern = null; }
     if (rand() < 0.004) { const x = (rand() < 0.5 ? -1 : 1) * (0.03 + rand() * 0.08); r += x; if (S.holdings[a3] || rand() < 0.12) news('Market', `${c.name} ${x > 0 ? pick(['wins a huge contract', 'announces a buyback', 'gets an upgrade', 'unveils a new product']) : pick(['faces a lawsuit', 'loses its CEO', 'recalls products', 'gets downgraded'])}. ${c.sym} ${x > 0 ? '+' : ''}${(x * 100).toFixed(1)}%.`, a3); }
-    capBefore += c.price * c.shares;
+    eqSum += r; eqN++;
     c.dayVol = Math.round(c.shares * 0.003 * (0.5 + rand()) * R.vol * (cs.war || cs.occ ? 1.5 : 1)) + (c.tradedToday || 0); c.tradedToday = 0;
     c.price = Math.max(0.5, c.price * Math.exp(r));
-    capAfter += c.price * c.shares;
   }
   if (--S.regime.left <= 0) { const nx = pickW(REGIMES[S.regime.type].next); S.regime = regimeOf(nx); news('Market', REGIMES[nx].news); }
-  if (capBefore) S.idx.v *= capAfter / capBefore;
+  if (eqN) S.idx.v *= Math.exp(eqSum / eqN);
 }
 function pushHist(h, v, day, vol) {
   h.d.push(v); if (h.d.length > 400) h.d.shift();
@@ -403,13 +422,13 @@ function pushHist(h, v, day, vol) {
 
 // ---------- running your companies ----------
 function requireControl(a3) { return controlled(a3) ? null : 'You need to control this company first.'; }
-function leaseLot(a3, t, interior) {
+function leaseLot(a3, t, interior, cityId) {
   const e = requireControl(a3); if (e) return e;
-  const c = S.co[a3], lot = cityLots(c.city).find(l => l.t === t);
-  if (!lot || (lot.kind !== 'lease' && !(lot.kind === 'prop' && !S.props.find(p => p.city === c.city && p.t === t).loc))) return 'That spot isn’t available.';
+  const c = S.co[a3], city = cityId != null ? cityId : c.city, lot = cityLots(city).find(l => l.t === t);
+  if (!lot || (lot.kind !== 'lease' && !(lot.kind === 'prop' && !S.props.find(p => p.city === city && p.t === t).loc))) return 'That spot isn’t available.';
   const cost = buildCost(c, interior); if (S.cash < cost) return `Fitting it out costs ${fmtMoney(cost)}.`;
-  S.cash -= cost; addLocation(c, lot, interior); S.xp += 60;
-  news('Business', `${c.name} opened a new ${SECTORS[c.sector].loc.name.toLowerCase()} in ${W.cities[c.city].name}.`, a3);
+  S.cash -= cost; addLocation(c, lot, interior, city); S.xp += 60;
+  news('Business', `${c.name} opened a new ${SECTORS[c.sector].loc.name.toLowerCase()} in ${W.cities[city].name}.`, a3);
   return null;
 }
 function upgradeFleet(a3) {
