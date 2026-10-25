@@ -485,13 +485,17 @@ function makePaperEdition(year) {
   const warsElse = S.wars.filter(w => w.a !== S.home && w.b !== S.home);
   const war = warsElse[0] || S.wars[0];
   let headline = '', headBody = '';
+  let frontKind = 'growth', frontCaption = 'The world, this year.';
   if (war) {
+    frontKind = 'war'; frontCaption = `The front in the war between ${cname(war.a)} and ${cname(war.b)}, as the fighting moves on.`;
     headline = `${cname(war.a)} AT WAR WITH ${cname(war.b)}`;
     headBody = `The front has moved to ${Math.round(war.front)}%. Capitals are watching, neighbours are nervous, and trade routes through both nations are under strain. The world waits to see whether talks, or tanks, win the year.`;
   } else if (unrestC) {
+    frontKind = 'unrest'; frontCaption = `Crowds in the streets of ${cname(unrestC.a3)}, where protests have paralysed the capital.`;
     headline = `UNREST IN ${cname(unrestC.a3).toUpperCase()}`;
     headBody = `Mass protests have paralysed the streets. The government calls for calm, the crowds call for change, and the rest of the world is watching what happens next.`;
   } else {
+    frontKind = boomC ? 'boom' : 'growth'; frontCaption = boomC ? `Factories at full steam in ${cname(boomC.a3)}, in a boom year for the country.` : `A skyline on the rise in ${fastest ? fastest.name : 'the world'}, the fastest riser this year.`;
     headline = `${(fastest ? fastest.name : 'THE WORLD').toUpperCase()} LEADS THE WORLD`;
     headBody = `No war dominates the front page this year. Instead, the story is growth: new factories, new trade, and a country that outpaced every rival.`;
   }
@@ -531,7 +535,7 @@ function makePaperEdition(year) {
   });
   return {
     year, day: S.day, date: fmtDate(S.day),
-    front: { headline, body: headBody, stories: frontStories.slice(0, 4) },
+    front: { headline, body: headBody, stories: frontStories.slice(0, 4), kind: frontKind, caption: frontCaption },
     business: { idx: S.idx.v, idxChg, oil: S.oil, gainers, losers, tip, stories: bizStories },
     sports: { leagues: sports, story: `Champions are crowned in every league this year, from the gridiron to the diamond to the ice. The ${sports[0].champ} took the ${sports[0].l} crown, and the ${sports[1].champ} did the same in the ${sports[1].l}. New stars, old rivalries, and one more season for the history books.` },
     numbers: { worldGdp, worldPop, avgStab: playable.length ? stabSum / playable.length : 0, wars: S.wars.length, booms, unrest, topGrowth: growth.slice(0, 5), slowest: growth.slice(-3).reverse(), idx: S.idx.v, idxChg },
@@ -542,6 +546,16 @@ function paperEdition() { ensurePapers(); paperEdIdx = Math.max(0, Math.min(S.pa
 function paperArticle(n) {
   return `<article class="part"><div class="pkicker">${esc(n.kicker)}</div><h3>${esc(n.head)}</h3><p class="pbody">${esc(n.body)}</p></article>`;
 }
+function paperCutSVG(kind) {
+  // Original illustration, drawn in code, in black ink on cream — no photo,
+  // logo or artwork copied from any real paper. One scene per story kind.
+  const sky = '<rect width="600" height="360" fill="#e8ddc0"/><circle cx="500" cy="70" r="42" fill="#d8c9a0"/>';
+  const dots = '<pattern id="halftone" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.4" fill="#1a1a1a" opacity="0.25"/></pattern><rect width="600" height="360" fill="url(#halftone)"/>';
+  if (kind === 'war') return `<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="War illustration">${sky}<g fill="#1a1a1a"><rect x="40" y="180" width="70" height="180"/><rect x="130" y="140" width="80" height="220"/><rect x="230" y="200" width="60" height="160"/><rect x="310" y="150" width="90" height="210"/><rect x="420" y="190" width="70" height="170"/><rect x="510" y="220" width="60" height="140"/></g><g fill="#555"><circle cx="150" cy="120" r="34"/><circle cx="180" cy="100" r="26"/><circle cx="340" cy="130" r="30"/><circle cx="370" cy="110" r="22"/></g><g fill="#1a1a1a"><rect x="90" y="300" width="90" height="14" transform="rotate(-8 90 300)"/><rect x="400" y="310" width="80" height="12" transform="rotate(6 400 310)"/></g>${dots}</svg>`;
+  if (kind === 'unrest') return `<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Crowd illustration">${sky}<g fill="#1a1a1a"><rect x="30" y="170" width="90" height="190"/><rect x="140" y="140" width="100" height="220"/><rect x="400" y="160" width="90" height="200"/><rect x="510" y="200" width="60" height="160"/></g><g fill="#1a1a1a">${[60,120,180,240,300,360,420,480,540].map(x => `<circle cx="${x}" cy="300" r="16"/><rect x="${x-14}" y="316" width="28" height="44"/>`).join('')}</g><g stroke="#1a1a1a" stroke-width="4"><line x1="180" y1="260" x2="180" y2="210"/><line x1="360" y1="260" x2="360" y2="210"/></g><rect x="150" y="190" width="80" height="26" fill="#f8f1dc" stroke="#1a1a1a" stroke-width="2"/><rect x="330" y="190" width="80" height="26" fill="#f8f1dc" stroke="#1a1a1a" stroke-width="2"/>${dots}</svg>`;
+  if (kind === 'boom') return `<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Factory illustration">${sky}<g fill="#1a1a1a"><rect x="40" y="220" width="220" height="140"/><rect x="60" y="170" width="26" height="60"/><rect x="110" y="150" width="26" height="80"/><rect x="160" y="180" width="26" height="50"/><rect x="280" y="240" width="160" height="120"/><rect x="460" y="200" width="100" height="160"/></g><g fill="#555"><circle cx="75" cy="140" r="26"/><circle cx="100" cy="120" r="20"/><circle cx="125" cy="150" r="24"/><circle cx="175" cy="160" r="20"/></g><g stroke="#1a1a1a" stroke-width="5" fill="none"><path d="M280 300 L340 240 L400 240 L460 180"/><circle cx="460" cy="180" r="8" fill="#1a1a1a"/></g>${dots}</svg>`;
+  return `<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="City skyline illustration">${sky}<g fill="#1a1a1a"><rect x="40" y="200" width="70" height="160"/><rect x="130" y="150" width="80" height="210"/><rect x="230" y="220" width="60" height="140"/><rect x="310" y="120" width="90" height="240"/><rect x="420" y="180" width="70" height="180"/><rect x="510" y="230" width="60" height="130"/></g><g stroke="#1a1a1a" stroke-width="5" fill="none"><path d="M60 330 L180 260 L300 280 L430 180 L540 140"/><path d="M540 140 L520 140 M540 140 L540 160" stroke-width="4"/></g>${dots}</svg>`;
+}
 function paperTicker(ed) {
   const items = [`WORLD INDEX ${ed.business.idx.toFixed(0)} (${fmtPct(ed.business.idxChg)})`, `OIL ${ed.business.oil.toFixed(2)}x`, `WORLD GDP ${fmtMoney(ed.numbers.worldGdp, true)}`, `WORLD POPULATION ${fmtPop(ed.numbers.worldPop)}`, ...ed.business.gainers.slice(0, 3).map(g => `${g.sym} ${fmtPct(g.chg)}`)];
   const line = items.join(' &nbsp;•&nbsp; ') + ' &nbsp;•&nbsp; ';
@@ -551,13 +565,22 @@ function paperHTML() {
   const ed = paperEdition(), total = 5, page = Math.min(paperPage, 4); paperPage = page;
   let body = '';
   if (page === 0) {
-    body = `<div class="pfront">
-      <div class="pheadline"><div class="pkicker">TOP STORY · WORLD</div><h2>${esc(ed.front.headline)}</h2><p class="pdrop">${esc(ed.front.body)}</p></div>
-      <div class="pbox"><b>WORLD AT A GLANCE</b><span>${ed.numbers.wars} war${ed.numbers.wars === 1 ? '' : 's'} running · ${ed.numbers.booms} boom economies · ${ed.numbers.unrest} countries in unrest</span><span>World GDP ${fmtMoney(ed.numbers.worldGdp, true)} · ${fmtPop(ed.numbers.worldPop)} people</span></div>
-      <div class="pcols">${ed.front.stories.map(paperArticle).join('') || '<p>No world stories this year.</p>'}</div>
-    </div>`;
+    body = `<div class="nfolio"><span>Vol. ${Math.max(1, ed.year - 2025)} · No. ${((ed.day % 365) + 1)}</span><span>WORLD EDITION</span><span>${ed.date.toUpperCase()}</span></div>
+    <div class="nname">
+      <div class="near">PRICE<br>TWO CENTS</div>
+      <div class="ntitle"><h1>The Ticker Times</h1><div class="nmotto">All the World's News — Business, Politics, Sport</div></div>
+      <div class="near">EST.<br>1926</div>
+    </div>
+    <div class="nmarket">MARKETS: World Index ${ed.business.idx.toFixed(0)} (${fmtPct(ed.business.idxChg)}) · Oil ${ed.business.oil.toFixed(2)}x · World GDP ${fmtMoney(ed.numbers.worldGdp, true)} · ${fmtPop(ed.numbers.worldPop)} people</div>
+    <div class="nbanner"><div class="pkicker">THE LEAD STORY · WORLD</div><h2>${esc(ed.front.headline)}</h2><p class="ndeck">${esc(ed.front.body)}</p></div>
+    <div class="nbyline"><span>By The Ticker Times Staff</span><span>WORLD — ${ed.date.toUpperCase()}</span></div>
+    <figure class="ncut">${paperCutSVG(ed.front.kind || 'growth')}<figcaption><b>${esc(ed.front.caption)}</b> <span class="ncredit">Ticker Times illustration.</span></figcaption></figure>
+    <div class="nlead"><p class="pdrop">${esc(ed.front.body)}</p><p class="pbody">The story above is the one every capital is talking about this year. What happens next will be written in trade, in politics, and in the markets — and it will be in this paper first.</p></div>
+    <div class="ncols">${ed.front.stories.map(paperArticle).join('') || '<p>No world stories this year.</p>'}</div>
+    <div class="nindex"><b>IN TODAY'S PAPER</b><span>Business — Page 2</span><span>Sport — Page 3</span><span>The Numbers — Page 4</span><span>Your Year — Page 5</span><span>Last edition — use LAST EDITION below</span></div>`;
   } else if (page === 1) {
-    body = `<div class="pfront">
+    body = `<div class="nsection"><span>BUSINESS</span><span>Page 2 · ${ed.date.toUpperCase()}</span></div>
+    <div class="pfront">
       <div class="pheadline"><div class="pkicker">BUSINESS · MARKETS</div><h2>Markets ${ed.business.idxChg >= 0 ? 'rise' : 'fall'} ${fmtPct(ed.business.idxChg)}</h2></div>
       <div class="pcols">${ed.business.stories.map(paperArticle).join('')}</div>
       <div class="ptip"><b>★ THE TIP SHEET — A HINT, NOT A PROMISE</b><p>${ed.business.tip ? `Keep an eye on <b>${esc(ed.business.tip.name)} (${esc(ed.business.tip.sym)})</b> — up ${fmtPct(ed.business.tip.chg)} this year, rated ${ed.business.tip.rating.toFixed(1)} stars in ${esc(ed.business.tip.sector)}. The paper likes the look of it. Do your own homework before you buy.` : 'No tip this year.'}</p></div>
@@ -565,20 +588,26 @@ function paperHTML() {
       <h3 class="psec">TOP FALLERS</h3><div class="ptable">${ed.business.losers.map(g => `<div class="prow"><span>${esc(g.name)} (${esc(g.sym)})</span><b class="bad">${fmtPct(g.chg)}</b></div>`).join('')}</div>
     </div>`;
   } else if (page === 2) {
-    body = `<div class="pfront">
+    body = `<div class="nsection"><span>SPORT</span><span>Page 3 · ${ed.date.toUpperCase()}</span></div>
+    <div class="pfront">
       <div class="pheadline"><div class="pkicker">SPORT · EVERY LEAGUE</div><h2>Champions crowned around the world</h2><p class="pdrop">${esc(ed.sports.story)}</p></div>
       <div class="psportgrid">${ed.sports.leagues.map(s => `<div class="pscore"><b>${esc(s.l)}</b><div class="pscore-team">${esc(s.champ)}</div><div class="pscore-line">beat ${esc(s.runner)} · ${esc(s.score)}</div><div class="psmall">MVP: ${esc(s.mvp)}</div></div>`).join('')}</div>
       <p class="psmall">NFL · NBA · NHL · WNBA · MLB · KBO · NPB · CPBL — simulated seasons in this world, not real-world results.</p>
     </div>`;
-  } else if (page === 4) {
+  } else if (page === 3) {
+    body = `<div class="nsection"><span>THE NUMBERS</span><span>Page 4 · ${ed.date.toUpperCase()}</span></div>
+    <div class="pfront">
+      <div class="pheadline"><div class="pkicker">THE NUMBERS</div><h2>The world, by the numbers</h2></div>
+      <div class="pbox"><b>THE BIG PICTURE</b><span>World GDP ${fmtMoney(ed.numbers.worldGdp, true)}</span><span>World population ${fmtPop(ed.numbers.worldPop)}</span><span>Average stability ${Math.round(ed.numbers.avgStab)}/100</span><span>World Index ${ed.numbers.idx.toFixed(0)} (${fmtPct(ed.numbers.idxChg)})</span><span>Wars ${ed.numbers.wars} · Booms ${ed.numbers.booms} · Unrest ${ed.numbers.unrest}</span></div>
+      <h3 class="psec">FASTEST GROWING COUNTRIES</h3><div class="ptable">${ed.numbers.topGrowth.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)} · ${fmtMoney(g.gdp * 1e6, true)}</b></div>`).join('')}</div>
+      <h3 class="psec">SLOWEST RISERS</h3><div class="ptable">${ed.numbers.slowest.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)}</b></div>`).join('')}</div>
+      <p class="psmall">News archive: only this edition and last year's edition are kept. Older editions rotate out on their own.</p>
+    </div>`;
+  } else {
     const pl = ed.player;
-    if (!pl) {
-      body = `<div class="pfront"><div class="pheadline"><div class="pkicker">YOUR YEAR</div><h2>Your ledger starts next year</h2><p class="pdrop">This edition was made before the player page existed. Age up once more and this page will fill with your actions, your outcomes, and your numbers.</p></div></div>`;
-    } else {
-      const chg = pl.yearAgo != null ? pl.netWorth - pl.yearAgo : null;
-      body = `<div class="pfront">
+    body = `<div class="nsection"><span>YOUR YEAR</span><span>Page 5 · ${ed.date.toUpperCase()}</span></div>` + (pl ? `<div class="pfront">
       <div class="pheadline"><div class="pkicker">YOUR YEAR · THE INDIVIDUAL LEDGER</div><h2>Your year, in numbers</h2><p class="pdrop">Not the world. You. What you built, what you bought, what you ran, and what it was worth at the end of the year.</p></div>
-      <div class="pbox"><b>THE BOTTOM LINE</b><span>Net worth ${fmtMoney(pl.netWorth, true)}${chg != null ? ` · ${chg >= 0 ? '+' : ''}${fmtMoney(chg, true)} this year (${fmtPct(pl.yearAgo ? chg / pl.yearAgo : 0)})` : ''}</span><span>Cash ${fmtMoney(pl.cash, true)} · Loans ${fmtMoney(pl.loan, true)}</span><span>Stocks held ${fmtMoney(pl.holdingsValue, true)} · Buildings ${fmtMoney(pl.propValue, true)}</span></div>
+      <div class="pbox"><b>THE BOTTOM LINE</b><span>Net worth ${fmtMoney(pl.netWorth, true)}${pl.yearAgo != null ? ` · ${(pl.netWorth - pl.yearAgo) >= 0 ? '+' : ''}${fmtMoney(pl.netWorth - pl.yearAgo, true)} this year (${fmtPct(pl.yearAgo ? (pl.netWorth - pl.yearAgo) / pl.yearAgo : 0)})` : ''}</span><span>Cash ${fmtMoney(pl.cash, true)} · Loans ${fmtMoney(pl.loan, true)}</span><span>Stocks held ${fmtMoney(pl.holdingsValue, true)} · Buildings ${fmtMoney(pl.propValue, true)}</span></div>
       <h3 class="psec">COMPANIES YOU RUN</h3>${pl.controlled.length ? `<div class="ptable">${pl.controlled.map(c => `<div class="prow"><span>${esc(c.name)} (${esc(c.sym)}) · ${c.locs} locations${c.fleet ? ` · fleet ${c.fleet}` : ''}</span><b>${c.old != null ? `${c.old.toFixed(1)} → ${c.nw.toFixed(1)} stars` : `${c.rating.toFixed(1)} stars`}</b></div>`).join('')}</div>${pl.controlled.filter(c => c.reasons.length).map(c => `<p class="psmall">${esc(c.name)}: ${esc(c.reasons[0])}</p>`).join('')}` : '<p class="psmall">You do not control a company yet. Buy a majority stake or take one over, then age up.</p>'}
       <h3 class="psec">OUTCOMES THIS YEAR</h3>${pl.yearEntries.length ? `<div class="ptable">${pl.yearEntries.map(e => `<div class="prow"><span>${esc(e.name)}</span><b>${e.old.toFixed(1)} → ${e.new.toFixed(1)} stars</b></div>`).join('')}</div>` : '<p class="psmall">No year-end ratings yet for companies you run.</p>'}${pl.taxLines.length ? `<p class="psmall">${esc(pl.taxLines.join(' '))}</p>` : ''}${pl.taxRev ? `<p class="psmall">Government corporate-tax revenue this year: ${fmtMoney(pl.taxRev, true)}.</p>` : ''}
       ${pl.leader ? `<h3 class="psec">YOUR NATION</h3><div class="pbox"><b>TREASURY & DEBT</b><span>Treasury ${fmtMoney(pl.leader.treasury, true)} · Debt ${fmtMoney(pl.leader.debt, true)}</span>${pl.leader.lastWeek ? `<span>Last week: revenue ${fmtMoney(pl.leader.lastWeek.revenue, true)} · spending ${fmtMoney(pl.leader.lastWeek.spending, true)} · net ${fmtMoney(pl.leader.lastWeek.net, true)}</span>` : ''}</div>` : ''}
@@ -592,26 +621,16 @@ function paperHTML() {
         ${pl.mil.length ? `<div class="prow"><span>Military</span><b>${pl.mil.map(m => `${m.b} Lv ${m.lv}`).join(' · ')}</b></div>` : ''}
         ${pl.warsHome.length ? `<div class="prow"><span>Wars you are in</span><b>${esc(pl.warsHome.join(', '))}</b></div>` : ''}
       </div>
-    </div>`;
-    }
-  } else {
-    body = `<div class="pfront">
-      <div class="pheadline"><div class="pkicker">THE NUMBERS</div><h2>The world, by the numbers</h2></div>
-      <div class="pbox"><b>THE BIG PICTURE</b><span>World GDP ${fmtMoney(ed.numbers.worldGdp, true)}</span><span>World population ${fmtPop(ed.numbers.worldPop)}</span><span>Average stability ${Math.round(ed.numbers.avgStab)}/100</span><span>World Index ${ed.numbers.idx.toFixed(0)} (${fmtPct(ed.numbers.idxChg)})</span><span>Wars ${ed.numbers.wars} · Booms ${ed.numbers.booms} · Unrest ${ed.numbers.unrest}</span></div>
-      <h3 class="psec">FASTEST GROWING COUNTRIES</h3><div class="ptable">${ed.numbers.topGrowth.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)} · ${fmtMoney(g.gdp * 1e6, true)}</b></div>`).join('')}</div>
-      <h3 class="psec">SLOWEST RISERS</h3><div class="ptable">${ed.numbers.slowest.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)}</b></div>`).join('')}</div>
-      <p class="psmall">News archive: only this edition and last year's edition are kept. Older editions rotate out on their own.</p>
-    </div>`;
+    </div>` : `<div class="pfront"><div class="pheadline"><div class="pkicker">YOUR YEAR</div><h2>Your ledger starts next year</h2><p class="pdrop">This edition was made before the player page existed. Age up once more and this page will fill with your actions, your outcomes, and your numbers.</p></div></div>`);
   }
   const edLabel = paperEdIdx === 0 ? `THIS YEAR · ${ed.year}` : `LAST YEAR · ${ed.year}`;
-  return `<div class="paper-top"><button class="wback paper-close" data-a="closePaper" aria-label="Close newspaper">${IC.close}</button>
-    <div class="masthead"><div class="mrule"></div><h1>The Ticker Times</h1><div class="medition">WORLD EDITION · PRICE TWO CENTS · ${ed.date.toUpperCase()}</div><div class="mrule"></div></div><div class="paper-spacer"></div></div>
-  ${page === 0 ? paperTicker(ed) : ''}
-  <div class="paper-body">${body}</div>
+  return `<div class="paper-closebar"><button class="paper-closebtn" data-a="closePaper" aria-label="Close newspaper">✕ CLOSE</button></div>
+  <div class="psheet">${body}<div class="nfoliofoot"><span>The Ticker Times</span><span>Page ${page + 1} of 5 · ${PAPER_PAGES[page]}</span><span>${ed.date.toUpperCase()}</span></div></div>
   <div class="pedition"><button class="btn" data-a="paperEdPrev" ${paperEdIdx >= S.papers.length - 1 ? 'disabled' : ''}>← LAST EDITION</button><span class="ppage">${edLabel}</span><button class="btn" data-a="paperEdNext" ${paperEdIdx === 0 ? 'disabled' : ''}>THIS EDITION →</button></div>
   <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of 5 · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= 4 ? 'disabled' : ''}>NEXT →</button></div>
   <button class="btn wide paper-return" data-a="closePaper">✕ CLOSE — RETURN TO MAP</button>`;
 }
+
 function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
 function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
 function flipPaper(d) { paperPage = Math.max(0, Math.min(4, paperPage + d)); $('paper').innerHTML = paperHTML(); }
