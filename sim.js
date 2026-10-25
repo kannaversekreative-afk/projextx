@@ -71,16 +71,24 @@ function newGame(opt) {
     // Count is random (2 vs 3), sectors are realism-picked.
     W.playable.forEach(k => {
       const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k) : SECTOR_LIST.slice();
-      const used = [];
-      const pickSector = () => { const avail = pool.filter(x => !used.includes(x)); const sec = avail.length ? pick(avail) : pick(pool); used.push(sec); return sec; };
-      const flagSector = pickSector();
+      const must = (typeof mustHaveForCountry === 'function') ? mustHaveForCountry(k.a3) : [];
+      // MUST-HAVE FIRST, guaranteed, not random: e.g. Russia ALWAYS gets
+      // Oil Extraction + Natural Gas, Taiwan ALWAYS gets Semiconductors.
+      // Total is 3 if there are 2 must-haves, otherwise 2 or 3 random.
+      let total = must.length >= 2 ? 3 : (rand() < 0.5 ? 2 : 3);
+      total = Math.max(total, must.length);
+      const sectors = [...must];
+      while (sectors.length < total) {
+        const avail = pool.filter(x => !sectors.includes(x));
+        if (!avail.length) break;
+        sectors.push(pick(avail));
+      }
+      const flagSector = sectors[0];
       s.co[k.a3] = makeCompany(k, flagSector, usedNames, usedSyms);
-      const extraCount = rand() < 0.5 ? 1 : 2;
-      for (let i = 0; i < extraCount; i++) {
-        const sec = pickSector();
+      sectors.slice(1).forEach((sec, i) => {
         const ex = makeExtraBusiness(k, sec, usedNames, usedSyms, i + 1);
         s.extra[ex.id] = ex;
-      }
+      });
     });
   } else {
     // Tycoon (legacy, old saves / old mode): one company per country.

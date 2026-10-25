@@ -151,15 +151,86 @@ const LEADER_SPECIAL = {
   FRA: ['Aerospace', 'Tourism Services', 'Pharmaceuticals'],
   ITA: ['Vehicles – Cars & Trucks', 'Tourism Services', 'Apparel & Footwear'],
   ESP: ['Tourism Services', 'Crop Farming', 'Vehicles – Cars & Trucks'],
+  IRQ: ['Oil Extraction', 'Natural Gas'],
+  IRN: ['Oil Extraction', 'Natural Gas'],
+  VEN: ['Oil Extraction'],
+  ARE: ['Oil Extraction', 'Natural Gas'],
+  KWT: ['Oil Extraction'],
+  LBY: ['Oil Extraction'],
+  DZA: ['Natural Gas', 'Oil Extraction'],
+  AZE: ['Oil Extraction', 'Natural Gas'],
+  KAZ: ['Oil Extraction', 'Mining – Metals'],
+  ZAF: ['Mining – Metals', 'Crop Farming'],
+  THA: ['Tourism Services', 'Food Processing'],
+  MYS: ['Consumer Electronics', 'Semiconductors'],
+  IDN: ['Mining – Metals', 'Crop Farming'],
+  PHL: ['Consumer Electronics', 'Tourism Services'],
+  POL: ['Vehicles – Cars & Trucks', 'Food Processing'],
+  TUR: ['Textiles', 'Tourism Services'],
+  EGY: ['Natural Gas', 'Tourism Services'],
+  COL: ['Oil Extraction', 'Crop Farming'],
+  PER: ['Mining – Metals', 'Crop Farming'],
+  UZB: ['Natural Gas', 'Mining – Metals'],
+  TKM: ['Natural Gas'],
+  BHR: ['Oil Extraction', 'Finance – Banking'],
+  OMN: ['Oil Extraction', 'Natural Gas'],
+  BRN: ['Oil Extraction', 'Natural Gas'],
 };
+const LEADER_MUST = {
+  RUS: ['Oil Extraction', 'Natural Gas'],
+  SAU: ['Oil Extraction', 'Natural Gas'],
+  QAT: ['Natural Gas', 'Oil Extraction'],
+  NOR: ['Oil Extraction', 'Natural Gas'],
+  IRQ: ['Oil Extraction'],
+  IRN: ['Oil Extraction', 'Natural Gas'],
+  VEN: ['Oil Extraction'],
+  ARE: ['Oil Extraction', 'Natural Gas'],
+  KWT: ['Oil Extraction'],
+  LBY: ['Oil Extraction'],
+  DZA: ['Natural Gas', 'Oil Extraction'],
+  AZE: ['Oil Extraction', 'Natural Gas'],
+  KAZ: ['Oil Extraction', 'Mining – Metals'],
+  NGA: ['Oil Extraction'],
+  CAN: ['Oil Extraction', 'Mining – Metals'],
+  AUS: ['Mining – Metals'],
+  CHL: ['Mining – Metals'],
+  ZAF: ['Mining – Metals'],
+  BRA: ['Crop Farming'],
+  TWN: ['Semiconductors'],
+  KOR: ['Semiconductors', 'Vehicles – Cars & Trucks'],
+  JPN: ['Vehicles – Cars & Trucks', 'Machinery – Industrial'],
+  DEU: ['Vehicles – Cars & Trucks', 'Machinery – Industrial'],
+  CHN: ['Consumer Electronics', 'Textiles'],
+  USA: ['Software & AI', 'Semiconductors'],
+  GBR: ['Finance – Banking'],
+  CHE: ['Finance – Banking', 'Pharmaceuticals'],
+  SGP: ['Semiconductors', 'Finance – Banking'],
+  NLD: ['Semiconductors'],
+  ISR: ['Software & AI', 'Cybersecurity'],
+  FRA: ['Aerospace'],
+  ITA: ['Tourism Services'],
+  ESP: ['Tourism Services'],
+  IND: ['Software & AI'],
+  BGD: ['Textiles'],
+  VNM: ['Textiles', 'Consumer Electronics'],
+  MEX: ['Vehicles – Cars & Trucks'],
+  UKR: ['Crop Farming'],
+  ARG: ['Crop Farming'],
+  THA: ['Tourism Services'],
+  MYS: ['Consumer Electronics'],
+  IDN: ['Mining – Metals'],
+};
+function mustHaveForCountry(a3) { return (LEADER_MUST[a3] || []).filter(n => LEADER_SECTOR_BY_NAME[n]); }
 function sectorPoolForCountry(k) {
-  const pool = ['Retail – Grocery', 'Construction – Residential', 'Food Processing'];
+  const pool = [];
+  mustHaveForCountry(k.a3).forEach(n => pool.push(n));
+  pool.push('Retail – Grocery', 'Construction – Residential', 'Food Processing');
   const gdpPc = k.gdp0 * 1e6 / Math.max(1, k.pop0);
   if (LEADER_SPECIAL[k.a3]) pool.push(...LEADER_SPECIAL[k.a3]);
   if (k.coastal) pool.push('Fishing & Aquaculture', 'Shipping – Freight', 'Ports & Airports Services');
   else pool.push('Rail Transport', 'Road Transport & Trucking');
   if (gdpPc > 30000) pool.push('Software & AI', 'Finance – Banking', 'Professional – Consulting');
-  else if (gdpPc > 10000) pool.push('Manufacturing – Industrial'.replace('Manufacturing – Industrial', 'Machinery – Industrial'), 'Consumer Electronics');
+  else if (gdpPc > 10000) pool.push('Machinery – Industrial', 'Consumer Electronics');
   else pool.push('Crop Farming', 'Textiles', 'Apparel & Footwear');
   if (k.wealth > 1.2) pool.push('Data Centers & Cloud', 'Pharmaceuticals');
   if (k.wealth < 0.6) pool.push('Livestock Farming', 'Mining – Non-metals');
