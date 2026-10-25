@@ -39,7 +39,7 @@ function newGame(opt) {
     v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, home: opt.home, day: 0, speed: 1,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
-    countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [] } }, idx0: 1000,
+    countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
     holdings: {}, props: [], lotState: {},
     regime: regimeOf('calm'), nextRate: 30 + Math.floor(rand() * 40), oil: 1, trade: 1,
     wars: [], live: [], news: [], mail: [], cityHit: {}, boosts: {}, pandemic: 0,
@@ -84,7 +84,7 @@ function newGame(opt) {
     c.shares = Math.max(1e5, Math.round(V / p0)); c.price = p0 * Math.exp(gauss() * 0.1); c.p0 = c.price;
     if (!c.listed) { c.price = V / c.shares; c.p0 = c.price; }
     const path = [c.price]; for (let i = 1; i < 260; i++) path.unshift(path[0] / Math.exp(gauss() * c.vol + 0.0003));
-    path.forEach((p, i) => { const v = +p.toFixed(2); c.h.d.push(v); if (i % 5 === 4) c.h.w.push(v); if (i % 21 === 20) c.h.m.push(v); });
+    path.forEach((p, i) => { const v = +p.toFixed(2); c.h.d.push(v); c.h.v.push(Math.round(c.shares * 0.003 * (0.5 + rand()))); if (i % 5 === 4) c.h.w.push(v); if (i % 21 === 20) c.h.m.push(v); });
     c.price = path[path.length - 1];
   }
   s.holdings[opt.home] = { qty: home.shares, cost: 0 };
@@ -109,7 +109,7 @@ function makeCompany(k, sector, usedNames, usedSyms) {
     price: 1, p0: 1, shares: 1, listed: true, ai: true, pe: info.pe * (0.85 + rand() * 0.3), vol: info.vol * (0.85 + rand() * 0.4) * (k.wealth < 0.6 ? 1.2 : 1),
     beta: info.beta * (0.8 + rand() * 0.4), mood: gauss() * 0.3, moodT: gauss() * 0.4, tmp: 0, shock: 0, pattern: null,
     set: { price: 1, quality: 3, wage: 1 }, locs: [], fleet: 0, web: { tier: clamp(Math.round(k.wealth * 1.4 + rand() * 1.2 - 0.4), 0, 4), ads: {}, addons: {} },
-    rating: 3.4 + rand() * 0.5, avg: 0, hist: [], week: { profit: 0 }, h: { d: [], w: [], m: [] }, founded: 0 };
+    rating: 3.4 + rand() * 0.5, avg: 0, hist: [], week: { profit: 0 }, h: { d: [], w: [], m: [], v: [] }, tradedToday: 0, dayVol: 0, founded: 0 };
   if (info.fleet) c.fleet = clamp(Math.round(g - 2.6 + rand() * 0.8), 1, 6);
   if (c.web.tier >= 2 && rand() < 0.5) c.web.ads.search = true;
   if (c.web.tier >= 3 && rand() < 0.4) c.web.ads.social = true;
@@ -138,6 +138,7 @@ function live(title, days, cat, a3) { S.live.push({ id: uid(), title, until: S.d
 // ---------- city lots (deterministic per game, only changes are saved) ----------
 function baseLots(cityId) {
   const key = cityId + ':' + S.seed;
+  if (!W.lotCache) W.lotCache = {};
   if (W.lotCache[key]) return W.lotCache[key];
   const city = W.cities[cityId], L = cityLayout(city), r = mulberry(hashStr('lots' + key)), w = city.wealth;
   const tFac = clamp(Math.log10(city.pop) / 6.4, 0.55, 1.2), lots = [];
@@ -329,6 +330,7 @@ function trade(a3, side, qty) {
   if (pos.qty === 0) delete S.holdings[a3]; else S.holdings[a3] = pos;
   c.price *= Math.exp(sign * imp); c.tmp -= sign * imp * 0.6;
   S.stats.trades++;
+  c.tradedToday = (c.tradedToday || 0) + qty;
   if (!wasControlled && controlled(a3)) { gainControl(c, 'You now own a majority of'); }
   if (pos.qty >= c.shares) takePrivate(c, 'You bought every share of');
   if (wasControlled && !controlled(a3)) { c.ai = true; news('Business', `You sold control of ${c.name}.`, a3); }
@@ -374,7 +376,7 @@ function marketDay() {
   let capBefore = 0, capAfter = 0;
   for (const a3 in S.co) {
     const c = S.co[a3], cs = country(a3);
-    if (!c.listed) { c.price = companyFairTotal(c) / c.shares; continue; }
+    if (!c.listed) { c.dayVol = 0; c.tradedToday = 0; c.price = companyFairTotal(c) / c.shares; continue; }
     if (rand() < 1 / 25) c.moodT = clamp(gauss() * 0.5, -1, 1);
     c.mood = clamp(c.mood + 0.15 * (c.moodT - c.mood) + gauss() * 0.05, -1, 1);
     let r = c.beta * mkt + sec[c.sector] + c.mood * 0.003 + 0.012 * Math.log(fairValue(c) / c.price) + gauss() * c.vol * R.vol * (cs.war || cs.occ ? 1.5 : 1);
@@ -384,14 +386,17 @@ function marketDay() {
     if (c.pattern) { r += c.pattern.seq.shift(); if (!c.pattern.seq.length) c.pattern = null; }
     if (rand() < 0.004) { const x = (rand() < 0.5 ? -1 : 1) * (0.03 + rand() * 0.08); r += x; if (S.holdings[a3] || rand() < 0.12) news('Market', `${c.name} ${x > 0 ? pick(['wins a huge contract', 'announces a buyback', 'gets an upgrade', 'unveils a new product']) : pick(['faces a lawsuit', 'loses its CEO', 'recalls products', 'gets downgraded'])}. ${c.sym} ${x > 0 ? '+' : ''}${(x * 100).toFixed(1)}%.`, a3); }
     capBefore += c.price * c.shares;
+    c.dayVol = Math.round(c.shares * 0.003 * (0.5 + rand()) * R.vol * (cs.war || cs.occ ? 1.5 : 1)) + (c.tradedToday || 0); c.tradedToday = 0;
     c.price = Math.max(0.5, c.price * Math.exp(r));
     capAfter += c.price * c.shares;
   }
   if (--S.regime.left <= 0) { const nx = pickW(REGIMES[S.regime.type].next); S.regime = regimeOf(nx); news('Market', REGIMES[nx].news); }
   if (capBefore) S.idx.v *= capAfter / capBefore;
 }
-function pushHist(h, v, day) {
+function pushHist(h, v, day, vol) {
   h.d.push(v); if (h.d.length > 400) h.d.shift();
+  if (!h.v) h.v = [];
+  h.v.push(vol || 0); if (h.v.length > 400) h.v.shift();
   if (day % 7 === 6) { h.w.push(v); if (h.w.length > 1040) h.w.shift(); }
   if (dateOf(day + 1).getUTCDate() === 1) h.m.push(v);
 }
@@ -473,7 +478,7 @@ function sellBuilding(id) {
   return null;
 }
 const renoCost = p => Math.round(p.value * (1 - p.cond) * 0.25 / 1000) * 1000 + 5000;
-function renovate(id) { const p = S.props.find(x => x.id === id); const c = renoCost(p); if (S.cash < c) return 'Not enough cash.'; S.cash -= c; p.value += c * 0.8; p.cond = 1; return null; }
+function renovate(id) { const p = S.props.find(x => x.id === id); if (!p) return 'Building not found.'; const c = renoCost(p); if (S.cash < c) return 'Not enough cash.'; S.cash -= c; p.value += c * 0.8; p.cond = 1; return null; }
 function propsWeek() {
   let total = 0;
   S.props.forEach(p => {
