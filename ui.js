@@ -11,8 +11,11 @@ const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: f
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const upCls = x => x >= 0 ? 'up' : 'down';
-// Time runs always and slow: no pause, no skip, one day every 4 seconds.
-const DAY_MS_BY_SPEED = [4000, 4000, 4000, 4000];
+// Year by year, not day by day: 1 game day every 33ms real time, so a
+// full year passes in about 12 seconds. Vehicles animate on the map's
+// own requestAnimationFrame loop, independent of this day loop, so they
+// keep moving while years pass. A manual 'Next year' jump is also offered.
+const DAY_MS_BY_SPEED = [33, 33, 33, 33];
 const IC = {
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
@@ -65,8 +68,16 @@ async function idbDel(key) {
 }
 function migrateSave(s) {
   if (!s || !s.co) return s;
+  if (!s.maxDays) s.maxDays = NORMAL_DAYS;
+  if (s.yearsBought == null) s.yearsBought = 0;
+  if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
+  for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; }
   for (const a3 in s.co) {
     const c = s.co[a3];
+    if (!c.yearStats) c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
+    if (c.lastYearProfit === undefined) c.lastYearProfit = null;
+    if (!c.ratingReasons) c.ratingReasons = [];
+    c.locs.forEach(l => { if (l.city == null) l.city = c.city; });
     if (!c.h) c.h = { d: [], w: [], m: [], v: [] };
     if (!Array.isArray(c.h.v)) c.h.v = [];
     while (c.h.v.length < (c.h.d || []).length) c.h.v.push(Math.round((c.shares || 0) * 0.003));
@@ -218,7 +229,7 @@ function renderHUD() {
   $('hud').innerHTML = `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
-    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
+    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)} · ${Math.max(0, Math.ceil(((S.maxDays || NORMAL_DAYS) - S.day) / 365.25))} yrs left</span><button class="btn small" data-a="nextYear">Next year ▶</button></div>
   </div>
   <div class="rail-top">
     <button class="rail-btn notif-btn" data-a="panel" data-x="inbox" aria-label="Notifications">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
@@ -452,7 +463,7 @@ function showTitle() {
 function chooseMode() {
   openModal(`<h2>Choose a game mode</h2><p class="muted">You can't change this later.</p>
     <div class="modes">
-      <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>About 100 years, from ${START_YEAR} to ${START_YEAR + NORMAL_YEARS}. Time never skips. At the end you get a final score for population, money and how far you beat the market.</span></button>
+      <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>About 100 years, from ${START_YEAR} to ${START_YEAR + NORMAL_YEARS}. Time runs year by year, vehicles keep moving, and you can buy 25 more years at a time in the Shop. At the end you get a final score for population, money and how far you beat the market.</span></button>
       <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Skip ahead a day, a week, a month or a year whenever you want.</span></button>
     </div>`, 'center');
 }
@@ -495,7 +506,7 @@ const TUT = [
   { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
   { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
-  { t: () => 'Time runs on its own, slowly. There is no pause and no skipping. Wars, booms and disasters move stock prices, so watch the news.', btn: 'Got it' },
+  { t: () => 'Time runs year by year, about 12 seconds per year, and vehicles keep moving while years pass. You start with 100 years and can buy 25 more at a time in the Shop.', btn: 'Got it' },
 ];
 function renderTutorial() {
   if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
@@ -531,12 +542,13 @@ function renderPopup() {
   const p = UI.popup;
   if (p.type === 'city') {
     const c = W.cities[p.id], k = W.byA3[c.a3], co = S.co[c.a3], st = countryStatus(c.a3);
-    const myLocs = (controlled(c.a3) && co.city === c.id) ? co.locs.length : 0;
+    const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
     const myProps = S.props.filter(x => x.city === c.id).length;
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
       <div class="kv"><span>${SECTORS[co.sector].icon} ${esc(co.name)}</span><b>${co.listed ? fmtMoney(co.price) + ' · ' + co.sym : 'Private'}</b></div>
+      ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('')}
       <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="stock" data-x="${c.a3}">VIEW STOCK</button></div>
     </div>`;
   } else if (p.type === 'pin') {
@@ -594,7 +606,7 @@ function doSkip(days) {
 }
 function gameOver() {
   const o = S.over;
-  openModal(`<h2>${o.bankrupt ? 'Bankrupt' : `${START_YEAR + NORMAL_YEARS}: the final report`}</h2><p class="muted">${o.bankrupt ? 'Your debts caught up with you.' : '100 years have passed.'}</p>
+  openModal(`<h2>${o.bankrupt ? 'Bankrupt' : `${START_YEAR + Math.round((S.maxDays || NORMAL_DAYS) / 365.25)}: the final report`}</h2><p class="muted">${o.bankrupt ? 'Your debts caught up with you.' : `${Math.round((S.maxDays || NORMAL_DAYS) / 365.25)} years have passed.`}</p>
     <div class="big center">${o.score} points</div>
     <div class="stats3 box"><div><span>👥 Population</span><b class="${upCls(o.pop)}">${fmtPct(o.pop)}</b></div><div><span>💰 Net worth</span><b>${fmtMoney(o.nw, true)}</b></div><div><span>📈 vs Market</span><b class="${upCls(o.beat)}">${fmtPct(o.beat)}</b></div></div>
     <p class="muted">You finished as <b>${o.stage}</b>. The market returned ${fmtPct(o.mkt)}; you returned ${fmtPct(o.mine)}.</p>
@@ -655,7 +667,7 @@ PANELS.markets = () => {
       const ch = cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0;
       return `<div class="kv"><span>${SECTORS[sec].icon} ${sec} Index</span><b>${fmtMoney(cap, true)} · <em class="${upCls(ch)}">${fmtPct(ch)}</em></b></div>`;
     }).join('');
-    return panelShell('Markets', 'World Index ' + S.idx.v.toFixed(0), `<div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
+    return panelShell('Markets', 'World Index ' + S.idx.v.toFixed(0) + ' · Vs Market is an equal-weighted algo: the same $ in every stock, so it is the average stock return, not the biggest companies', `<div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
       <div class="card in">${idxRows}<div class="kv"><span>🌍 World Index</span><b>${S.idx.v.toFixed(0)} · <em class="${upCls(marketReturn())}">${fmtPct(marketReturn())}</em></b></div><div class="kv"><span>🛢️ Oil index</span><b>${S.oil.toFixed(2)}x</b></div></div>`);
   }
   const rows = marketRows();
@@ -732,12 +744,13 @@ PANELS.company = () => {
     return `<div class="card in"><h4>${SECTORS[c.sector].icon} ${esc(c.name)} <small class="muted">${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)}</small></h4>
       <div class="stats3 box"><div><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div><span>Locations</span><b>${c.locs.length}</b></div><div><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div></div>
       <div class="kv"><span>Locations profit</span><b>${fmtMoney(wk.locs, true)}</b></div><div class="kv"><span>Fleet profit</span><b>${fmtMoney(wk.fleet, true)}</b></div><div class="kv"><span>Online profit</span><b>${fmtMoney(wk.online, true)}</b></div><div class="kv"><span>Ads cost</span><b>${fmtMoney(wk.ads, true)}</b></div><div class="kv"><span>Tax</span><b>${fmtMoney(wk.tax, true)}</b></div>
+      <div class="kv"><span>Rating (updates yearly)</span><b>${c.rating.toFixed(1)}★</b></div>${c.ratingReasons && c.ratingReasons.length ? `<p class="muted small">Last year: ${esc(c.ratingReasons.join(' '))}</p>` : ''}
       <h5>Price, quality, wage</h5>
       <div class="kv"><span>Price multiplier</span><span><input type="range" min="0.5" max="2" step="0.1" value="${c.set.price}" data-in="price" data-x="${c.a3}"> ${Math.round(c.set.price * 100)}%</span></div>
       <div class="kv"><span>Quality (1–5)</span><span><input type="range" min="1" max="5" step="1" value="${c.set.quality}" data-in="quality" data-x="${c.a3}"> ${c.set.quality}★</span></div>
       <div class="kv"><span>Wage multiplier</span><span><input type="range" min="0.5" max="2" step="0.1" value="${c.set.wage}" data-in="wage" data-x="${c.a3}"> ${Math.round(c.set.wage * 100)}%</span></div>
       <h5>Locations</h5><div class="list">${c.locs.map(l => {
-        const city = W.cities[c.city];
+        const city = W.cities[l.city || c.city];
         return `<div class="kv"><span>${SECTORS[c.sector].loc.name} in ${esc(city.name)} · Staff ${l.staff} · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week <button class="btn small" data-a="closeLoc" data-x="${c.a3}|${l.id}">Close</button></b></div>`;
       }).join('') || '<p class="muted small">No locations. Open one from a city FOR LEASE pin.</p>'}</div>
       ${F ? `<h5>Fleet</h5><div class="kv"><span>${F.levels[c.fleet].name}</span><b>${c.fleet < F.levels.length - 1 ? `<button class="btn" data-a="fleetUp" data-x="${c.a3}">Upgrade · ${fmtMoney(F.levels[c.fleet + 1].cost, true)}</button>` : 'Biggest there is'}</b></div>${c.fleet ? `<button class="btn" data-a="fleetSell" data-x="${c.a3}">Sell fleet level · +${fmtMoney(F.levels[c.fleet].cost * 0.6, true)}</button>` : ''}` : ''}
@@ -801,7 +814,12 @@ PANELS.nation = () => {
   const occ = Object.keys(S.countries).filter(a => S.countries[a].occ === S.home);
   return panelShell('Nation', `${k.flag} ${esc(k.name)} · ${esc(countryStatus(S.home).t)}`,
     `<div class="stats3 box"><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>Growth</span><b class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</b></div><div><span>Military rank</span><b>#${milRank(S.home)} of 195</b></div></div>
-    <div class="kv"><span>GDP</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div><div class="kv"><span>Stability</span><b>${Math.round(cs.stab)} / 100</b></div><div class="kv"><span>Tax rate</span><b>${Math.round(cs.tax * 100)}%</b></div><div class="kv"><span>Occupied land</span><b>${occ.length ? occ.map(a => cname(a)).join(', ') : 'None'}</b></div>
+    <div class="kv"><span>GDP</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div><div class="kv"><span>Stability</span><b>${Math.round(cs.stab)} / 100</b></div><div class="kv"><span>Corporate-tax revenue</span><b>${fmtMoney(cs.taxRev || 0, true)} total</b></div><div class="kv"><span>Occupied land</span><b>${occ.length ? occ.map(a => cname(a)).join(', ') : 'None'}</b></div>
+    <h4>Tax rates — that's the game</h4><p class="muted small">Change these for your home nation. They take effect now, and how businesses, households and the government reacted is reported at year end. High tax raises revenue but cuts profits and spending; low tax does the reverse.</p>
+    <div class="kv"><span>Corporate tax</span><span><input type="range" min="5" max="50" step="1" value="${Math.round(cs.tax * 100)}" data-in="taxCorp" data-x=""> ${Math.round(cs.tax * 100)}%</span></div>
+    <div class="kv"><span>Income tax</span><span><input type="range" min="0" max="40" step="1" value="${Math.round((cs.incTax || 0.20) * 100)}" data-in="taxInc" data-x=""> ${Math.round((cs.incTax || 0.20) * 100)}%</span></div>
+    <div class="kv"><span>VAT (sales tax)</span><span><input type="range" min="0" max="20" step="1" value="${Math.round((cs.vat || 0.05) * 100)}" data-in="taxVat" data-x=""> ${Math.round((cs.vat || 0.05) * 100)}%</span></div>
+    ${S.yearReport ? `<h4>Last year in review (${S.yearReport.year})</h4>${S.yearReport.entries.map(e => `<div class="kv"><span>${esc(e.name)} · ${e.old.toFixed(1)}★ → ${e.new.toFixed(1)}★</span><b>${esc(e.reasons.join(' '))}</b></div>`).join('')}<p class="muted small">${esc(S.yearReport.taxLines.join(' '))}</p>` : ''}
     ${S.wars.length ? `<h4>Wars</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))} · Front ${Math.round(w.front)}%</span><button class="btn" data-a="peace">SUE FOR PEACE · ${fmtMoney(peaceCost(), true)}</button></div>`).join('')}` : ''}
     <h4>Projects</h4>${PROJECTS.map(d => {
       const run = cs.proj.find(p => p.id === d.id && p.until > S.day);
@@ -840,7 +858,9 @@ PANELS.inbox = () => {
     <h4>Latest news</h4><div class="list">${S.news.slice(0, 30).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('')}</div>`);
 };
 PANELS.shop = () => {
-  return panelShell('Shop', 'Every power-up is free, once per real day. The cash grant is added to your cash automatically each day.',
+  const yearsCost = S.mode === 'infinite' ? 0 : Math.round(Math.max(250000, netWorth() * 0.05) * Math.pow(1.5, S.yearsBought || 0) / 1000) * 1000;
+  return panelShell('Shop', 'Every power-up is free, once per real day. The cash grant is added to your cash automatically each day. Extra years are bought with in-game cash, not real money.',
+    (S.mode === 'infinite' ? '' : `<div class="card in"><h4>⏳ 25 more years</h4><p class="muted small">You have ${Math.max(0, Math.ceil(((S.maxDays || NORMAL_DAYS) - S.day) / 365.25))} years left. Buy 25 more, again and again. Price rises each time you buy.</p><button class="btn3d orange" data-a="buyYears">BUY · ${fmtMoney(yearsCost, true)}</button></div>`) +
     SHOP.filter(s => s.id !== 'cash').map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'GET FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
 };
 PANELS.search = () => {
@@ -869,7 +889,7 @@ PANELS.settings = () => {
 };
 PANELS.help = () => {
   return panelShell('Help', '',
-    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in its capital, buy stocks, and grow. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
+    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time runs year by year, vehicles keep moving, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
 function moreSheet() {
@@ -991,7 +1011,7 @@ const A = {
   lease: x => {
     const [t, i] = x.split('|').map(Number);
     const city = CityView.city;
-    const err = leaseLot(city.a3, t, i);
+    const err = leaseLot(city.a3, t, i, city.id);
     if (err) return toast(err, 'bad');
     closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Location opened! Results arrive every week.', 'good'); tutCheck(); save(); refreshAll();
   },
@@ -1010,6 +1030,8 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
+  buyYears: () => act(() => buyYears(), '25 more years bought'),
+  nextYear: () => { stepYear(); UI.acc = 0; save(); renderHUD(); if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
   claimDaily: () => {
     const r = dailyRewardInfo(); const e = claimDaily();
     if (e) return toast(e, 'bad');
@@ -1039,6 +1061,10 @@ function onInput(e) {
   const k = t.dataset.in; if (!k) return;
   if (k === 'price' || k === 'quality' || k === 'wage') {
     const c = S.co[t.dataset.x]; if (c) c.set[k] = +t.value;
+    save();
+  }
+  if (k === 'taxCorp' || k === 'taxInc' || k === 'taxVat') {
+    const cs = country(S.home); if (cs) { if (k === 'taxCorp') cs.tax = +t.value / 100; if (k === 'taxInc') cs.incTax = +t.value / 100; if (k === 'taxVat') cs.vat = +t.value / 100; }
     save();
   }
   if (k === 'vol') { S.settings.vol = +t.value; }
