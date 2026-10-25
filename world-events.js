@@ -262,7 +262,7 @@ function stepDay() {
   const trading = marketOpen();
   if (trading) marketDay();
   worldDay();
-  if (trading) { for (const a3 in S.co) pushHist(S.co[a3].h, +S.co[a3].price.toFixed(2), S.day); pushHist(S.idx.h, +S.idx.v.toFixed(2), S.day); }
+  if (trading) { for (const a3 in S.co) pushHist(S.co[a3].h, +S.co[a3].price.toFixed(2), S.day, S.co[a3].dayVol || 0); pushHist(S.idx.h, +S.idx.v.toFixed(2), S.day, 0); }
   if (S.day % 91 === 45) { let d = 0; for (const a3 in S.holdings) { const c = S.co[a3], h = S.holdings[a3]; if (h.qty > 0 && !controlled(a3) && c.listed) d += h.qty * c.price * SECTORS[c.sector].div / 4; } if (d > 1) { S.cash += d; news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
   if (S.day % 7 === 6) businessWeek();
