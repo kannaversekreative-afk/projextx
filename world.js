@@ -149,13 +149,12 @@ function ownCoastWater(a3, lon, lat, maxR) {
   }
   return null;
 }
-// Port icons used to sit at the centre of a water cell — up to ~100 miles
-// offshore, in open ocean, for a country far away. A port should sit on
-// the coast: halfway between its water cell and the neighbouring land
-// cell that belongs to this country. For a tiny island with no land cell
-// in the grid, the port sits on the capital itself, not out at sea.
+// A port is not in the water. It sits on the edge of the land, connected
+// to land. So the icon goes on the land cell that touches the water —
+// the country's own land cell if one is found, any neighbouring land
+// cell otherwise, the capital itself for a tiny island with no land
+// cell in the grid. Never the water cell centre out at sea.
 function coastPoint(a3, cell, cap) {
-  const wxy = cellXY(W, cell);
   const G = W.ww, x = cell % G, y = (cell / G) | 0;
   let anyLand = null;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -164,14 +163,13 @@ function coastPoint(a3, cell, cap) {
     const nc = ny * G + nx; if (W.water[nc]) continue;
     const lxy = cellXY(W, nc);
     if (!anyLand) anyLand = lxy;
-    // Own-country land: check the land cell itself is inside the shape.
     const k = W.byA3[a3];
     if (k && k.path && FAC_CTX && typeof FAC_CTX.isPointInPath === 'function') {
-      try { if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return [(wxy[0] + lxy[0]) / 2, (wxy[1] + lxy[1]) / 2]; } catch (e) {}
+      try { if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return lxy; } catch (e) {}
     }
   }
-  if (anyLand) return [(wxy[0] + anyLand[0]) / 2, (wxy[1] + anyLand[1]) / 2];
-  return cap ? [cap.x, cap.y] : wxy;
+  if (anyLand) return anyLand;
+  return cap ? [cap.x, cap.y] : cellXY(W, cell);
 }
 let FAC_CACHE = {};
 function facilitiesFor(a3) {
