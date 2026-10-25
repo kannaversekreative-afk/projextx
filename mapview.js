@@ -65,33 +65,70 @@ const MapView = (() => {
   const seaCache = {};
   let routeQueue = [];
   const destCapitals = () => W.playable.slice().sort((a, b) => b.gdp0 - a.gdp0).slice(0, 70).map(k => W.cities[k.capital]);
-  let portCells = null;
+  let portCells = null, portByBasin = null;
+  const basinOf = cell => (cell != null && W.basin) ? W.basin[cell] : -1;
   function buildUnits() {
     const st = S_(); if (!st) { units = []; return; }
     builtFor = st.seed; units = []; routeQueue = [];
     const dests = destCapitals();
-    portCells = W.playable.filter(k => k.coastal && k.gdp0 > 20000).map(k => { const c = W.cities[k.capital]; return nearestWater(W, c.lon, c.lat); }).filter(x => x != null);
+    // All coastal capitals are voyage destinations, not just large economies:
+    // enclosed basins have only a handful of ports, and cutting small ones
+    // out left some basin boats with almost nowhere to sail to.
+    portCells = W.playable.filter(k => k.coastal).map(k => { const c = W.cities[k.capital]; return nearestWater(W, c.lon, c.lat); }).filter(x => x != null);
+    // Group ports by water basin so a boat only ever rolls destinations it
+    // can actually sail to. Basin -1 is the fallback (no basin data): all ports.
+    portByBasin = new Map();
+    for (const cell of portCells) { const b = basinOf(cell); if (!portByBasin.has(b)) portByBasin.set(b, []); portByBasin.get(b).push(cell); }
     for (const a3 in st.co) {
       const c = st.co[a3], F = SECTORS[c.sector].fleet; if (!F) continue;
       const home = W.cities[c.city], r = mulberry(hashStr(a3 + st.seed));
       if (F.kind === 'plane') units.push({ type: 'plane', a3, from: home, to: dests[Math.floor(r() * dests.length)], t: r(), dir: 1, r, dests });
-      else units.push({ type: F.kind, a3, start: nearestWater(W, home.lon, home.lat), pts: null, t: r(), dir: 1, r });
+      else { const start = nearestWater(W, home.lon, home.lat); units.push({ type: F.kind, a3, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r, shortRetries: 0 }); }
     }
   }
+  function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; }
+  // Pick a destination in the boat's own basin. Prefer a destination whose
+  // already-cached route is a real voyage (>=150 map units); otherwise pick
+  // an uncached destination so pumpRoutes can compute it. Never the start cell.
+  function pickDest(u, exclude) {
+    const list = (portByBasin && portByBasin.get(u.basin)) || portCells || [];
+    if (!list.length) return null;
+    const tries = [];
+    for (let i = 0; i < 5 && tries.length < 5; i++) { const c = list[Math.floor(u.r() * list.length)]; if (c !== u.start && !(exclude || []).includes(c) && !tries.includes(c)) tries.push(c); }
+    for (const c of tries) { const p = seaCache[u.start + '>' + c]; if (p && p.length >= 2 && pathLen(p) >= 150) return c; }
+    // Otherwise prefer the farthest try: in a tiny basin every route is
+    // short, so a random pick keeps hopping to a neighbouring port and the
+    // boat never leaves a small patch of sea. Farthest-first makes it cross
+    // its whole basin instead.
+    const farthest = arr => { let best = null, bd = -1; const sx = u.start % W.ww, sy = (u.start / W.ww) | 0; for (const c of arr) { const d = Math.hypot(c % W.ww - sx, ((c / W.ww) | 0) - sy); if (d > bd) { bd = d; best = c; } } return best; };
+    const uncached = tries.filter(c => !(u.start + '>' + c in seaCache));
+    return farthest(uncached.length ? uncached : tries);
+  }
   function nextSea(u, to) {
-    if (u.start == null || !portCells.length) return;
-    // When called from pumpRoutes, `to` is the destination the queued path was
-    // computed for. Previously nextSea always rolled a NEW random destination
-    // here, discarding the just-computed path and re-queueing the boat, so a
-    // boat only ever got a route when its random roll happened to hit a path
-    // already in the cache. That made boats pop in one by one over many
-    // seconds at game start and vanish again every time one finished a route.
-    if (to == null) to = portCells[Math.floor(u.r() * portCells.length)];
+    if (u.start == null) return;
+    // When called from pumpRoutes, `to` is the destination the queued path
+    // was computed for, so the computed path is actually used (the a82bdac
+    // fix). Destinations are always in the boat's own basin (pickDest).
+    if (to == null) to = pickDest(u);
+    if (to == null) return;
     const key = u.start + '>' + to;
     if (!(key in seaCache)) { routeQueue.push([u, key, to]); return; }
-    const p = seaCache[key]; if (!p || p.length < 2) { u.pts = null; return; }
-    u.pts = p; u.waiting = false; u.len = 0; for (let i = 1; i < p.length; i++) u.len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
-    u.t = 0; u.dir = 1;
+    const p = seaCache[key]; if (!p || p.length < 2) { u.pts = null; u.waiting = false; return; }
+    const len = pathLen(p);
+    // Prefer real voyages over tiny hops: if this route is under 150 map
+    // units, try up to 3 other basin destinations before settling for it.
+    // Enclosed basins (where every route is short) still get a route after
+    // the retries, instead of sitting routeless forever.
+    if (len < 150 && (u.shortRetries || 0) < 3) {
+      // Try a different basin destination, keeping `waiting` set so step()
+      // does not queue a second, competing route while this one is pending.
+      u.shortRetries = (u.shortRetries || 0) + 1;
+      const alt = pickDest(u, [to]);
+      if (alt != null) { nextSea(u, alt); return; }
+      // No alternative in this basin: settle for the short route below.
+    }
+    u.pts = p; u.dest = to; u.waiting = false; u.shortRetries = 0;
+    u.len = len; u.t = 0; u.dir = 1;
   }
   function pumpRoutes() { // compute at most two sea paths per frame
     for (let i = 0; i < 2 && routeQueue.length; i++) { const [u, key, to] = routeQueue.shift(); if (!(key in seaCache)) seaCache[key] = seaPath(W, u.start, to); nextSea(u, to); }
@@ -119,8 +156,20 @@ const MapView = (() => {
         if (u.t >= 1) { const arrived = u.to; u.from = arrived; u.to = u.dir > 0 ? W.cities[st.co[u.a3].city] : u.dests[Math.floor(u.r() * u.dests.length)]; u.dir = -u.dir; u.t = 0; }
       } else {
         if (!u.pts) { if (!u.waiting) { u.waiting = true; nextSea(u); } else if (routeQueue.every(q => q[0] !== u)) { u.waiting = false; } return; }
-        u.t += u.dir * dt * 3 / Math.max(20, u.len);
-        if (u.t >= 1) { u.t = 1; u.dir = -1; } if (u.t <= 0) { u.t = 0; u.dir = 1; if (u.r() < 0.5) { u.pts = null; u.waiting = false; } }
+        // Voyage port-to-port: sail the route once, then start from the
+        // destination cell and roll a NEW basin destination. The old code
+        // ping-ponged the same path back and forth (and only half the time
+        // even rolled a new route), which is exactly the "sitting there
+        // flashing back and forth" the player sees.
+        // Visual speed only — boats do not affect the economy. 3 map units/s
+        // was 2.6 screen px/s at phone world zoom, slower than a ship's own
+        // length in 10s; 5 keeps the same calm pace but makes movement, and
+        // especially short enclosed-basin voyages, actually visible.
+        u.t += dt * 5 / Math.max(20, u.len);
+        if (u.t >= 1) {
+          if (u.dest != null) { u.start = u.dest; u.basin = basinOf(u.start); }
+          u.dest = null; u.pts = null; u.waiting = false; u.t = 0; u.dir = 1;
+        }
       }
     });
   }
@@ -214,17 +263,21 @@ const MapView = (() => {
       const A = W.cities[W.byA3[w.a].capital], B = W.cities[W.byA3[w.b].capital];
       const t = ((now / 1000 * 0.15) % 2), f = t < 1 ? t : 2 - t;
       const x = A.x + (B.x - A.x) * f, y = A.y + (B.y - A.y) * f, ang = Math.atan2(B.y - A.y, B.x - A.x) + (t < 1 ? 0 : Math.PI);
-      out.push([x, y, ang, c => fighter(c, Math.max(2, country(w.a).milLv.air))]);
+      out.push([x, y, ang, c => fighter(c, Math.max(2, country(w.a).milLv.air)), false]);
       const back = [(B.x * 0.7 + A.x * 0.3), (B.y * 0.7 + A.y * 0.3)];
-      out.push([back[0] + Math.sin(now / 700) * 4, back[1] - 6, ang + Math.PI, c => fighter(c, Math.max(1, country(w.b).milLv.air))]);
+      out.push([back[0] + Math.sin(now / 700) * 4, back[1] - 6, ang + Math.PI, c => fighter(c, Math.max(1, country(w.b).milLv.air)), false]);
     });
     const show = [st.home];
     if (v.s > 1.4) Object.keys(st.countries).sort((a, b) => milPower(b) - milPower(a)).slice(0, 12).forEach(a => { if (a !== st.home) show.push(a); });
     show.forEach((a3, i) => {
       const cs = st.countries[a3], cap = W.cities[W.byA3[a3].capital];
-      if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 9, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air)]); }
+      // Orbit radii were 9 (fighter) and 7 (warship) map units — smaller
+      // than the sprites themselves, so military units spun in place over
+      // their own capital. 26/28 map units is wider than any sprite, so
+      // the orbit is actually visible as movement.
+      if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 26, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air), false]); }
       if (cs.milLv.navy > 0) {
-        const cell = nearestWater(W, cap.lon, cap.lat); if (cell != null) { const [wx, wy] = cellXY(W, cell); const [x, y, ang] = orbit(wx, wy, 7, 0.12, i * 2); out.push([x, y, ang, c => warship(c, cs.milLv.navy)]); }
+        const cell = nearestWater(W, cap.lon, cap.lat); if (cell != null) { const [wx, wy] = cellXY(W, cell); const [x, y, ang] = orbit(wx, wy, 28, 0.12, i * 2); out.push([x, y, ang, c => warship(c, cs.milLv.navy), true]); }
       }
     });
     return out;
@@ -234,17 +287,24 @@ const MapView = (() => {
     const st = S_();
     if (pickMode) { drawPickLabels(c); return; }
     const k = Math.min(1.9, Math.max(0.75, Math.sqrt(v.s / 0.55)));
+    // Ship sprites used the same near-constant scale at every zoom, so at
+    // world zoom a ~35px ship moved ~2.6px/sec — less than its own length
+    // in 10 seconds, which reads as "sitting there". Ships now scale with
+    // zoom (smaller when zoomed out, full size when zoomed in), so their
+    // movement is visible relative to their own size. Planes keep the old
+    // scale: they move fast enough that size was never the problem.
+    const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     if (st && st.settings.motion) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co || !co.fleet) return;
         let x, y, a;
         if (u.type === 'plane') [x, y, a] = bez(u.from, u.to, u.t);
-        else { if (!u.pts) return; [x, y, a] = along(u.pts, u.len, u.t); if (u.dir < 0) a += Math.PI; }
+        else { if (!u.pts) return; [x, y, a] = along(u.pts, u.len, u.t); }
         const [sx, sy] = toScreen(x, y); if (!onScreen(sx, sy)) return;
-        drawSprite(sx, sy, a, k * 0.85, cc => u.type === 'plane' ? plane(cc, co.fleet, co.color) : u.type === 'container' ? containerShip(cc, co.fleet, co.color) : tanker(cc, co.fleet));
+        drawSprite(sx, sy, a, u.type === 'plane' ? k * 0.85 : kShip, cc => u.type === 'plane' ? plane(cc, co.fleet, co.color) : u.type === 'container' ? containerShip(cc, co.fleet, co.color) : tanker(cc, co.fleet));
       });
-      military(now).forEach(([x, y, a, fn]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, k * 0.85, fn); });
+      military(now).forEach(([x, y, a, fn, isShip]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, isShip ? kShip : k * 0.85, fn); });
     }
     if (!st) return;
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);
