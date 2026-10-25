@@ -32,37 +32,121 @@ function upgradeMilitary(branch) {
   return null;
 }
 function milRank(a3) { const list = Object.keys(S.countries).sort((a, b) => milPower(b) - milPower(a)); return list.indexOf(a3) + 1; }
-// You can attack neighbours by land, or anyone with a strong enough navy or air force.
+// ---------- war, new model ----------
+// No buying peace. War is declared from a War Plan, not from a button that
+// starts a years-long front war. The player orchestrates the attack first
+// (commit forces, pick an approach, upgrade, research, sell stock for funds),
+// then clicks SUBMIT and the game decides a winner right there.
+// The winner is not just the stronger army: it is army power times how long
+// each side can last — treasury, economy, people, stability and debt.
+// You can declare war only once every 10 years (3650 days).
+const WAR_COOLDOWN_DAYS = 3650;
+function warOdds(att, def) { const a = milPower(att), d = milPower(def) * 1.15; return a / (a + d); }
+function warCooldownLeft() {
+  if (S.lastWarDay == null) return 0;
+  return Math.max(0, S.lastWarDay + WAR_COOLDOWN_DAYS - S.day);
+}
 function canAttack(target) {
   if (target === S.home) return 'That is your own country.';
   const h = country(S.home), t = country(target);
   if (!t) return 'Not a country you can invade.';
-  if (h.war) return 'You are already at war.';
   if (h.occ) return 'Your country is occupied.';
   if (t.occ === S.home) return 'You already occupy it.';
   if (t.war) return `${cname(target)} is already at war.`;
-  const neighbour = W.byA3[S.home].nb.includes(target);
-  if (!neighbour && h.milLv.navy < 3 && h.milLv.air < 4) return 'Not a neighbour. You need Destroyers (navy level 3) or Stealth fighters (air level 4) to strike overseas.';
+  const left = warCooldownLeft();
+  if (left > 0) return `You can declare war again in ${Math.ceil(left / 365)} year${Math.ceil(left / 365) === 1 ? '' : 's'}.`;
   return null;
 }
-function warOdds(att, def) { const a = milPower(att), d = milPower(def) * 1.15; return a / (a + d); }
-function declareWar(target) {
-  const e = canAttack(target); if (e) return e;
-  for (const a3 in S.countries) if (a3 !== S.home && a3 !== target && rand() < 0.4) setRel(S.home, a3, getRel(S.home, a3) - 10);
-  setRel(S.home, target, -100);
-  S.stats.wars++;
-  startWar(S.home, target, true);
+function treasuryOf(a3) { return a3 === S.home ? S.cash : (country(a3).treasury || 0); }
+function approachList(target) {
+  const h = country(S.home), neighbour = W.byA3[S.home].nb.includes(target), coastal = !!W.byA3[target].coastal;
+  return [
+    { id: 'land', name: 'Land border', ok: neighbour, why: neighbour ? 'Neighbour: direct land attack.' : 'Not a land neighbour.' , bonus: 0.15 },
+    { id: 'sea', name: 'Sea landing', ok: coastal && h.milLv.navy >= 1, why: !coastal ? 'Target has no coast.' : h.milLv.navy < 1 ? 'You need a navy first.' : 'Landing from your military port.', bonus: 0.10 },
+    { id: 'air', name: 'Air strike', ok: h.milLv.air >= 1, why: h.milLv.air < 1 ? 'You need an air force first.' : 'Strike from the air.', bonus: 0.10 },
+    { id: 'combined', name: 'Combined arms', ok: h.milLv.army >= 2 && h.milLv.navy >= 2 && h.milLv.air >= 2 && (neighbour || coastal), why: !(neighbour || coastal) ? 'No land border and no coast to land on.' : 'Needs Army, Navy and Air all at level 2 or more.', bonus: 0.20 },
+  ];
+}
+// War score for one side. commit: {army, navy, air} as 0-100. approachBonus
+// and researchBonus are multipliers for the attacker only; the defender
+// fights at full commitment with no approach bonus.
+function warScore(a3, commit, approachBonus, researchBonus, baseBonus) {
+  const cs = country(a3), k = W.byA3[a3];
+  const gdpDollars = Math.max(1, cs.gdp * 1e6), treasury = Math.max(0, treasuryOf(a3));
+  const power0 = milPower(a3);
+  const commitF = commit ? (commit.army * 0.4 + commit.navy * 0.3 + commit.air * 0.3) / 100 : 1;
+  const power = power0 * Math.max(0, commitF) * (approachBonus || 1) * (researchBonus || 1) * (baseBonus || 1);
+  // How long can this side last? Weeks of war its treasury can pay for.
+  const weeklyCost = Math.max(1, power0 * 50000);
+  const weeks = treasury / weeklyCost;
+  const endurance = clamp(weeks / 104, 0.25, 2.5);
+  const gdpPc = gdpDollars / Math.max(1, cs.pop);
+  const supplies = clamp(Math.sqrt(gdpPc / 20000), 0.3, 2) * clamp(cs.stab / 50, 0.3, 1.5) * (1 - Math.min(0.5, (cs.debt || 0) / gdpDollars * 0.3));
+  const popF = 0.8 + 0.2 * clamp(Math.log10(Math.max(1, cs.pop)) / 8, 0, 1.3);
+  const effective = power * endurance * supplies * popF;
+  return { power, power0, weeks, endurance, supplies, popF, effective, treasury, gdpDollars, gdpPc, stab: cs.stab, debtRatio: (cs.debt || 0) / gdpDollars, milLv: cs.milLv };
+}
+function warPlanScore(plan) {
+  const att = warScore(S.home, { army: plan.army, navy: plan.navy, air: plan.air }, 1 + (plan.approachBonus || 0), plan.research ? 1.15 : 1, 1 + 0.05 * purchasedBaseCount(S.home));
+  const def = warScore(plan.target, null, 1, 1, 1);
+  const winP = att.effective / Math.max(1e-9, att.effective + def.effective);
+  return { att, def, winP };
+}
+function researchWarCost() { return Math.round(Math.max(5e6, W.byA3[S.home].gdp0 * 1e6 * 0.001) / 1e5) * 1e5; }
+function researchWar(plan) {
+  const cost = researchWarCost(); if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  if (plan.research) return 'Already researched for this attack.';
+  S.cash -= cost; plan.research = true; return null;
+}
+function sellForWar() {
+  // Sell 25% of every open holding at its current price, for war funds.
+  let raised = 0, any = false;
+  for (const a3 in S.holdings) { const h = S.holdings[a3]; if (!h || h.qty <= 0) continue; const c = S.co[a3]; if (!c || !c.listed) continue; const qty = Math.floor(h.qty * 0.25); if (qty <= 0) continue; const proceeds = qty * c.price; h.qty -= qty; if (h.qty <= 0) delete S.holdings[a3]; S.cash += proceeds; raised += proceeds; any = true; }
+  if (!any) return 'Nothing to sell: you hold no listed stocks.';
   return null;
 }
-function suePeace() {
-  const w = S.wars.find(x => x.a === S.home || x.b === S.home); if (!w) return 'You are not at war.';
-  const cost = Math.round(Math.max(5e6, country(S.home).gdp * 1e6 * 0.002) / 1e5) * 1e5;
-  if (S.cash < cost) return `Reparations cost ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; endWar(w, `Peace deal signed between ${cname(w.a)} and ${cname(w.b)}.`, 'World');
-  shockCountry(w.a, 'peace'); shockCountry(w.b, 'peace');
+function baseCost() {
+  const n = purchasedBaseCount(S.home);
+  return Math.round(200e6 * Math.max(0.3, Math.pow(W.byA3[S.home].gdp0 / 500000, 0.35)) * (1 + n * 0.5) / 1e5) * 1e5;
+}
+function buyBase() {
+  const cost = baseCost(); if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  if (!S.facilities) S.facilities = {}; if (!S.facilities[S.home]) S.facilities[S.home] = { bases: [] };
+  const f = facilitiesFor(S.home); const cap = W.cities[W.byA3[S.home].capital];
+  const n = (S.facilities[S.home].bases || []).length, ang = (n * 1.1) + 0.5, radius = 48 + n * 16;
+  const xy = { x: cap.x + Math.cos(ang) * radius, y: cap.y + Math.sin(ang) * radius * 0.6 };
+  S.facilities[S.home].bases.push(xy); S.cash -= cost; S.xp += 100;
+  news('Nation', `New military base built in ${cname(S.home)}. It adds +5% to your war power.`, S.home);
   return null;
 }
-const peaceCost = () => Math.round(Math.max(5e6, country(S.home).gdp * 1e6 * 0.002) / 1e5) * 1e5;
+// Instant resolution: the player submits a plan, the game decides now.
+function resolveWar(plan) {
+  const err = canAttack(plan.target); if (err) return err;
+  const { att, def, winP } = warPlanScore(plan);
+  const roll = winP + gauss() * 0.12;
+  const attackerWins = roll >= 0.5;
+  S.lastWarDay = S.day; S.stats.wars++;
+  const attCost = Math.min(S.cash, country(S.home).gdp * 1e6 * 0.02 + att.power0 * 10000);
+  const defCs = country(plan.target);
+  S.cash = Math.max(0, S.cash - attCost);
+  defCs.treasury = Math.max(0, (defCs.treasury || 0) * 0.9);
+  setRel(S.home, plan.target, -100);
+  for (const a3 in S.countries) if (a3 !== S.home && a3 !== plan.target && rand() < 0.4) setRel(S.home, a3, getRel(S.home, a3) - 10);
+  if (W.byA3[S.home].gdp0 > 200000 && rand() < 0.6) { country(S.home).fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(S.home, 'sanctions'); news('World', `The world sanctions ${cname(S.home)} over the attack.`, S.home); }
+  const result = { target: plan.target, attackerWins, winP, att, def, cost: attCost };
+  S.lastWarResult = result;
+  if (attackerWins) {
+    shockCountry(plan.target, 'invasion'); shockCountry(S.home, 'peace', 0.5);
+    country(plan.target).occ = S.home; country(plan.target).occSince = S.day;
+    occupy(S.home, plan.target);
+    news('War', `Victory. ${cname(S.home)} defeated ${cname(plan.target)} and now occupies it.`, plan.target);
+  } else {
+    country(S.home).stab = clamp(country(S.home).stab - 15, 0, 100);
+    shockCountry(S.home, 'unrest', 1.2); shockCountry(plan.target, 'peace', 1.5); setRel(S.home, plan.target, -20);
+    news('War', `${cname(plan.target)} drove back the invasion from ${cname(S.home)}.`, plan.target);
+  }
+  return null;
+}
 
 // ---------- wars ----------
 function startWar(att, def, byPlayer) {
@@ -134,6 +218,7 @@ function worldDay() {
     const cx = S.countries[x]; if (cx.war || cx.occ) continue;
     for (const y in cx.rel) {
       const cy = S.countries[y]; if (!cy || cy.war || cy.occ || cx.rel[y] > -55 || rand() > 0.006) continue;
+      if (x === S.home || y === S.home) continue;
       const [att, def] = milPower(x) * (0.5 + rand()) > milPower(y) * (0.5 + rand()) ? [x, y] : [y, x];
       startWar(att, def); break;
     }

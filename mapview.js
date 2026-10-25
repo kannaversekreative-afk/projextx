@@ -13,7 +13,7 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  const COL = { sea: '#14223f', sea2: '#0f1b34', land: '#384560', home: '#45567c', border: 'rgba(160,178,214,0.22)', grid: 'rgba(120,145,190,0.07)' };
+  const COL = { sea: '#bcd9f7', sea2: '#9cc3ef', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
   function resize() {
@@ -43,20 +43,20 @@ const MapView = (() => {
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
       if (!vis(k)) return;
-      let fill = k.playable ? COL.land : '#2f3a52';
+      let fill = k.playable ? COL.land : '#e6eefb';
       if (st && k.a3 === st.home) fill = COL.home;
-      if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#41506f';
+      if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#eaf2ff';
       c.fillStyle = fill; c.fill(k.path);
       const cs = st && st.countries[k.a3];
       if (cs && !pickMode) {
-        if (cs.occ === st.home) { c.fillStyle = 'rgba(69,86,124,0.9)'; c.fill(k.path); }
+        if (cs.occ === st.home) { c.fillStyle = 'rgba(47,124,246,0.35)'; c.fill(k.path); }
         else if (cs.war || cs.occ) { c.fillStyle = cs.occ ? 'rgba(229,72,77,0.28)' : 'rgba(229,72,77,0.18)'; c.fill(k.path); }
         else if (cs.boom > st.day) { c.fillStyle = 'rgba(18,161,80,0.14)'; c.fill(k.path); }
       }
     });
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
-    if (st && !pickMode) { c.strokeStyle = 'rgba(120,170,255,0.55)'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
+    if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
     if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
 
@@ -74,7 +74,8 @@ const MapView = (() => {
     // All coastal capitals are voyage destinations, not just large economies:
     // enclosed basins have only a handful of ports, and cutting small ones
     // out left some basin boats with almost nowhere to sail to.
-    portCells = W.playable.filter(k => k.coastal).map(k => { const c = W.cities[k.capital]; return nearestWater(W, c.lon, c.lat); }).filter(x => x != null);
+    // Cargo boats use civilian ports only — never a military port.
+    portCells = W.playable.filter(k => k.coastal).map(k => { const f = facilitiesFor(k.a3); return f ? f.portCell : null; }).filter(x => x != null);
     // Group ports by water basin so a boat only ever rolls destinations it
     // can actually sail to. Basin -1 is the fallback (no basin data): all ports.
     portByBasin = new Map();
@@ -83,13 +84,13 @@ const MapView = (() => {
       const c = st.co[a3], F = SECTORS[c.sector].fleet; if (!F) continue;
       const home = W.cities[c.city], r = mulberry(hashStr(a3 + st.seed));
       if (F.kind === 'plane') units.push({ type: 'plane', a3, from: home, to: dests[Math.floor(r() * dests.length)], t: r(), dir: 1, r, dests });
-      else { const start = nearestWater(W, home.lon, home.lat); units.push({ type: F.kind, a3, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r, shortRetries: 0 }); }
+      else { const fac = facilitiesFor(a3); const start = (fac && fac.portCell != null) ? fac.portCell : nearestWater(W, home.lon, home.lat); units.push({ type: F.kind, a3, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r, shortRetries: 0 }); }
     }
     // One personal yacht for the player's home nation. It sails port to
     // port like a cargo boat but carries people, not freight, and has no
     // effect on the economy — it is just there to watch and follow.
     if (st.home) {
-      const hc = W.cities[st.co[st.home].city], start = nearestWater(W, hc.lon, hc.lat);
+      const hc = W.cities[st.co[st.home].city], hfac = facilitiesFor(st.home), start = (hfac && hfac.portCell != null) ? hfac.portCell : nearestWater(W, hc.lon, hc.lat);
       units.push({ type: 'yacht', a3: st.home, personal: true, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r: mulberry(hashStr('yacht' + st.seed)), shortRetries: 0 });
     }
   }
@@ -268,9 +269,9 @@ const MapView = (() => {
     c.fillStyle = style.fg; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText(text, x, y + h / 2 + 0.5);
     return true;
   }
-  const PILL = { font: '800 13px Nunito, system-ui, sans-serif', bg: 'rgba(22,34,62,0.92)', border: 'rgba(120,140,180,0.45)', fg: '#ffffff', px: 11, h: 26 };
+  const PILL = { font: '800 13px Nunito, system-ui, sans-serif', bg: 'rgba(255,255,255,0.95)', border: 'rgba(47,124,246,0.6)', fg: '#1f5fd0', px: 11, h: 26 };
   const PILL_SEL = { font: '800 15px Nunito, system-ui, sans-serif', bg: '#2f7cf6', border: 'rgba(255,255,255,0.35)', fg: '#ffffff', px: 14, h: 32 };
-  const PILL_MINE = { font: '800 13px Nunito, system-ui, sans-serif', bg: 'rgba(22,34,62,0.95)', border: '#2f7cf6', fg: '#cfe0ff', px: 11, h: 26 };
+  const PILL_MINE = { font: '800 13px Nunito, system-ui, sans-serif', bg: '#2f7cf6', border: '#ffffff', fg: '#ffffff', px: 11, h: 26 };
   function drawSprite(sx, sy, ang, k, fn) { const c = tctx; c.save(); c.translate(sx, sy); c.rotate(ang); c.scale(k, k); fn(c); c.restore(); }
   // Navy patrols: warships used to orbit a point near the capital, and that
   // orbit crossed land half the time — that is the "boats are on land" bug.
@@ -279,7 +280,7 @@ const MapView = (() => {
   let navyCache = {};
   function navyPatrol(a3, cap, now) {
     if (!navyCache[a3]) {
-      const start = nearestWater(W, cap.lon, cap.lat);
+      const fac = facilitiesFor(a3); const start = (fac && fac.milPortCell != null) ? fac.milPortCell : (fac && fac.portCell != null ? fac.portCell : nearestWater(W, cap.lon, cap.lat));
       if (start == null) { navyCache[a3] = null; return null; }
       const basin = basinOf(start);
       let dest = null;
@@ -389,6 +390,39 @@ const MapView = (() => {
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);
     st.wars.forEach(w => [w.a, w.b].forEach(a3 => { const cap = W.cities[W.byA3[a3].capital]; const [sx, sy] = toScreen(cap.x, cap.y); c.strokeStyle = `rgba(229,72,77,${0.4 + pulse * 0.5})`; c.lineWidth = 3; c.beginPath(); c.arc(sx, sy, 14 + pulse * 8, 0, 7); c.stroke(); }));
     for (const id in st.cityHit) if (st.cityHit[id] > st.day) { const ct = W.cities[id]; const [sx, sy] = toScreen(ct.x, ct.y); c.strokeStyle = `rgba(255,140,40,${0.4 + pulse * 0.5})`; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, 11 + pulse * 6, 0, 7); c.stroke(); }
+    // Facilities network: ports, military ports and military bases, joined
+    // by small white lines (with a faint blue edge so the white shows on
+    // white land and blue sea). Shown for your home country always, and
+    // for every country once you zoom in — at world zoom 196 networks
+    // would just be clutter.
+    if (st && !pickMode) {
+      const showFac = v.s > 1.0;
+      W.playable.forEach(k => {
+        if (k.a3 !== st.home && !showFac) return;
+        const f = facilitiesFor(k.a3); if (!f) return;
+        const nodes = [];
+        if (f.portXY) nodes.push({ xy: f.portXY, kind: 'port' });
+        if (f.milPortXY) nodes.push({ xy: f.milPortXY, kind: 'milPort' });
+        f.bases.forEach(b => nodes.push({ xy: [b.x, b.y], kind: 'base' }));
+        const scr = nodes.map(n => { const [sx, sy] = toScreen(n.xy[0], n.xy[1]); return { ...n, sx, sy }; }).filter(n => n.sx > -30 && n.sy > -30 && n.sx < vw + 30 && n.sy < vh + 30);
+        if (!scr.length) return;
+        const [cx, cy] = toScreen(f.cap.x, f.cap.y);
+        const links = [];
+        scr.forEach(n => links.push([[cx, cy], [n.sx, n.sy]]));
+        const portN = scr.find(n => n.kind === 'port'), milN = scr.find(n => n.kind === 'milPort');
+        if (portN && milN) links.push([[portN.sx, portN.sy], [milN.sx, milN.sy]]);
+        links.forEach(([a, b]) => {
+          c.strokeStyle = 'rgba(47,124,246,0.35)'; c.lineWidth = 3; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+          c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+        });
+        scr.forEach(n => {
+          const bg = n.kind === 'port' ? '#2f7cf6' : n.kind === 'milPort' ? '#b9362f' : '#1f5fd0';
+          c.fillStyle = bg; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(n.sx, n.sy, 13, 0, 7); c.fill(); c.stroke();
+          c.fillStyle = '#ffffff'; c.font = '13px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillText(n.kind === 'base' ? '🛡' : '⚓', n.sx, n.sy + 1);
+        });
+      });
+    }
     const r = Math.max(3.4, Math.min(7.5, 2.6 + v.s * 2.2));
     const mineSet = new Set(); for (const a3 in st.holdings) if (controlled(a3)) mineSet.add(W.byA3[a3].capital);
     W.cities.forEach(ct => {
@@ -396,7 +430,7 @@ const MapView = (() => {
       const isMine = mineSet.has(ct.id), isSel = sel === ct.id, held = st.holdings[ct.a3] && !isMine;
       const rr = isSel ? r * 1.7 : isMine ? r * 1.35 : r;
       if (isSel) { c.fillStyle = 'rgba(47,124,246,0.25)'; c.beginPath(); c.arc(sx, sy, rr * 2.2, 0, 7); c.fill(); }
-      c.fillStyle = isMine || isSel ? '#2f7cf6' : '#ffffff'; c.strokeStyle = isMine || isSel ? '#ffffff' : held ? '#2f7cf6' : '#1a2747';
+      c.fillStyle = isMine || isSel ? '#2f7cf6' : '#ffffff'; c.strokeStyle = isMine || isSel ? '#ffffff' : '#2f7cf6';
       c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 2; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
     });
     labelRects = [];

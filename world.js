@@ -109,6 +109,46 @@ function nearestWater(W, lon, lat) {
   return null;
 }
 const cellXY = (W, c) => [projX((c % W.ww) * 2 - 180 + 1), projY(90 - ((c / W.ww) | 0) * 2 - 1)];
+// ---------- facilities: ports, military ports, military bases ----------
+// Every coastal country starts with one civilian port, one military port
+// and one military base. Landlocked countries start with a military base
+// only — there is no sea to port from. Military ships may use a civilian
+// port too, but civilian boats never use a military port: cargo routes are
+// built only from civilian port cells (see mapview buildUnits), while navy
+// patrols start from the military port.
+// Positions are deterministic from the capital, so old saves get the same
+// starting facilities without a save migration. Purchased bases live in
+// S.facilities[a3].bases (map-space xy pairs) and are added on top.
+function facilitiesFor(a3) {
+  if (typeof W === 'undefined' || !W || !W.byA3[a3]) return null;
+  const k = W.byA3[a3], cap = W.cities[k.capital]; if (!cap) return null;
+  const portCell = k.coastal ? nearestWater(W, cap.lon, cap.lat) : null;
+  let milPortCell = null;
+  if (portCell != null) {
+    // A different water cell in the same basin, a few cells along the coast.
+    const basin = W.basin[portCell], px = portCell % W.ww, py = (portCell / W.ww) | 0;
+    outer: for (let r = 4; r <= 20; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const nx = px + dx, ny = py + dy; if (nx < 0 || nx >= W.ww || ny < 0 || ny >= W.wh) continue;
+      const c = ny * W.ww + nx; if (W.water[c] && W.basin[c] === basin) { milPortCell = c; break outer; }
+    }
+    if (milPortCell == null || milPortCell === portCell) milPortCell = portCell;
+  }
+  // Military base: inland from the capital, away from the nearest water.
+  let bx = cap.x + 30, by = cap.y - 18;
+  if (portCell != null) { const [wx, wy] = cellXY(W, portCell); const dx = cap.x - wx, dy = cap.y - wy, d = Math.hypot(dx, dy) || 1; bx = cap.x + dx / d * 32; by = cap.y + dy / d * 32; }
+  const bases = [{ x: bx, y: by }];
+  if (typeof S !== 'undefined' && S && S.facilities && S.facilities[a3] && Array.isArray(S.facilities[a3].bases)) {
+    S.facilities[a3].bases.forEach(b => { if (b && isFinite(b.x) && isFinite(b.y)) bases.push(b); });
+  }
+  const portXY = portCell != null ? cellXY(W, portCell) : null;
+  let milPortXY = milPortCell != null ? cellXY(W, milPortCell) : null;
+  if (milPortXY && portXY && milPortXY[0] === portXY[0] && milPortXY[1] === portXY[1]) milPortXY = [portXY[0] + 18, portXY[1] - 10];
+  return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases };
+}
+function facilityCount(a3) { const f = facilitiesFor(a3); return f ? f.bases.length : 1; }
+function purchasedBaseCount(a3) { const f = facilitiesFor(a3); return f ? Math.max(0, f.bases.length - 1) : 0; }
+
 // A* over the water grid between two cells; returns map-space points.
 function seaPath(W, s, t) {
   if (s == null || t == null) return null;

@@ -42,7 +42,7 @@ function newGame(opt) {
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
     holdings: {}, props: [], lotState: {},
     regime: regimeOf('calm'), nextRate: 30 + Math.floor(rand() * 40), oil: 1, trade: 1,
-    wars: [], live: [], news: [], mail: [], papers: [], cityHit: {}, boosts: {}, pandemic: 0,
+    wars: [], live: [], news: [], mail: [], papers: [], cityHit: {}, boosts: {}, pandemic: 0, facilities: {}, lastWarDay: null,
     maxDays: NORMAL_DAYS, yearsBought: 0, yearReport: null, homeTaxPrev: null,
     nh: { d: [], w: [], m: [] }, watch: [], stats: { trades: 0, bestWeek: 0, startNet: 0, takeovers: 0, ipos: 0, wars: 0 },
     career: 0, goalsDone: [], daily: { streak: 0, last: null }, shop: {}, tutorial: 0, notified: 0,
