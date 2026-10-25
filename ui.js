@@ -26,13 +26,17 @@ const LOGO_SVG = '<svg viewBox="0 0 40 40"><path d="M9 25c6-1 15-6 22-14M9 31c8-
 
 // ---------- saves: IndexedDB first, localStorage fallback ----------
 const IDB_NAME = 'ticker-tycoon', IDB_STORE = 'saves';
+let IDB_PROMISE = null;
 function idb() {
-  return new Promise(res => {
+  if (IDB_PROMISE) return IDB_PROMISE;
+  IDB_PROMISE = new Promise(res => {
     if (!window.indexedDB) return res(null);
     const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (e) {} };
-    req.onsuccess = () => res(req.result); req.onerror = () => res(null);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => { IDB_PROMISE = null; res(null); };
   });
+  return IDB_PROMISE;
 }
 async function idbGet(key) {
   const db = await idb(); if (!db) return null;
@@ -58,36 +62,51 @@ async function idbDel(key) {
   const db = await idb(); if (!db) return;
   try { db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(key); } catch (e) {}
 }
+function migrateSave(s) {
+  if (!s || !s.co) return s;
+  for (const a3 in s.co) {
+    const c = s.co[a3];
+    if (!c.h) c.h = { d: [], w: [], m: [], v: [] };
+    if (!Array.isArray(c.h.v)) c.h.v = [];
+    while (c.h.v.length < (c.h.d || []).length) c.h.v.push(Math.round((c.shares || 0) * 0.003));
+    if (c.h.v.length > (c.h.d || []).length) c.h.v = c.h.v.slice(-((c.h.d || []).length || 1));
+  }
+  return s;
+}
 async function loadSave() {
   const fromIdb = await idbGet('main');
-  if (fromIdb && fromIdb.v === 2 && !fromIdb.over) return fromIdb;
+  if (fromIdb && fromIdb.v === 2 && !fromIdb.over) return migrateSave(fromIdb);
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (s && s.v === 2 && !s.over) { idbPut('main', s); return s; }
+      if (s && s.v === 2 && !s.over) { const m = migrateSave(s); idbPut('main', m); return m; }
       if (s && s.over) UI.lastOver = s.over;
     }
   } catch (e) {}
   return null;
 }
-let saveQueued = false;
-function save() {
+let saveInFlight = false, savePending = false;
+async function save() {
   if (!S || UI.pick) return;
-  if (saveQueued) return; saveQueued = true;
-  setTimeout(async () => {
-    saveQueued = false;
-    S.lastSeen = Date.now();
-    const ok = await idbPut('main', S);
-    if (!ok) {
-      try {
+  // Never drop a save: if one is already writing, mark a follow-up pass so the
+  // latest state is written after it, instead of silently losing the trade.
+  if (saveInFlight) { savePending = true; return; }
+  saveInFlight = true;
+  do {
+    savePending = false;
+    try {
+      S.lastSeen = Date.now();
+      const ok = await idbPut('main', S);
+      if (!ok) {
         const copy = JSON.parse(JSON.stringify(S));
-        for (const k in copy.co) { copy.co[k].h.d = copy.co[k].h.d.slice(-120); copy.co[k].h.w = copy.co[k].h.w.slice(-104); }
+        for (const k in copy.co) { copy.co[k].h.d = copy.co[k].h.d.slice(-120); copy.co[k].h.v = (copy.co[k].h.v || []).slice(-120); copy.co[k].h.w = copy.co[k].h.w.slice(-104); }
         copy.news = (copy.news || []).slice(0, 60);
         localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
-      } catch (e) {}
-    }
-  }, 0);
+      }
+    } catch (e) {}
+  } while (savePending);
+  saveInFlight = false;
 }
 
 // ---------- small helpers ----------
@@ -119,7 +138,7 @@ function sma(vals, n) {
   }
   return out;
 }
-function candleChart(closes) {
+function candleChart(closes, vols) {
   const Wd = 400, H = 180;
   const groups = [];
   for (let i = 0; i < closes.length; i += 5) {
@@ -143,7 +162,13 @@ function candleChart(closes) {
     const x = 8 + i * step + step / 2, col = c.c >= c.o ? '#12a150' : '#e5484d';
     return `<line x1="${x.toFixed(1)}" y1="${y(c.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(c.l).toFixed(1)}" stroke="${col}" stroke-width="1.6"/><rect x="${(x - bw / 2).toFixed(1)}" y="${y(Math.max(c.o, c.c)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(y(c.o) - y(c.c))).toFixed(1)}" fill="${col}"/>`;
   }).join('');
-  return `<svg class="chart" viewBox="0 0 ${Wd} ${H}" preserveAspectRatio="none"><path d="${smaD}" fill="none" stroke="#7c4dff" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-dasharray="4 3"/>${bars}</svg>`;
+  const volBars = (vols && vols.length) ? (() => {
+    const gv = [];
+    for (let i = 0; i < closes.length; i += 5) { const g = vols.slice(i, i + 5); gv.push(g.length ? g.reduce((a, b) => a + b, 0) : 0); }
+    const mx = Math.max(1, ...gv);
+    return `<svg class="chart" viewBox="0 0 ${Wd} 40" preserveAspectRatio="none">${gv.map((v, i) => `<rect x="${(8 + i * step + step / 2 - bw / 2).toFixed(1)}" y="${(38 - v / mx * 34).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, v / mx * 34).toFixed(1)}" fill="#7c4dff" opacity="0.55"/>`).join('')}</svg>`;
+  })() : '';
+  return `<svg class="chart" viewBox="0 0 ${Wd} ${H}" preserveAspectRatio="none"><path d="${smaD}" fill="none" stroke="#7c4dff" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-dasharray="4 3"/>${bars}</svg>${volBars}`;
 }
 const rangeSeg = (list, cur, act) => `<div class="seg">${list.map(r => `<button class="${cur === r ? 'on' : ''}" data-a="${act}" data-x="${r}">${r}</button>`).join('')}</div>`;
 const chgVs = (c) => {
@@ -203,8 +228,10 @@ function renderHUD() {
 function renderCityHUD() {
   if (!CityView.isOpen()) { $('chud').innerHTML = ''; return; }
   const c = CityView.city, k = W.byA3[c.a3], co = S.co[c.a3];
-  const mine = controlled(c.a3) ? co.locs.filter(l => l && W.cities[c.id] && co.city === c.id).length : 0;
-  $('chud').innerHTML = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)}</span></div>
+  // A company's locations are all in its own capital city (co.city), by construction
+  // in addLocation(), so the count here is exact, not a filter that happens to work.
+  const myLocs = (controlled(c.a3) && co.city === c.id) ? co.locs.length : 0;
+  $('chud').innerHTML = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
 }
 
@@ -313,7 +340,7 @@ function renderPopup() {
   const p = UI.popup;
   if (p.type === 'city') {
     const c = W.cities[p.id], k = W.byA3[c.a3], co = S.co[c.a3], st = countryStatus(c.a3);
-    const myLocs = controlled(c.a3) ? co.locs.filter(l => co.city === c.id).length : 0;
+    const myLocs = (controlled(c.a3) && co.city === c.id) ? co.locs.length : 0;
     const myProps = S.props.filter(x => x.city === c.id).length;
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
@@ -454,13 +481,15 @@ function tradeView(a3) {
   const ch = chgVs(c), val = held.qty > 0 ? held.qty * c.price : held.qty < 0 ? -held.qty * c.price : 0;
   const pnl = held.qty !== 0 ? (c.price - held.cost) * held.qty : 0;
   const closes = UI.tradeRange === '1M' ? c.h.d.slice(-22) : UI.tradeRange === 'All' ? c.h.d.slice() : c.h.d.slice(-130);
+  const vols = UI.tradeRange === '1M' ? (c.h.v || []).slice(-22) : UI.tradeRange === 'All' ? (c.h.v || []).slice() : (c.h.v || []).slice(-130);
   const sma20 = sma(closes, 20), sma20v = sma20.length ? sma20[sma20.length - 1] : c.price;
   const res = c.res && c.res.day > S.day - 90 ? c.res : null;
   return panelShell(`${c.sym} · ${c.name}`, `${SECTORS[c.sector].icon} ${c.sector} · ${cname(a3)} · ${countryStatus(a3).t}`,
     `<div class="trade-head"><div><div class="big">${c.listed ? fmtMoney(c.price) : 'Private'}</div><div class="${upCls(ch)}">${fmtPct(ch)} today · SMA20 ${fmtMoney(sma20v)}</div></div>
       <button class="star-btn ${S.watch.includes(a3) ? 'on' : ''}" data-a="star" data-x="${a3}">${S.watch.includes(a3) ? '★ Starred' : '☆ Star'}</button></div>
-    ${c.listed ? candleChart(closes) : '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'}
-    <p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20. Daily closes only; the engine does not record intraday volume.</p>
+    ${c.listed ? candleChart(closes, vols) : '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'}
+    <p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20. Purple bars below are shares traded per day in the in-game market, including your trades. This is simulated in-game volume, not real-world volume.</p>
+    ${c.listed && vols.length ? `<div class="kv"><span>Shares traded today</span><b>${(vols[vols.length - 1] || 0).toLocaleString()}</b></div>` : ''}
     ${rangeSeg(['1M', '1Y', 'All'], UI.tradeRange, 'tradeRange')}
     <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
     ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
@@ -514,8 +543,8 @@ PANELS.company = () => {
       <div class="kv"><span>Quality (1–5)</span><span><input type="range" min="1" max="5" step="1" value="${c.set.quality}" data-in="quality" data-x="${c.a3}"> ${c.set.quality}★</span></div>
       <div class="kv"><span>Wage multiplier</span><span><input type="range" min="0.5" max="2" step="0.1" value="${c.set.wage}" data-in="wage" data-x="${c.a3}"> ${Math.round(c.set.wage * 100)}%</span></div>
       <h5>Locations</h5><div class="list">${c.locs.map(l => {
-        const city = W.cities[S.co[c.a3].city];
-        return `<div class="kv"><span>${SECTORS[c.sector].loc.name} · Staff ${l.staff} · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week <button class="btn small" data-a="closeLoc" data-x="${c.a3}|${l.id}">Close</button></b></div>`;
+        const city = W.cities[c.city];
+        return `<div class="kv"><span>${SECTORS[c.sector].loc.name} in ${esc(city.name)} · Staff ${l.staff} · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week <button class="btn small" data-a="closeLoc" data-x="${c.a3}|${l.id}">Close</button></b></div>`;
       }).join('') || '<p class="muted small">No locations. Open one from a city FOR LEASE pin.</p>'}</div>
       ${F ? `<h5>Fleet</h5><div class="kv"><span>${F.levels[c.fleet].name}</span><b>${c.fleet < F.levels.length - 1 ? `<button class="btn" data-a="fleetUp" data-x="${c.a3}">Upgrade · ${fmtMoney(F.levels[c.fleet + 1].cost, true)}</button>` : 'Biggest there is'}</b></div>${c.fleet ? `<button class="btn" data-a="fleetSell" data-x="${c.a3}">Sell fleet level · +${fmtMoney(F.levels[c.fleet].cost * 0.6, true)}</button>` : ''}` : ''}
       <h5>Loans &amp; listing</h5>
@@ -768,7 +797,7 @@ const A = {
     closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Building bought. Rent arrives every week.', 'good'); save(); refreshAll();
   },
   sellBld: x => { act(() => sellBuilding(x), 'Building sold'); closePopup(); CityView.refresh(); },
-  renovate: x => act(() => { const e = renovate(x); if (!e) { UI.popup = { type: 'pin', pin: { type: 'prop', lot: { t: S.props.find(p => p.id === x).t } }, lot: { t: S.props.find(p => p.id === x).t } }; renderPopup(); } return e; }),
+  renovate: x => { const e = renovate(x); if (e) { toast(e, 'bad'); return; } toast('Renovated', 'good'); save(); refreshAll(); A.propSheet(x); },
   propSheet: x => {
     const p = S.props.find(y => y.id === x); if (!p) return;
     openModal(`<div class="card in"><h3>Your building</h3><p class="muted">${esc(W.cities[p.city].name)}, ${esc(cname(W.cities[p.city].a3))}</p>
