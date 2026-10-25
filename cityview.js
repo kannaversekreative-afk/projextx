@@ -239,7 +239,7 @@ const CityView = (() => {
   function pins() {
     layer.innerHTML = '';
     const lots = cityLots(city.id), N = layout.N, owner = S.co[city.a3], mineCo = controlled(city.a3);
-    const locAt = {}; owner.locs.forEach(l => locAt[l.t] = l);
+    const locAt = {}; owner.locs.forEach(l => { if ((l.city || owner.city) === city.id) locAt[l.t] = l; });
     const show = k => filter === 'all' || filter === k || (filter === 'mine' && k === 'prop');
     const add = (t, cls, html, fn, title) => { const r = roofs[t]; if (!r) return; const p = document.createElement('button'); p.className = 'pin ' + cls; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = html; if (title) p.title = title; p.addEventListener('click', e => { e.stopPropagation(); fn(); }); layer.appendChild(p); };
     lots.forEach(l => {

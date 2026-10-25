@@ -50,6 +50,10 @@ function buildWorld() {
     k.wealth = Math.max(0.22, Math.min(2.3, Math.pow(gdpPc / 20000, 0.55)));
     W.cities[k.capital].wealth = k.wealth;
   });
+  // Every city needs wealth for lot rents, not just the capital: businesses
+  // now open in any city in their country, so a non-capital city with no
+  // wealth would produce NaN rents.
+  W.cities.forEach(c => { if (c.wealth == null && W.byA3[c.a3]) c.wealth = W.byA3[c.a3].wealth; });
   // Ship routing on a 2-degree grid (water if any 1-degree sub-cell is water).
   W.ww = wd.w / 2; W.wh = wd.h / 2; W.water = new Uint8Array(W.ww * W.wh);
   for (let y = 0; y < W.wh; y++) for (let x = 0; x < W.ww; x++) W.water[y * W.ww + x] = fine[(2 * y) * wd.w + 2 * x] | fine[(2 * y) * wd.w + 2 * x + 1] | fine[(2 * y + 1) * wd.w + 2 * x] | fine[(2 * y + 1) * wd.w + 2 * x + 1];
