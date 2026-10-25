@@ -247,11 +247,153 @@ function renderCityHUD() {
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
 }
 
+// ---------- vehicles: tap card + Watch view ----------
+// Original art only: the plane view takes its layout from the screenshot
+// Nicholas sent (route on top, big side view, progress bar below), but
+// the aircraft, ships and names are drawn fresh here — no real airline,
+// brand or copied game asset is used. The company name on a vehicle is
+// always the in-game company's own name.
+function vNum(key, mod) { let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0; return Math.abs(h) % mod; }
+function vTripId(vd) {
+  if (vd.category === 'yacht') return 'YACHT-001';
+  if (vd.category === 'fighter') return `${vd.a3}-FTR-${1 + vNum(vd.key, 9)}`;
+  if (vd.category === 'carrier') return `${vd.a3}-CVN-${1 + vNum(vd.key, 9)}`;
+  if (vd.category === 'warship') return `${vd.a3}-DDG-${1 + vNum(vd.key, 9)}`;
+  return `${vd.sym || vd.a3}-${100 + vNum(vd.key, 900)}`;
+}
+function vStatus(vd) {
+  if (vd.war) return 'In combat';
+  if (vd.category === 'plane') return vd.to ? 'Cruising' : 'Setting course';
+  if (vd.category === 'cargo' || vd.category === 'yacht') return vd.to ? 'Sailing' : 'Setting course';
+  return 'Patrolling';
+}
+function vLoad(vd) {
+  if (vd.category === 'plane') { const cap = [0, 72, 100, 180, 250, 350, 550][vd.level] || 72; return `${Math.round(cap * (0.7 + vNum(vd.key, 30) / 100))}/${cap} passengers`; }
+  if (vd.category === 'cargo') {
+    if (vd.fleetKind === 'tanker') { const cap = [0, 30000, 80000, 150000, 300000, 500000, 800000][vd.level] || 30000; return `${Math.round(cap * (0.7 + vNum(vd.key, 30) / 100)).toLocaleString()}/${cap.toLocaleString()} barrels`; }
+    const cap = [0, 500, 5000, 10000, 14000, 20000, 24000][vd.level] || 500; return `${Math.round(cap * (0.7 + vNum(vd.key, 30) / 100)).toLocaleString()}/${cap.toLocaleString()} containers`;
+  }
+  if (vd.category === 'yacht') return `${6 + vNum(vd.key, 7)}/12 guests`;
+  if (vd.category === 'fighter') return '1 pilot';
+  if (vd.category === 'carrier') return '24 aircraft · 2,500 crew';
+  const crew = [0, 40, 120, 250, 400, 600][vd.level] || 120; return `${crew} crew`;
+}
+function vIcon(vd) { return vd.category === 'plane' || vd.category === 'fighter' ? '✈️' : vd.category === 'yacht' ? '⛵' : '🚢'; }
+function vWatchLabel(vd) { return vd.category === 'plane' || vd.category === 'fighter' ? 'WATCH FLIGHT' : vd.category === 'cargo' || vd.category === 'yacht' ? 'WATCH VOYAGE' : 'WATCH'; }
+function fmtSecs(s) { if (s == null) return ''; if (s < 60) return `${Math.ceil(s)}s remaining`; return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s remaining`; }
+function vLocText(vd) {
+  const ct = MapView.nearCity(vd.x, vd.y); if (!ct) return '';
+  const cn = W.byA3[ct.a3] ? W.byA3[ct.a3].name : ct.a3;
+  if (vd.category === 'plane' || vd.category === 'fighter') return `Over ${ct.name}, ${cn}`;
+  return `At sea near ${ct.name}, ${cn}`;
+}
+function openVehicleCard(key) {
+  const vd = MapView.vehicle(key); if (!vd) return;
+  const fromC = vd.from ? vd.from.code : '—', toC = vd.to ? vd.to.code : 'Patrol';
+  const pct = vd.progress != null ? Math.round(vd.progress * 100) : null;
+  openModal(`<div class="vcard">
+    <div class="row between"><div><b>${vTripId(vd)}</b> <span class="muted">${esc(vd.model)}</span></div><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
+    <div class="vroute">${fromC} <span class="varr">→</span> ${toC} <span class="muted small">${vTripId(vd)}</span></div>
+    <div class="vstatus"><b>${vStatus(vd)}</b>${vd.secsLeft != null ? ` · ${fmtSecs(vd.secsLeft)}` : ''} <span class="muted">👤 ${vLoad(vd)}</span></div>
+    ${pct != null ? `<div class="vprog"><div class="vprog-fill" style="width:${pct}%"></div><span class="vprog-icon" style="left:${pct}%">${vIcon(vd)}</span></div>` : `<p class="muted small">Patrolling around ${esc(vd.from ? vd.from.name : '')}.</p>`}
+    <p class="muted small">${esc(vd.owner)} · ${vd.from ? esc(vd.from.name) : ''}${vd.to ? ` → ${esc(vd.to.name)}` : ''}</p>
+    <div class="row wrap"><button class="btn3d blue wide" data-a="watchVehicle" data-x="${vd.key}">👁 ${vWatchLabel(vd)}</button>
+    <button class="btn" data-a="routeVehicle" data-x="${vd.key}">VIEW ROUTE</button>
+    <button class="btn" data-a="infoVehicle" data-x="${vd.key}" aria-label="Vehicle information">i</button></div>
+  </div>`, 'sheet');
+}
+function openRouteSheet(key) {
+  const vd = MapView.vehicle(key); if (!vd) return;
+  openModal(`<div class="vcard"><div class="row between"><h3>Route · ${vTripId(vd)}</h3><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
+    <div class="kv"><span>From</span><b>${vd.from ? `${esc(vd.from.name)} (${vd.from.code})` : '—'}</b></div>
+    <div class="kv"><span>To</span><b>${vd.to ? `${esc(vd.to.name)} (${vd.to.code})` : 'Patrol — no destination'}</b></div>
+    <div class="kv"><span>Vehicle</span><b>${esc(vd.model)}</b></div>
+    <div class="kv"><span>Owner</span><b>${esc(vd.owner)}</b></div>
+    <div class="kv"><span>Status</span><b>${vStatus(vd)}${vd.secsLeft != null ? ` · ${fmtSecs(vd.secsLeft)}` : ''}</b></div>
+    ${vd.progress != null ? `<div class="kv"><span>Progress</span><b>${Math.round(vd.progress * 100)}% of this leg</b></div>` : ''}
+    <div class="row wrap"><button class="btn3d blue wide" data-a="followVehicle" data-x="${vd.key}">FOLLOW ON MAP</button>
+    <button class="btn" data-a="vehicleCard" data-x="${vd.key}">BACK TO VEHICLE</button></div>
+  </div>`, 'sheet');
+}
+function openVehicleInfo(key) {
+  const vd = MapView.vehicle(key); if (!vd) return;
+  const companyBtn = (vd.category === 'plane' || vd.category === 'cargo') ? `<button class="btn3d blue wide" data-a="vehicleCompany" data-x="${vd.a3}">OPEN COMPANY</button>` : '';
+  openModal(`<div class="vcard"><div class="row between"><h3>${vTripId(vd)} · ${esc(vd.model)}</h3><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
+    <div class="kv"><span>Owner</span><b>${esc(vd.owner)}</b></div>
+    <div class="kv"><span>Load</span><b>${vLoad(vd)}</b></div>
+    <div class="kv"><span>Status</span><b>${vStatus(vd)}</b></div>
+    ${vd.category === 'yacht' ? '<p class="muted small">Your personal yacht. It sails for fun and earns nothing — it is just yours to watch.</p>' : ''}
+    ${vd.category === 'carrier' || vd.category === 'warship' || vd.category === 'fighter' ? `<p class="muted small">${esc(vd.owner)} military. Upgrade it from the Military screen for your home nation.</p>` : ''}
+    <div class="row wrap">${companyBtn}<button class="btn" data-a="vehicleCard" data-x="${vd.key}">BACK TO VEHICLE</button></div>
+  </div>`, 'sheet');
+}
+function watchSVG(vd) {
+  const col = (S.co[vd.a3] && S.co[vd.a3].color) || '#2f7cf6', name = esc(vd.owner.length > 18 ? vd.owner.slice(0, 18) : vd.owner);
+  if (vd.category === 'plane') {
+    const prop = vd.level === 1;
+    return `<svg viewBox="0 0 400 170" class="wsvg"><ellipse cx="200" cy="118" rx="150" ry="8" fill="rgba(0,0,0,0.12)"/>
+    <path d="M70 118 L110 62 L150 62 L140 118 Z" fill="${col}"/><rect x="60" y="72" width="280" height="34" rx="17" fill="#fff"/><rect x="60" y="98" width="280" height="8" fill="${col}"/>
+    <rect x="300" y="78" width="42" height="22" rx="4" fill="#1a2747"/><rect x="150" y="60" width="70" height="14" rx="7" fill="#fff"/>
+    ${[100, 125, 150, 175, 200, 225, 250].map(x => `<circle cx="${x}" cy="88" r="4" fill="#9fb0c8"/>`).join('')}
+    ${prop ? `<ellipse cx="330" cy="88" rx="4" ry="26" fill="rgba(120,140,170,0.6)"/>` : `<rect x="310" y="102" width="34" height="10" rx="5" fill="#c9d2df"/>`}
+    <text x="185" y="92" font-size="11" font-weight="800" fill="${col}" text-anchor="middle">${name}</text></svg>`;
+  }
+  if (vd.category === 'fighter') {
+    return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M40 95 L300 78 L360 88 L300 102 L40 108 Z" fill="#3b4250"/><path d="M150 88 L210 40 L235 40 L210 88 Z" fill="#3b4250"/><path d="M150 100 L210 150 L235 150 L210 100 Z" fill="#2c3340"/><ellipse cx="315" cy="88" rx="14" ry="7" fill="#9ad1ff"/></svg>`;
+  }
+  if (vd.category === 'yacht') {
+    return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M190 20 L190 95 M190 30 L265 95 L190 95 Z" fill="#fff" stroke="#6b7685" stroke-width="2"/><rect x="150" y="80" width="90" height="24" rx="6" fill="#fff"/><path d="M90 104 L310 104 L280 138 L120 138 Z" fill="#fff"/><rect x="90" y="104" width="220" height="8" fill="${col}"/><rect x="170" y="86" width="50" height="12" rx="3" fill="#9fb0c8"/></svg>`;
+  }
+  if (vd.category === 'carrier') {
+    return `<svg viewBox="0 0 400 170" class="wsvg"><rect x="60" y="88" width="290" height="14" rx="4" fill="#5b6573"/><path d="M80 102 L320 102 L300 132 L100 132 Z" fill="#3b4250"/><rect x="250" y="60" width="36" height="30" rx="4" fill="#d6dbe2"/><rect x="255" y="52" width="26" height="10" rx="3" fill="#9aa4b2"/>${[100, 150, 200].map(x => `<path d="M${x} 82 L${x + 22} 82 L${x + 11} 74 Z" fill="#8e99a8"/>`).join('')}</svg>`;
+  }
+  if (vd.category === 'warship') {
+    return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M70 100 L330 100 L300 132 L100 132 Z" fill="#6b7685"/><rect x="150" y="72" width="80" height="28" rx="4" fill="#9aa4b2"/><rect x="180" y="58" width="20" height="16" rx="3" fill="#cfd5dd"/><rect x="190" y="40" width="4" height="20" fill="#4f5866"/><circle cx="285" cy="86" r="10" fill="#4f5866"/><rect x="95" y="88" width="40" height="8" rx="4" fill="#4f5866"/></svg>`;
+  }
+  if (vd.fleetKind === 'tanker') {
+    return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M60 100 L340 100 L315 134 L85 134 Z" fill="#9b2c2c"/><rect x="270" y="70" width="40" height="30" rx="4" fill="#f2f4f7"/>${[110, 160, 210].map(x => `<circle cx="${x}" cy="112" r="11" fill="#e6eaef"/>`).join('')}</svg>`;
+  }
+  return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M60 100 L340 100 L315 134 L85 134 Z" fill="#2d3748"/><rect x="70" y="70" width="36" height="30" rx="4" fill="#f2f4f7"/>${['#e5484d', '#2f7cf6', '#f5b301', '#12a150', '#ff6b2c'].map((c, i) => `<rect x="${115 + i * 38}" y="72" width="32" height="28" rx="2" fill="${c}"/>`).join('')}</svg>`;
+}
+let watchTimer = null, watchKey = null, watchSig = '';
+function watchHTML(vd) {
+  const sky = vd.category === 'plane' || vd.category === 'fighter';
+  const fromC = vd.from ? vd.from.code : '—', toC = vd.to ? vd.to.code : 'Patrol';
+  return `<div class="watch-top"><button class="wback" data-a="closeWatch" aria-label="Back to map">${IC.back}</button>
+    <div class="wroute"><b id="watch-route">${vd.from ? esc(vd.from.name) : ''} → ${vd.to ? esc(vd.to.name) : 'Patrol'}</b><small>${vTripId(vd)} · ${esc(vd.model)}</small></div>
+    <div class="wpills"><span class="wpill" id="watch-status">${vStatus(vd).toUpperCase()}</span><span class="wpill">👤 ${vLoad(vd)}</span></div></div>
+  <div class="watch-scene ${sky ? 'sky' : 'sea'}">${sky ? '<div class="wsun"></div><div class="wcloud c1"></div><div class="wcloud c2"></div><div class="wcloud c3"></div>' : '<div class="wwave w1"></div><div class="wwave w2"></div>'}
+    ${watchSVG(vd)}<div class="wloc" id="watch-loc">📍 ${esc(vLocText(vd))}</div></div>
+  <div class="watch-bottom"><div class="wprog-row"><b>${fromC}</b><div class="wprog"><div class="wprog-fill" id="watch-prog-fill" style="width:${vd.progress != null ? Math.round(vd.progress * 100) : 100}%"></div><span class="wprog-icon" id="watch-prog-icon" style="left:${vd.progress != null ? Math.round(vd.progress * 100) : 100}%">${vIcon(vd)}</span></div><b>${toC}</b></div>
+    <div class="wtime" id="watch-time">${vStatus(vd)}${vd.secsLeft != null ? ` · ${fmtSecs(vd.secsLeft)}` : ''}</div>
+    <button class="btn wide" data-a="closeWatch">RETURN TO MAP</button></div>`;
+}
+function openWatch(key) {
+  const vd = MapView.vehicle(key); if (!vd) return;
+  closeModal(); closePanel(); watchKey = key; watchSig = `${vd.category}|${vd.model}|${vd.owner}`;
+  $('watch').innerHTML = watchHTML(vd); $('watch').classList.add('open');
+  if (watchTimer) clearInterval(watchTimer); watchTimer = setInterval(tickWatch, 500);
+}
+function closeWatch() { watchKey = null; if (watchTimer) clearInterval(watchTimer); watchTimer = null; $('watch').innerHTML = ''; $('watch').classList.remove('open'); }
+function tickWatch() {
+  if (!watchKey) return; const vd = MapView.vehicle(watchKey); if (!vd) { closeWatch(); return; }
+  const sig = `${vd.category}|${vd.model}|${vd.owner}`;
+  if (sig !== watchSig) { watchSig = sig; $('watch').innerHTML = watchHTML(vd); return; }
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  set('watch-route', `${vd.from ? vd.from.name : ''} → ${vd.to ? vd.to.name : 'Patrol'}`);
+  set('watch-status', vStatus(vd).toUpperCase());
+  set('watch-loc', `📍 ${vLocText(vd)}`);
+  set('watch-time', `${vStatus(vd)}${vd.secsLeft != null ? ` · ${fmtSecs(vd.secsLeft)}` : ''}`);
+  const pct = vd.progress != null ? Math.round(vd.progress * 100) : 100;
+  const fill = document.getElementById('watch-prog-fill'); if (fill) fill.style.width = pct + '%';
+  const ic = document.getElementById('watch-prog-icon'); if (ic) ic.style.left = pct + '%';
+}
+
 // ---------- boot / onboarding ----------
 async function boot() {
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
   CityView.init($('cityview'), onPin);
@@ -727,6 +869,13 @@ const A = {
   closePanel: () => closePanel(),
   panelBack: () => { UI.stack.pop(); renderPanel(); },
   closePopup: () => closePopup(),
+  vehicleCard: x => openVehicleCard(x),
+  watchVehicle: x => openWatch(x),
+  routeVehicle: x => openRouteSheet(x),
+  infoVehicle: x => openVehicleInfo(x),
+  followVehicle: x => { const vd = MapView.vehicle(x); closeModal(); if (vd) { MapView.flyToXY(vd.x, vd.y, 3); toast(`Following ${vTripId(vd)}`); } },
+  vehicleCompany: x => openPanel('stock', { a3: x }),
+  closeWatch: () => closeWatch(),
   scrim: (x, el, e) => { if (e.target === el && UI.modal === 'sheet') closeModal(); },
   closeModal: () => { closeModal(); if (S && S.over) gameOver(); },
   speed: x => { S.speed = +x; renderHUD(); },

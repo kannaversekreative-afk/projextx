@@ -85,6 +85,13 @@ const MapView = (() => {
       if (F.kind === 'plane') units.push({ type: 'plane', a3, from: home, to: dests[Math.floor(r() * dests.length)], t: r(), dir: 1, r, dests });
       else { const start = nearestWater(W, home.lon, home.lat); units.push({ type: F.kind, a3, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r, shortRetries: 0 }); }
     }
+    // One personal yacht for the player's home nation. It sails port to
+    // port like a cargo boat but carries people, not freight, and has no
+    // effect on the economy — it is just there to watch and follow.
+    if (st.home) {
+      const hc = W.cities[st.co[st.home].city], start = nearestWater(W, hc.lon, hc.lat);
+      units.push({ type: 'yacht', a3: st.home, personal: true, start, basin: basinOf(start), dest: null, pts: null, t: 0, dir: 1, r: mulberry(hashStr('yacht' + st.seed)), shortRetries: 0 });
+    }
   }
   function pathLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; }
   // Pick a destination in the boat's own basin. Prefer a destination whose
@@ -217,6 +224,15 @@ const MapView = (() => {
     for (let i = 0; i < 2 + lv; i++) { c.fillStyle = '#e6eaef'; c.beginPath(); c.arc(-L + 6 + i * (L * 1.5 - 6) / (2 + lv), 0, B * 0.32, 0, 7); c.fill(); }
     c.fillStyle = '#f2f4f7'; c.fillRect(-L + 0.8, -B * 0.75, 3, B * 1.5);
   }
+  function yacht(c) {
+    const L = 8, B = 2.2;
+    wake(c, L, B); shadow(c, L, B);
+    hull(c, L, B, '#ffffff');
+    c.fillStyle = '#2f7cf6'; c.fillRect(-L + 1, -B * 0.7, L * 1.7, B * 0.5); // stripe
+    c.fillStyle = '#f2f4f7'; c.fillRect(-L * 0.3, -B * 1.6, L * 0.7, B * 1.2); // cabin
+    c.fillStyle = '#9fb0c8'; c.fillRect(-L * 0.1, -B * 1.3, L * 0.3, B * 0.6); // window
+    c.strokeStyle = '#6b7685'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(-L * 0.5, -B * 1.6); c.lineTo(-L * 0.5, -B * 3.2); c.lineTo(L * 0.4, -B * 3.2); c.stroke(); // mast + boom
+  }
   function hull(c, L, B, col) { c.fillStyle = col; c.beginPath(); c.moveTo(L + 2, 0); c.quadraticCurveTo(L, -B, L - 3, -B); c.lineTo(-L, -B); c.lineTo(-L, B); c.lineTo(L - 3, B); c.quadraticCurveTo(L, B, L + 2, 0); c.fill(); }
   function wake(c, L, B) { c.fillStyle = 'rgba(255,255,255,0.16)'; c.beginPath(); c.moveTo(-L, -B * 0.8); c.lineTo(-L - 12 - L * 0.4, -B * 2); c.lineTo(-L - 12 - L * 0.4, B * 2); c.lineTo(-L, B * 0.8); c.fill(); }
   function fighter(c, lv) {
@@ -263,9 +279,9 @@ const MapView = (() => {
       const A = W.cities[W.byA3[w.a].capital], B = W.cities[W.byA3[w.b].capital];
       const t = ((now / 1000 * 0.15) % 2), f = t < 1 ? t : 2 - t;
       const x = A.x + (B.x - A.x) * f, y = A.y + (B.y - A.y) * f, ang = Math.atan2(B.y - A.y, B.x - A.x) + (t < 1 ? 0 : Math.PI);
-      out.push([x, y, ang, c => fighter(c, Math.max(2, country(w.a).milLv.air)), false]);
+      out.push([x, y, ang, c => fighter(c, Math.max(2, country(w.a).milLv.air)), false, { kind: 'fighter', a3: w.a, other: w.b, war: true, idx: 0, key: `war:${w.a}-${w.b}-0` }]);
       const back = [(B.x * 0.7 + A.x * 0.3), (B.y * 0.7 + A.y * 0.3)];
-      out.push([back[0] + Math.sin(now / 700) * 4, back[1] - 6, ang + Math.PI, c => fighter(c, Math.max(1, country(w.b).milLv.air)), false]);
+      out.push([back[0] + Math.sin(now / 700) * 4, back[1] - 6, ang + Math.PI, c => fighter(c, Math.max(1, country(w.b).milLv.air)), false, { kind: 'fighter', a3: w.b, other: w.a, war: true, idx: 1, key: `war:${w.a}-${w.b}-1` }]);
     });
     const show = [st.home];
     if (v.s > 1.4) Object.keys(st.countries).sort((a, b) => milPower(b) - milPower(a)).slice(0, 12).forEach(a => { if (a !== st.home) show.push(a); });
@@ -275,12 +291,49 @@ const MapView = (() => {
       // than the sprites themselves, so military units spun in place over
       // their own capital. 26/28 map units is wider than any sprite, so
       // the orbit is actually visible as movement.
-      if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 26, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air), false]); }
+      if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 26, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air), false, { kind: 'fighter', a3, level: cs.milLv.air, key: `mil:${a3}:air` }]); }
       if (cs.milLv.navy > 0) {
-        const cell = nearestWater(W, cap.lon, cap.lat); if (cell != null) { const [wx, wy] = cellXY(W, cell); const [x, y, ang] = orbit(wx, wy, 28, 0.12, i * 2); out.push([x, y, ang, c => warship(c, cs.milLv.navy), true]); }
+        const cell = nearestWater(W, cap.lon, cap.lat); if (cell != null) { const [wx, wy] = cellXY(W, cell); const [x, y, ang] = orbit(wx, wy, 28, 0.12, i * 2); out.push([x, y, ang, c => warship(c, cs.milLv.navy), true, { kind: cs.milLv.navy >= 5 ? 'carrier' : 'warship', a3, level: cs.milLv.navy, key: `mil:${a3}:navy` }]); }
       }
     });
     return out;
+  }
+  // ---------- vehicle descriptors (for tap cards and Watch views) ----------
+  function nearestCityXY(x, y) { let best = null, bd = 1e18; W.cities.forEach(ct => { const d = Math.hypot(ct.x - x, ct.y - y); if (d < bd) { bd = d; best = ct; } }); return best; }
+  function cityForCell(cell) { if (cell == null) return null; const [wx, wy] = cellXY(W, cell); return nearestCityXY(wx, wy); }
+  function vehicleList(now) {
+    const st = S_(); if (!st) return [];
+    const out = [];
+    if (builtFor !== st.seed) buildUnits();
+    units.forEach(u => {
+      const co = st.co[u.a3]; if (!co) return;
+      if (u.type === 'yacht') {
+        const pos = u.pts ? along(u.pts, u.len, u.t) : cellXY(W, u.start);
+        out.push({ key: 'yacht', category: 'yacht', model: 'Personal yacht', owner: 'You', a3: u.a3, from: cityForCell(u.start), to: u.dest != null ? cityForCell(u.dest) : null, progress: u.t, secsLeft: u.pts ? (1 - u.t) * u.len / 5 : null, x: pos[0], y: pos[1], ang: pos[2], level: 1 });
+        return;
+      }
+      const F = SECTORS[co.sector].fleet; if (!F || !co.fleet) return;
+      if (u.type === 'plane') {
+        const d = Math.max(30, Math.hypot(u.to.x - u.from.x, u.to.y - u.from.y)), pos = bez(u.from, u.to, u.t);
+        out.push({ key: `co:${u.a3}`, category: 'plane', model: F.levels[co.fleet].name, owner: co.name, sym: co.sym, a3: u.a3, from: u.from, to: u.to, progress: u.t, secsLeft: (1 - u.t) * d / 24, x: pos[0], y: pos[1], ang: pos[2], level: co.fleet, fleetKind: F.kind });
+      } else {
+        const pos = u.pts ? along(u.pts, u.len, u.t) : cellXY(W, u.start);
+        out.push({ key: `co:${u.a3}`, category: 'cargo', model: F.levels[co.fleet].name, owner: co.name, sym: co.sym, a3: u.a3, from: cityForCell(u.start), to: u.dest != null ? cityForCell(u.dest) : null, progress: u.t, secsLeft: u.pts ? (1 - u.t) * u.len / 5 : null, x: pos[0], y: pos[1], ang: pos[2], level: co.fleet, fleetKind: F.kind });
+      }
+    });
+    military(now).forEach(([x, y, a, fn, isShip, meta]) => {
+      if (!meta) return;
+      const cs = st.countries[meta.a3]; if (!cs) return;
+      const level = meta.level || (meta.kind === 'fighter' ? Math.max(2, cs.milLv.air) : cs.milLv.navy);
+      const cap = W.cities[W.byA3[meta.a3].capital];
+      out.push({ key: meta.key, category: meta.kind, model: meta.kind === 'fighter' ? MILITARY.air.levels[level] : MILITARY.navy.levels[level], owner: W.byA3[meta.a3].name, a3: meta.a3, other: meta.other || null, war: !!meta.war, from: cap, to: null, progress: null, secsLeft: null, x, y, ang: a, level });
+    });
+    return out;
+  }
+  function vehicleAt(sx, sy) {
+    let best = null, bd = 34;
+    vehicleList(performance.now()).forEach(vd => { const [x, y] = toScreen(vd.x, vd.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = vd.key; } });
+    return best;
   }
   function drawTop(now) {
     const c = tctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, vw, vh);
@@ -297,8 +350,10 @@ const MapView = (() => {
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     if (st && st.settings.motion) {
       units.forEach(u => {
-        const co = st.co[u.a3]; if (!co || !co.fleet) return;
+        const co = st.co[u.a3]; if (!co) return;
         let x, y, a;
+        if (u.type === 'yacht') { if (!u.pts) return; [x, y, a] = along(u.pts, u.len, u.t); const [sx, sy] = toScreen(x, y); if (!onScreen(sx, sy)) return; drawSprite(sx, sy, a, kShip, cc => yacht(cc)); return; }
+        if (!co.fleet) return;
         if (u.type === 'plane') [x, y, a] = bez(u.from, u.to, u.t);
         else { if (!u.pts) return; [x, y, a] = along(u.pts, u.len, u.t); }
         const [sx, sy] = toScreen(x, y); if (!onScreen(sx, sy)) return;
@@ -361,6 +416,8 @@ const MapView = (() => {
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
   function tap(sx, sy) {
     if (!pickMode) {
+      const vk = vehicleAt(sx, sy);
+      if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
       let best = null, bd = 18;
       W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
       if (best != null) { handlers.city && handlers.city(best); return; }
@@ -399,6 +456,10 @@ const MapView = (() => {
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
     home() { const st = S_(); if (st) this.flyToCountry(st.home); else fit(); },
     world() { flyTo(MAP_W / 2, MAP_H / 2, 0); },
-    sprite: { plane, containerShip, tanker, fighter, warship },
+    vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
+    vehicleAt(sx, sy) { return vehicleAt(sx, sy); },
+    flyToXY(x, y, s) { flyTo(x, y, s || Math.max(v.s, 2.4)); },
+    nearCity(x, y) { return nearestCityXY(x, y); },
+    sprite: { plane, containerShip, tanker, fighter, warship, yacht },
   };
 })();
