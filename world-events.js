@@ -331,6 +331,24 @@ function yearEnd(year) {
   mail('Year in review', `Year ${year} in review`, body);
   if (entries.length) news('Business', `Year ${year} ratings are in: ${entries.map(e => `${e.name} ${e.new.toFixed(1)} star`).join(', ')}. See Messages for what people thought.`, S.home);
 }
+// Age up / down: year snapshots, kept in memory only (not in the save,
+// or every save would balloon with old copies of the whole world).
+// Age Up is free: push a snapshot of today, then run a full year.
+// Age Down restores the last snapshot, i.e. the start of the year you
+// just aged through. It only goes back as far as you aged in this
+// session, up to 10 years, and never before the game started.
+let YEAR_SNAPS = [];
+function pushYearSnapshot() {
+  try { YEAR_SNAPS.push(JSON.stringify(S)); } catch (e) {}
+  if (YEAR_SNAPS.length > 10) YEAR_SNAPS.shift();
+}
+function ageUp() { pushYearSnapshot(); stepYear(); return null; }
+function canAgeDown() { return YEAR_SNAPS.length > 0; }
+function ageDown() {
+  if (!YEAR_SNAPS.length) return 'No earlier year to go back to in this session. Age up first, then age down.';
+  try { const prev = JSON.parse(YEAR_SNAPS.pop()); S = prev; } catch (e) { return 'Could not go back a year.'; }
+  return null;
+}
 function stepYear() { const y0 = yearOf(S.day); while (!S.over && yearOf(S.day) === y0) stepDay(); }
 function setTax(kind, value) {
   const cs = country(S.home); if (!cs) return 'No home nation.';

@@ -64,6 +64,11 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .rail-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
 .speedpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
 .bottombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 999px; max-width: calc(100vw - 24px); }
+/* Fixed Age stepper: always in the same spot at the bottom, above the
+   bottom bar, small and thumb-reachable. It sits in #hud (z-index 5),
+   so it is behind an open panel — close the panel to age, as before. */
+.agebar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 999px; white-space: nowrap; }
+.agebar span { font-weight: 900; font-size: 13px; }
 .bb-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 900; white-space: nowrap; }
 .bb-btn span { font-size: 20px; }
 .speeds { display: flex; gap: 2px; background: var(--soft); border-radius: 22px; padding: 3px; }
