@@ -399,6 +399,9 @@ const MapView = (() => {
       const showFac = v.s > 1.0;
       W.playable.forEach(k => {
         if (k.a3 !== st.home && !showFac) return;
+        const cap0 = W.cities[k.capital]; if (!cap0) return;
+        const [capSx, capSy] = toScreen(cap0.x, cap0.y);
+        if (capSx < -200 || capSy < -200 || capSx > vw + 200 || capSy > vh + 200) return;
         const f = facilitiesFor(k.a3); if (!f) return;
         const nodes = [];
         if (f.portXY) nodes.push({ xy: f.portXY, kind: 'port' });

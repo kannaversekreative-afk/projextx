@@ -119,20 +119,64 @@ const cellXY = (W, c) => [projX((c % W.ww) * 2 - 180 + 1), projY(90 - ((c / W.ww
 // Positions are deterministic from the capital, so old saves get the same
 // starting facilities without a save migration. Purchased bases live in
 // S.facilities[a3].bases (map-space xy pairs) and are added on top.
+// Does a water cell touch this country's own land? A water cell counts
+// only if one of its neighbouring cells is inside the country's shape.
+// Without this, a port is just "nearest water anywhere" — which is how
+// ports ended up scattered in other countries' waters (e.g. in Texas for
+// countries that have nothing to do with Texas).
+let FAC_CTX = null;
+function touchesCountry(a3, cell) {
+  const k = W.byA3[a3]; if (!k || !k.path) return true;
+  if (typeof document === 'undefined') return true;
+  if (!FAC_CTX) { try { FAC_CTX = document.createElement('canvas').getContext('2d'); } catch (e) { return true; } }
+  if (!FAC_CTX || typeof FAC_CTX.isPointInPath !== 'function') return true;
+  const G = W.ww, x = cell % G, y = (cell / G) | 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= W.wh) continue;
+    if (W.water[ny * G + nx]) continue;
+    const [mx, my] = cellXY(W, ny * G + nx);
+    try { if (FAC_CTX.isPointInPath(k.path, mx, my)) return true; } catch (e) { return true; }
+  }
+  return false;
+}
+function ownCoastWater(a3, lon, lat, maxR) {
+  const G = W.ww, x0 = Math.floor((lon + 180) / 2), y0 = Math.floor((90 - lat) / 2);
+  for (let r = 0; r <= maxR; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const X = (x0 + dx + G) % G, Y = y0 + dy; if (Y < 0 || Y >= W.wh) continue;
+    const c = Y * G + X; if (W.water[c] && touchesCountry(a3, c)) return c;
+  }
+  return null;
+}
+let FAC_CACHE = {};
 function facilitiesFor(a3) {
   if (typeof W === 'undefined' || !W || !W.byA3[a3]) return null;
   const k = W.byA3[a3], cap = W.cities[k.capital]; if (!cap) return null;
-  const portCell = k.coastal ? nearestWater(W, cap.lon, cap.lat) : null;
+  if (FAC_CACHE[a3]) {
+    const c = FAC_CACHE[a3];
+    const bases = [c.base];
+    if (typeof S !== 'undefined' && S && S.facilities && S.facilities[a3] && Array.isArray(S.facilities[a3].bases)) {
+      S.facilities[a3].bases.forEach(b => { if (b && isFinite(b.x) && isFinite(b.y)) bases.push(b); });
+    }
+    return { a3, cap, portCell: c.portCell, milPortCell: c.milPortCell, portXY: c.portXY, milPortXY: c.milPortXY, bases };
+  }
+  // Port: nearest water that touches this country's own coast, not just
+  // nearest water anywhere. Fall back to nearest water only if no own
+  // coast water is found (tiny countries with no shape).
+  const portCell = k.coastal ? (ownCoastWater(a3, cap.lon, cap.lat, 40) ?? nearestWater(W, cap.lon, cap.lat)) : null;
   let milPortCell = null;
   if (portCell != null) {
-    // A different water cell in the same basin, a few cells along the coast.
+    // Military port: the closest different water cell in the same basin
+    // that also touches this country's own coast, and close to the
+    // civilian port — not up to 40 degrees away in another country's waters.
     const basin = W.basin[portCell], px = portCell % W.ww, py = (portCell / W.ww) | 0;
-    outer: for (let r = 4; r <= 20; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    outer: for (let r = 1; r <= 8; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
       const nx = px + dx, ny = py + dy; if (nx < 0 || nx >= W.ww || ny < 0 || ny >= W.wh) continue;
-      const c = ny * W.ww + nx; if (W.water[c] && W.basin[c] === basin) { milPortCell = c; break outer; }
+      const c = ny * W.ww + nx; if (c !== portCell && W.water[c] && W.basin[c] === basin && touchesCountry(a3, c)) { milPortCell = c; break outer; }
     }
-    if (milPortCell == null || milPortCell === portCell) milPortCell = portCell;
+    if (milPortCell == null) milPortCell = portCell;
   }
   // Military base: inland from the capital, away from the nearest water.
   let bx = cap.x + 30, by = cap.y - 18;
@@ -144,6 +188,7 @@ function facilitiesFor(a3) {
   const portXY = portCell != null ? cellXY(W, portCell) : null;
   let milPortXY = milPortCell != null ? cellXY(W, milPortCell) : null;
   if (milPortXY && portXY && milPortXY[0] === portXY[0] && milPortXY[1] === portXY[1]) milPortXY = [portXY[0] + 18, portXY[1] - 10];
+  FAC_CACHE[a3] = { portCell, milPortCell, portXY, milPortXY, base: bases[0] };
   return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases };
 }
 function facilityCount(a3) { const f = facilitiesFor(a3); return f ? f.bases.length : 1; }
