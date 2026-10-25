@@ -219,22 +219,22 @@ function renderPanel() {
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
 function renderHUD() {
   if (!S || UI.pick) return;
-  const nw = netWorth(), lv = level(), unread = S.mail.filter(m => !m.read).length;
+  const nw = netWorth(), lv = level();
   const co = homeCo();
-  // HUD: company card top-left, a small notification circle beside the
-  // settings button top-right, zoom + locate on the right, and a bottom
-  // bar. The map fills the whole screen behind all of it. No top-left
-  // pill, no Claim button, no Shop button up here: daily money is added
-  // to cash automatically, and Shop lives only in the More (…) menu.
-  // Menu and Help are also in More, and Locate (home) is on the right.
+  // HUD: company card top-left, a small Age button top-right, zoom +
+  // locate on the right, and a bottom bar. The map fills the whole screen
+  // behind all of it. No top-left pill, no Claim button, no Shop button
+  // up here: daily money is added to cash automatically, and Shop lives
+  // only in the More (…) menu. Messages and Settings are also only in
+  // More now — the top-right envelope and gear were duplicates of those,
+  // so they were removed and Age took their spot.
   $('hud').innerHTML = `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
-    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span><button class="btn small" data-a="ageUp">Age +1</button></div>
+    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
   </div>
   <div class="rail-top">
-    <button class="rail-btn notif-btn" data-a="panel" data-x="inbox" aria-label="Notifications">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
-    <button class="rail-btn" data-a="panel" data-x="settings" aria-label="Settings">⚙</button>
+    <button class="btn small" data-a="ageUp">Age +1</button>
   </div>
   <div class="rail-bottom">
     <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
