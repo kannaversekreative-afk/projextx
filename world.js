@@ -15,7 +15,7 @@ const projY = lat => (MY_TOP - millerY(Math.max(LAT_BOT - 5, Math.min(LAT_TOP + 
 const flagEmoji = a2 => a2 && a2.length === 2 ? String.fromCodePoint(...[...a2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '\u{1F3F3}️';
 
 function buildWorld() {
-  const W = { countries: [], byA3: {}, cities: [], layouts: {} };
+  const W = { countries: [], byA3: {}, cities: [], layouts: {}, lotCache: {} };
   const wd = WORLD_DATA.water, raw = atob(wd.b64), fine = new Uint8Array(wd.w * wd.h);
   for (let i = 0; i < fine.length; i++) fine[i] = (raw.charCodeAt(i >> 3) >> (i & 7)) & 1;
   WORLD_DATA.countries.forEach(d => {
