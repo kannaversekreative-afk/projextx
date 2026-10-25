@@ -76,6 +76,7 @@ function migrateSave(s) {
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
   if (s.extra == null) s.extra = {};
+  if (!Array.isArray(s.papers)) s.papers = [];
   if (s.leader == null) s.leader = false;
   if (s.countryName === undefined) s.countryName = null;
   for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05; if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54; }
@@ -416,36 +417,151 @@ function tickWatch() {
   const ic = document.getElementById('watch-prog-icon'); if (ic) ic.style.left = pct + '%';
 }
 
-// ---------- newspaper: flip through the world news ----------
-let paperPage = 0;
-function paperPages() { return Math.max(1, 1 + Math.ceil((S.news.length || 0) / 6)); }
+// ---------- newspaper: 1920s style, 4 pages, Age Up edition ----------
+// One edition is made every time you age up. It is world news, not
+// news about you: world politics and countries, business and markets,
+// sports from every league, and the numbers behind it all.
+// Only two editions are kept: this one and the last one. When a new
+// edition arrives, older ones rotate out on their own.
+let paperPage = 0, paperEdIdx = 0;
+const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS'];
+function ensurePapers() {
+  if (!Array.isArray(S.papers)) S.papers = [];
+  if (!S.papers.length) S.papers.push(makePaperEdition(yearOf(S.day)));
+  return S.papers;
+}
+function pushPaperEdition() {
+  ensurePapers();
+  const ed = makePaperEdition(yearOf(S.day));
+  if (S.papers[0] && S.papers[0].year === ed.year) S.papers[0] = ed; else S.papers.unshift(ed);
+  S.papers = S.papers.slice(0, 2);
+  paperEdIdx = 0; paperPage = 0;
+}
+function paperChg(h) {
+  if (!h || !h.w || h.w.length < 2) return 0;
+  const n = h.w.length, base = h.w[Math.max(0, n - 53)];
+  return base ? h.w[n - 1] / base - 1 : 0;
+}
+function makePaperEdition(year) {
+  const playable = W.playable.filter(k => S.countries[k.a3]);
+  let worldGdp = 0, worldPop = 0, stabSum = 0, booms = 0, unrest = 0;
+  playable.forEach(k => { const cs = S.countries[k.a3]; worldGdp += cs.gdp * 1e6; worldPop += cs.pop; stabSum += cs.stab; if (cs.boom > S.day) booms++; if (cs.unrest > S.day) unrest++; });
+  const growth = playable.map(k => ({ a3: k.a3, name: cname(k.a3), g: S.countries[k.a3].growth, gdp: S.countries[k.a3].gdp, pop: S.countries[k.a3].pop, stab: S.countries[k.a3].stab })).sort((a, b) => b.g - a.g);
+  const notHome = x => x.a3 !== S.home;
+  const fastest = growth.find(notHome) || growth[0];
+  const slowest = [...growth].reverse().find(notHome) || growth[growth.length - 1];
+  const boomC = playable.find(k => S.countries[k.a3].boom > S.day && k.a3 !== S.home);
+  const unrestC = playable.find(k => S.countries[k.a3].unrest > S.day && k.a3 !== S.home);
+  // Front page: prefer a war that is not yours, then world news from the year.
+  const warsElse = S.wars.filter(w => w.a !== S.home && w.b !== S.home);
+  const war = warsElse[0] || S.wars[0];
+  let headline = '', headBody = '';
+  if (war) {
+    headline = `${cname(war.a)} AT WAR WITH ${cname(war.b)}`;
+    headBody = `The front has moved to ${Math.round(war.front)}%. Capitals are watching, neighbours are nervous, and trade routes through both nations are under strain. The world waits to see whether talks, or tanks, win the year.`;
+  } else if (unrestC) {
+    headline = `UNREST IN ${cname(unrestC.a3).toUpperCase()}`;
+    headBody = `Mass protests have paralysed the streets. The government calls for calm, the crowds call for change, and the rest of the world is watching what happens next.`;
+  } else {
+    headline = `${(fastest ? fastest.name : 'THE WORLD').toUpperCase()} LEADS THE WORLD`;
+    headBody = `No war dominates the front page this year. Instead, the story is growth: new factories, new trade, and a country that outpaced every rival.`;
+  }
+  const frontStories = [];
+  if (fastest) frontStories.push({ kicker: 'COUNTRIES', head: `${fastest.name} is the fastest riser`, body: `Growth of ${fmtPct(fastest.g)} this year, on a ${fmtMoney(fastest.gdp * 1e6, true)} economy and ${fmtPop(fastest.pop)} people. Traders and neighbours alike are asking how long the run can last.` });
+  if (boomC) frontStories.push({ kicker: 'COUNTRIES', head: `Boom time in ${cname(boomC.a3)}`, body: `Factories are hiring, ports are busy, and money is moving. A boom year like this lifts the whole region with it.` });
+  if (slowest) frontStories.push({ kicker: 'POLITICS', head: `${slowest.name} falls behind`, body: `Growth of just ${fmtPct(slowest.g)} this year. The government is under pressure to act, and investors are looking elsewhere for now.` });
+  S.news.filter(n => n.d >= S.day - 365 && n.a3 && n.a3 !== S.home && (n.cat === 'World' || n.cat === 'War')).slice(0, 2).forEach(n => frontStories.push({ kicker: n.cat.toUpperCase(), head: n.text, body: `Reported from ${cname(n.a3)}. The full story is still unfolding.` }));
+  // Business: gainers, losers, sector, tip.
+  const cos = Object.values(S.co).map(c => ({ name: c.name, sym: c.sym, sector: c.sector, price: c.price, rating: c.rating, chg: paperChg(c.h) })).sort((a, b) => b.chg - a.chg);
+  const gainers = cos.slice(0, 5), losers = [...cos].reverse().slice(0, 5);
+  const secAvg = {};
+  cos.forEach(c => { if (!secAvg[c.sector]) secAvg[c.sector] = { s: 0, n: 0 }; secAvg[c.sector].s += c.chg; secAvg[c.sector].n++; });
+  const topSec = Object.entries(secAvg).map(([s, v]) => ({ s, a: v.s / v.n })).sort((a, b) => b.a - a.a)[0];
+  const idxChg = paperChg(S.idx.h);
+  const tip = gainers[0] || cos[0];
+  const bizStories = [
+    { kicker: 'MARKETS', head: `World markets ${idxChg >= 0 ? 'climb' : 'fall'} ${fmtPct(idxChg)}`, body: `The World Index closed the year at ${S.idx.v.toFixed(0)}. ${idxChg >= 0 ? 'A steady year for traders, with more winners than losers.' : 'A hard year for traders, with sellers in charge for long stretches.'}` },
+    topSec ? { kicker: 'BUSINESS', head: `${topSec.s} leads the sectors`, body: `The average ${topSec.s} stock moved ${fmtPct(topSec.a)} this year, ahead of every other line of business in the world.` } : null,
+    { kicker: 'ENERGY', head: `Oil at ${S.oil.toFixed(2)}x`, body: `Energy prices set the mood for shipping, airlines and factories alike. Every boardroom in the world is watching the next move in oil.` },
+  ].filter(Boolean);
+  // Sport: one simulated championship per league, seeded by year + league.
+  const FIRST = ['Jack', 'Sam', 'Leo', 'Max', 'Eli', 'Noah', 'Owen', 'Cole', 'Rex', 'Art', 'Mae', 'June', 'Ada', 'Ivy', 'Rosa', 'Nina'];
+  const LAST = ['Harper', 'Cole', 'Reed', 'Marsh', 'Stone', 'Blake', 'Frost', 'Lane', 'Quinn', 'Vance', 'Wells', 'Drake'];
+  const TEAMS = ['Harbor Hawks', 'Ironwood Bears', 'River Kings', 'Desert Foxes', 'Northern Stars', 'Coastal Sharks', 'Prairie Wolves', 'Mountain Lions', 'City Falcons', 'Bay Pirates', 'Valley Eagles', 'Storm Riders'];
+  const LEAGUES = [
+    { l: 'NFL', hi: 38, lo: 10 }, { l: 'NBA', hi: 122, lo: 88 }, { l: 'NHL', hi: 6, lo: 1 },
+    { l: 'WNBA', hi: 96, lo: 68 }, { l: 'MLB', hi: 11, lo: 2 }, { l: 'KBO', hi: 12, lo: 2 },
+    { l: 'NPB', hi: 9, lo: 1 }, { l: 'CPBL', hi: 13, lo: 3 },
+  ];
+  const sports = LEAGUES.map((lg, i) => {
+    const r = mulberry(hashStr('sport' + year + lg.l));
+    const a = TEAMS[Math.floor(r() * TEAMS.length)]; let b = TEAMS[Math.floor(r() * TEAMS.length)];
+    if (b === a) b = TEAMS[(TEAMS.indexOf(a) + 5) % TEAMS.length];
+    const sa = lg.lo + Math.floor(r() * (lg.hi - lg.lo)), sb = Math.max(0, sa - 1 - Math.floor(r() * 8));
+    return { l: lg.l, champ: a, runner: b, score: `${sa}–${sb}`, mvp: `${FIRST[Math.floor(r() * FIRST.length)]} ${LAST[Math.floor(r() * LAST.length)]}` };
+  });
+  return {
+    year, day: S.day, date: fmtDate(S.day),
+    front: { headline, body: headBody, stories: frontStories.slice(0, 4) },
+    business: { idx: S.idx.v, idxChg, oil: S.oil, gainers, losers, tip, stories: bizStories },
+    sports: { leagues: sports, story: `Champions are crowned in every league this year, from the gridiron to the diamond to the ice. The ${sports[0].champ} took the ${sports[0].l} crown, and the ${sports[1].champ} did the same in the ${sports[1].l}. New stars, old rivalries, and one more season for the history books.` },
+    numbers: { worldGdp, worldPop, avgStab: playable.length ? stabSum / playable.length : 0, wars: S.wars.length, booms, unrest, topGrowth: growth.slice(0, 5), slowest: growth.slice(-3).reverse(), idx: S.idx.v, idxChg },
+  };
+}
+function paperEdition() { ensurePapers(); paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx)); return S.papers[paperEdIdx]; }
 function paperArticle(n) {
-  return `<article class="part"><div class="pkicker">${esc(n.cat.toUpperCase())} · ${fmtDate(n.d)}</div><h3>${esc(n.text)}</h3>${n.a3 ? `<div class="psmall">${esc(cname(n.a3))}</div>` : ''}</article>`;
+  return `<article class="part"><div class="pkicker">${esc(n.kicker)}</div><h3>${esc(n.head)}</h3><p class="pbody">${esc(n.body)}</p></article>`;
+}
+function paperTicker(ed) {
+  const items = [`WORLD INDEX ${ed.business.idx.toFixed(0)} (${fmtPct(ed.business.idxChg)})`, `OIL ${ed.business.oil.toFixed(2)}x`, `WORLD GDP ${fmtMoney(ed.numbers.worldGdp, true)}`, `WORLD POPULATION ${fmtPop(ed.numbers.worldPop)}`, ...ed.business.gainers.slice(0, 3).map(g => `${g.sym} ${fmtPct(g.chg)}`)];
+  const line = items.join(' &nbsp;•&nbsp; ') + ' &nbsp;•&nbsp; ';
+  return `<div class="pticker"><div class="pticker-inner"><span>${line}</span><span>${line}</span></div></div>`;
 }
 function paperHTML() {
-  const total = paperPages(), page = Math.min(paperPage, total - 1); paperPage = page;
+  const ed = paperEdition(), total = 4, page = Math.min(paperPage, 3); paperPage = page;
   let body = '';
   if (page === 0) {
-    const top = S.news[0], second = S.news.slice(1, 3);
     body = `<div class="pfront">
-      ${top ? `<div class="pheadline"><div class="pkicker">TOP STORY · ${fmtDate(top.d)}</div><h2>${esc(top.text)}</h2></div>` : '<p>No news yet.</p>'}
-      <div class="pbox"><b>MARKETS</b><span>World Index ${S.idx.v.toFixed(0)}</span><span>Net worth ${fmtMoney(netWorth(), true)}</span><span>Cash ${fmtMoney(S.cash, true)}</span><span>Your nation ${fmtPop(nationPop())} people (${fmtPct(popGrowth())})</span></div>
-      ${S.wars.length ? `<div class="pbox"><b>WARS NOW</b>${S.wars.map(w => `<span>${esc(cname(w.a))} vs ${esc(cname(w.b))} — front ${Math.round(w.front)}%</span>`).join('')}</div>` : ''}
-      <div class="pcols">${second.map(paperArticle).join('')}</div>
+      <div class="pheadline"><div class="pkicker">TOP STORY · WORLD</div><h2>${esc(ed.front.headline)}</h2><p class="pdrop">${esc(ed.front.body)}</p></div>
+      <div class="pbox"><b>WORLD AT A GLANCE</b><span>${ed.numbers.wars} war${ed.numbers.wars === 1 ? '' : 's'} running · ${ed.numbers.booms} boom economies · ${ed.numbers.unrest} countries in unrest</span><span>World GDP ${fmtMoney(ed.numbers.worldGdp, true)} · ${fmtPop(ed.numbers.worldPop)} people</span></div>
+      <div class="pcols">${ed.front.stories.map(paperArticle).join('') || '<p>No world stories this year.</p>'}</div>
+    </div>`;
+  } else if (page === 1) {
+    body = `<div class="pfront">
+      <div class="pheadline"><div class="pkicker">BUSINESS · MARKETS</div><h2>Markets ${ed.business.idxChg >= 0 ? 'rise' : 'fall'} ${fmtPct(ed.business.idxChg)}</h2></div>
+      <div class="pcols">${ed.business.stories.map(paperArticle).join('')}</div>
+      <div class="ptip"><b>★ THE TIP SHEET — A HINT, NOT A PROMISE</b><p>${ed.business.tip ? `Keep an eye on <b>${esc(ed.business.tip.name)} (${esc(ed.business.tip.sym)})</b> — up ${fmtPct(ed.business.tip.chg)} this year, rated ${ed.business.tip.rating.toFixed(1)} stars in ${esc(ed.business.tip.sector)}. The paper likes the look of it. Do your own homework before you buy.` : 'No tip this year.'}</p></div>
+      <h3 class="psec">TOP RISERS</h3><div class="ptable">${ed.business.gainers.map(g => `<div class="prow"><span>${esc(g.name)} (${esc(g.sym)})</span><b class="good">${fmtPct(g.chg)}</b></div>`).join('')}</div>
+      <h3 class="psec">TOP FALLERS</h3><div class="ptable">${ed.business.losers.map(g => `<div class="prow"><span>${esc(g.name)} (${esc(g.sym)})</span><b class="bad">${fmtPct(g.chg)}</b></div>`).join('')}</div>
+    </div>`;
+  } else if (page === 2) {
+    body = `<div class="pfront">
+      <div class="pheadline"><div class="pkicker">SPORT · EVERY LEAGUE</div><h2>Champions crowned around the world</h2><p class="pdrop">${esc(ed.sports.story)}</p></div>
+      <div class="psportgrid">${ed.sports.leagues.map(s => `<div class="pscore"><b>${esc(s.l)}</b><div class="pscore-team">${esc(s.champ)}</div><div class="pscore-line">beat ${esc(s.runner)} · ${esc(s.score)}</div><div class="psmall">MVP: ${esc(s.mvp)}</div></div>`).join('')}</div>
+      <p class="psmall">NFL · NBA · NHL · WNBA · MLB · KBO · NPB · CPBL — simulated seasons in this world, not real-world results.</p>
     </div>`;
   } else {
-    const list = S.news.slice((page - 1) * 6, page * 6);
-    body = `<div class="pcols">${list.map(paperArticle).join('') || '<p>No more stories in this edition.</p>'}</div>`;
+    body = `<div class="pfront">
+      <div class="pheadline"><div class="pkicker">THE NUMBERS</div><h2>The world, by the numbers</h2></div>
+      <div class="pbox"><b>THE BIG PICTURE</b><span>World GDP ${fmtMoney(ed.numbers.worldGdp, true)}</span><span>World population ${fmtPop(ed.numbers.worldPop)}</span><span>Average stability ${Math.round(ed.numbers.avgStab)}/100</span><span>World Index ${ed.numbers.idx.toFixed(0)} (${fmtPct(ed.numbers.idxChg)})</span><span>Wars ${ed.numbers.wars} · Booms ${ed.numbers.booms} · Unrest ${ed.numbers.unrest}</span></div>
+      <h3 class="psec">FASTEST GROWING COUNTRIES</h3><div class="ptable">${ed.numbers.topGrowth.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)} · ${fmtMoney(g.gdp * 1e6, true)}</b></div>`).join('')}</div>
+      <h3 class="psec">SLOWEST RISERS</h3><div class="ptable">${ed.numbers.slowest.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)}</b></div>`).join('')}</div>
+      <p class="psmall">News archive: only this edition and last year's edition are kept. Older editions rotate out on their own.</p>
+    </div>`;
   }
+  const edLabel = paperEdIdx === 0 ? `THIS YEAR · ${ed.year}` : `LAST YEAR · ${ed.year}`;
   return `<div class="paper-top"><button class="wback paper-close" data-a="closePaper" aria-label="Close newspaper">${IC.close}</button>
-    <div class="masthead"><h1>The Ticker Times</h1><div class="medition">WORLD EDITION · ${fmtDate(S.day)} · Day ${S.day}</div></div><div class="paper-spacer"></div></div>
+    <div class="masthead"><div class="mrule"></div><h1>The Ticker Times</h1><div class="medition">WORLD EDITION · PRICE TWO CENTS · ${ed.date.toUpperCase()}</div><div class="mrule"></div></div><div class="paper-spacer"></div></div>
+  ${page === 0 ? paperTicker(ed) : ''}
   <div class="paper-body">${body}</div>
-  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${total}</span><button class="btn" data-a="paperNext" ${page >= total - 1 ? 'disabled' : ''}>NEXT →</button></div>
-  <button class="btn wide paper-return" data-a="closePaper">RETURN TO MAP</button>`;
+  <div class="pedition"><button class="btn" data-a="paperEdPrev" ${paperEdIdx >= S.papers.length - 1 ? 'disabled' : ''}>← LAST EDITION</button><span class="ppage">${edLabel}</span><button class="btn" data-a="paperEdNext" ${paperEdIdx === 0 ? 'disabled' : ''}>THIS EDITION →</button></div>
+  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of 4 · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= 3 ? 'disabled' : ''}>NEXT →</button></div>
+  <button class="btn wide paper-return" data-a="closePaper">✕ CLOSE — RETURN TO MAP</button>`;
 }
-function openPaper() { closeModal(); closePanel(); if (watchKey) closeWatch(); paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
+function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
 function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
-function flipPaper(d) { paperPage = Math.max(0, Math.min(paperPages() - 1, paperPage + d)); $('paper').innerHTML = paperHTML(); }
+function flipPaper(d) { paperPage = Math.max(0, Math.min(3, paperPage + d)); $('paper').innerHTML = paperHTML(); }
+function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx + d)); paperPage = 0; $('paper').innerHTML = paperHTML(); }
 
 // ---------- boot / onboarding ----------
 async function boot() {
@@ -1022,6 +1138,8 @@ const A = {
   closePaper: () => closePaper(),
   paperPrev: () => flipPaper(-1),
   paperNext: () => flipPaper(1),
+  paperEdPrev: () => flipEdition(1),
+  paperEdNext: () => flipEdition(-1),
   scrim: (x, el, e) => { if (e.target === el && UI.modal === 'sheet') closeModal(); },
   closeModal: () => { closeModal(); if (S && S.over) gameOver(); },
   speed: x => { S.speed = +x; renderHUD(); },
@@ -1117,7 +1235,7 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
-  ageUp: () => { ageUp(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
+  ageUp: () => { ageUp(); pushPaperEdition(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); openPaper(0); },
   ageDown: () => {
     if (!canAgeDown()) return toast('No earlier year to go back to in this session. Age up first, then age down.', 'bad');
     if (window.AD_TIMER) clearInterval(window.AD_TIMER);
