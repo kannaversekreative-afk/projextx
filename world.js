@@ -53,6 +53,33 @@ function buildWorld() {
   // Ship routing on a 2-degree grid (water if any 1-degree sub-cell is water).
   W.ww = wd.w / 2; W.wh = wd.h / 2; W.water = new Uint8Array(W.ww * W.wh);
   for (let y = 0; y < W.wh; y++) for (let x = 0; x < W.ww; x++) W.water[y * W.ww + x] = fine[(2 * y) * wd.w + 2 * x] | fine[(2 * y) * wd.w + 2 * x + 1] | fine[(2 * y + 1) * wd.w + 2 * x] | fine[(2 * y + 1) * wd.w + 2 * x + 1];
+  // Flood-fill water components ("basins") once at build time, using the
+  // same 8-neighbour, no-wrap adjacency seaPath() uses, so any two cells in
+  // one basin are guaranteed reachable from each other by seaPath(). This
+  // keeps boats out of enclosed seas (Caspian, Black Sea, Baltic, ...) from
+  // rolling destinations in the open ocean that no sea path can reach: a
+  // boat that rolls only inside its own basin always gets a real route.
+  W.basin = new Int32Array(W.ww * W.wh).fill(-1);
+  W.basinSize = [];
+  {
+    const G = W.ww, H = W.wh, stack = [];
+    for (let c = 0; c < G * H; c++) {
+      if (!W.water[c] || W.basin[c] >= 0) continue;
+      const id = W.basinSize.length; let size = 0;
+      W.basin[c] = id; stack.push(c);
+      while (stack.length) {
+        const cur = stack.pop(); size++;
+        const x = cur % G, y = (cur / G) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= H) continue;
+          const nc = ny * G + nx; if (W.water[nc] && W.basin[nc] < 0) { W.basin[nc] = id; stack.push(nc); }
+        }
+      }
+      W.basinSize.push(size);
+    }
+  }
+  W.basinCount = W.basinSize.length;
   return W;
 }
 
