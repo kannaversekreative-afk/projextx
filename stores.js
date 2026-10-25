@@ -56,6 +56,7 @@ function buildStore(cityId, lot, type) {
   const def = STORE_TYPES[type || 'coffee']; if (!def) return 'Unknown store type.';
   const lotObj = typeof lot === 'object' ? lot : (cityLots(cityId) || []).find(l => l.t === lot);
   if (!lotObj || lotObj.kind !== 'lease') return 'That lot is not for lease anymore.';
+  if (S.stores.some(s => s.cityId === cityId && s.lotT === lotObj.t)) return 'That lot already has a store.';
   const rent = lotObj.rent || 2000, deposit = Math.round(rent * 10), buildCost = 25000 + rent * 4;
   const total = deposit + buildCost;
   if (S.cash < total) return `Needs ${fmtMoney(total, true)} (deposit ${fmtMoney(deposit, true)} + fit-out ${fmtMoney(buildCost, true)}).`;

@@ -16,6 +16,7 @@ function ensureBoard(e) { if (!e) return []; if (!Array.isArray(e.board)) e.boar
 function boardFull(e) { const b = ensureBoard(e); return BOARD_ROLES.every(r => b.some(x => x.role === r.role)); }
 function boardWeeklyCost(e) { return ensureBoard(e).reduce((a, x) => a + (x.salary || 0) / 52, 0); }
 function hireBoard(e, role) {
+  if (!e) return 'Business or team not found.';
   const def = BOARD_ROLES.find(r => r.role === role);
   if (!def) return 'Unknown board role.';
   const b = ensureBoard(e);
@@ -26,6 +27,7 @@ function hireBoard(e, role) {
   return null;
 }
 function fireBoard(e, role) {
+  if (!e) return 'Business or team not found.';
   const b = ensureBoard(e); const i = b.findIndex(x => x.role === role);
   if (i < 0) return 'That seat is empty.';
   b.splice(i, 1); return null;
