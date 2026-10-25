@@ -389,6 +389,37 @@ function tickWatch() {
   const ic = document.getElementById('watch-prog-icon'); if (ic) ic.style.left = pct + '%';
 }
 
+// ---------- newspaper: flip through the world news ----------
+let paperPage = 0;
+function paperPages() { return Math.max(1, 1 + Math.ceil((S.news.length || 0) / 6)); }
+function paperArticle(n) {
+  return `<article class="part"><div class="pkicker">${esc(n.cat.toUpperCase())} · ${fmtDate(n.d)}</div><h3>${esc(n.text)}</h3>${n.a3 ? `<div class="psmall">${esc(cname(n.a3))}</div>` : ''}</article>`;
+}
+function paperHTML() {
+  const total = paperPages(), page = Math.min(paperPage, total - 1); paperPage = page;
+  let body = '';
+  if (page === 0) {
+    const top = S.news[0], second = S.news.slice(1, 3);
+    body = `<div class="pfront">
+      ${top ? `<div class="pheadline"><div class="pkicker">TOP STORY · ${fmtDate(top.d)}</div><h2>${esc(top.text)}</h2></div>` : '<p>No news yet.</p>'}
+      <div class="pbox"><b>MARKETS</b><span>World Index ${S.idx.v.toFixed(0)}</span><span>Net worth ${fmtMoney(netWorth(), true)}</span><span>Cash ${fmtMoney(S.cash, true)}</span><span>Your nation ${fmtPop(nationPop())} people (${fmtPct(popGrowth())})</span></div>
+      ${S.wars.length ? `<div class="pbox"><b>WARS NOW</b>${S.wars.map(w => `<span>${esc(cname(w.a))} vs ${esc(cname(w.b))} — front ${Math.round(w.front)}%</span>`).join('')}</div>` : ''}
+      <div class="pcols">${second.map(paperArticle).join('')}</div>
+    </div>`;
+  } else {
+    const list = S.news.slice((page - 1) * 6, page * 6);
+    body = `<div class="pcols">${list.map(paperArticle).join('') || '<p>No more stories in this edition.</p>'}</div>`;
+  }
+  return `<div class="paper-top"><button class="wback paper-close" data-a="closePaper" aria-label="Close newspaper">${IC.close}</button>
+    <div class="masthead"><h1>The Ticker Times</h1><div class="medition">WORLD EDITION · ${fmtDate(S.day)} · Day ${S.day}</div></div><div class="paper-spacer"></div></div>
+  <div class="paper-body">${body}</div>
+  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${total}</span><button class="btn" data-a="paperNext" ${page >= total - 1 ? 'disabled' : ''}>NEXT →</button></div>
+  <button class="btn wide paper-return" data-a="closePaper">RETURN TO MAP</button>`;
+}
+function openPaper() { closeModal(); closePanel(); if (watchKey) closeWatch(); paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
+function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
+function flipPaper(d) { paperPage = Math.max(0, Math.min(paperPages() - 1, paperPage + d)); $('paper').innerHTML = paperHTML(); }
+
 // ---------- boot / onboarding ----------
 async function boot() {
   W = buildWorld();
@@ -398,6 +429,10 @@ async function boot() {
   MapView.on('frame', loop);
   CityView.init($('cityview'), onPin);
   document.addEventListener('click', onClick);
+  // Swipe a newspaper page left or right to flip it, like turning a page.
+  let paperX = null;
+  $('paper').addEventListener('pointerdown', e => { paperX = e.clientX; });
+  $('paper').addEventListener('pointerup', e => { if (paperX == null) return; const dx = e.clientX - paperX; paperX = null; if (Math.abs(dx) > 70 && $('paper').classList.contains('open')) flipPaper(dx < 0 ? 1 : -1); });
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
   addEventListener('pagehide', save);
@@ -839,13 +874,13 @@ PANELS.help = () => {
 };
 function moreSheet() {
   const items = [
-    ['inbox', '✉️', 'Messages'], ['markets', '📈', 'Markets'], ['portfolio', '💼', 'Portfolio'],
-    ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['military', '🪖', 'Military'],
-    ['company', '🏢', 'My Company'], ['estate', '🏠', 'My Estate'], ['goals', '🎯', 'Daily goals'],
-    ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'], ['leaderboard', '🏆', 'Leaderboard'],
-    ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
+    ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
+    ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
+    ['military', '🪖', 'Military'], ['company', '🏢', 'My Company'], ['estate', '🏠', 'My Estate'],
+    ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
+    ['leaderboard', '🏆', 'Leaderboard'], ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
-  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="panel" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
+  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
 
 // ---------- actions ----------
@@ -876,6 +911,10 @@ const A = {
   followVehicle: x => { const vd = MapView.vehicle(x); closeModal(); if (vd) { MapView.flyToXY(vd.x, vd.y, 3); toast(`Following ${vTripId(vd)}`); } },
   vehicleCompany: x => openPanel('stock', { a3: x }),
   closeWatch: () => closeWatch(),
+  paper: () => openPaper(),
+  closePaper: () => closePaper(),
+  paperPrev: () => flipPaper(-1),
+  paperNext: () => flipPaper(1),
   scrim: (x, el, e) => { if (e.target === el && UI.modal === 'sheet') closeModal(); },
   closeModal: () => { closeModal(); if (S && S.over) gameOver(); },
   speed: x => { S.speed = +x; renderHUD(); },
