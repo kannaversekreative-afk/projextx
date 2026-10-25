@@ -234,6 +234,29 @@ const CityView = (() => {
     });
     const L = layout.landmark; objs.push([L.x + L.y + 4.6, L.x + 2, () => { roofs.capitol = capitol(c); }]);
     objs.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(o => o[2]());
+    // Stadium on the city map, at the southern edge like a waterfront
+    // ballpark: an oval bowl with a green field, stands and floodlights.
+    // Tapping it opens the team that plays there.
+    try {
+      const team = (typeof teamForCity === 'function') ? teamForCity(city.id) : null;
+      if (team) {
+        const parks = T.filter(t => t.kind === 'park');
+        const tile = parks.length ? parks.reduce((a, b) => (b.x + b.y > a.x + a.y ? b : a)) : T.find(t => t.kind === 'lot');
+        if (tile) {
+          const [cx, cy] = P(tile.x + 0.5, tile.y + 0.5);
+          const col = team.color || '#2f7cf6';
+          c.fillStyle = 'rgba(40,50,40,0.18)'; c.beginPath(); c.ellipse(cx + 4, cy + 6, TW * 1.05, TH * 1.05, 0, 0, 7); c.fill();
+          c.fillStyle = col; c.beginPath(); c.ellipse(cx, cy, TW * 1.0, TH * 1.0, 0, 0, 7); c.fill();
+          c.fillStyle = '#e8eaee'; c.beginPath(); c.ellipse(cx, cy, TW * 0.82, TH * 0.82, 0, 0, 7); c.fill();
+          c.fillStyle = '#3e9b4f'; c.beginPath(); c.ellipse(cx, cy, TW * 0.62, TH * 0.62, 0, 0, 7); c.fill();
+          c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 1.2; c.beginPath(); c.ellipse(cx, cy, TW * 0.30, TH * 0.30, 0, 0, 7); c.stroke();
+          c.beginPath(); c.moveTo(cx - TW * 0.62, cy); c.lineTo(cx + TW * 0.62, cy); c.stroke();
+          c.fillStyle = '#ffffff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.fillText(team.mascot || 'TEAM', cx, cy - TH * 0.85);
+          roofs.stadium = [cx, cy - TH * 1.1];
+          roofs.stadiumTeam = team;
+        }
+      }
+    } catch (e) {}
   }
 
   function pins() {
@@ -250,6 +273,7 @@ const CityView = (() => {
       else if (l.kind === 'sale' && show('sale')) add(l.t, 'pin-sale', '<span class="bld">\u{1F3E2}</span><span class="tag">FOR SALE</span>', () => onPin({ type: 'sale', lot: l }));
     });
     if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('div'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} Capitol</span>`; layer.appendChild(p); }
+    if (roofs.stadium && roofs.stadiumTeam) { const r = roofs.stadium, tm = roofs.stadiumTeam; const p = document.createElement('button'); p.className = 'pin pin-stadium'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = '<span class="logo">🏟️</span>'; p.title = tm.name; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'stadium', team: tm }); }); layer.appendChild(p); }
   }
 
   function apply() {

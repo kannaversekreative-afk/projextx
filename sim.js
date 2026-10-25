@@ -130,6 +130,8 @@ function newGame(opt) {
   } else {
     s.holdings[opt.home] = { qty: home.shares, cost: 0 };
   }
+  if (typeof ensureSports === 'function') { try { ensureSports(); } catch (e) {} }
+  if (typeof ensureStores === 'function') { try { ensureStores(); } catch (e) {} }
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
   s.stats.startNet = netWorth();
   s.nh.w.push([0, s.stats.startNet, 1000]); s.nh.m.push([0, s.stats.startNet, 1000]);

@@ -72,6 +72,9 @@ async function idbDel(key) {
 }
 function migrateSave(s) {
   if (!s || !s.co) return s;
+  if (!Array.isArray(s.stores)) s.stores = [];
+  if (!Array.isArray(s.loans)) s.loans = [];
+  if (!s.sports) s.sports = null;
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
@@ -787,6 +790,7 @@ function renderPopup() {
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
       <h5>Businesses here</h5>
       ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('') || `<p class="muted small">No businesses here yet. ${esc(co.name)} is this country's main business — see it in Markets if you want its stock.</p>`}
+      ${(() => { try { const tm = teamForCity(c.id); return tm ? `<div class="kv"><span>🏟️ ${esc(tm.stadium.name)} · ${esc(tm.name)}</span><button class="btn" data-a="openStadium" data-x="${tm.id}">OPEN TEAM</button></div>` : ''; } catch (e) { return ''; } })()}
       <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
       ${W.byA3[c.a3].capital === c.id && c.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${c.a3}">INVADE</button></div>` : ''}
     </div>`;
@@ -804,21 +808,32 @@ function renderPopup() {
     </div>`;
   } else if (p.type === 'pin') {
     const lot = p.lot, city = CityView.city, co = S.co[city.a3];
-    if (p.pin.type === 'loc') {
+    if (p.pin.type === 'stadium') {
+      const tm = p.pin.team;
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>🏟️ ${esc(tm.stadium.name)}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">${esc(tm.name)} · ${tm.wins}W - ${tm.losses}L · ${tm.stadium.capacity.toLocaleString()} seats · Value ${fmtMoney(tm.value, true)}</p>
+        <button class="btn3d orange wide" data-a="openStadium" data-x="${tm.id}">OPEN TEAM</button></div>`;
+    } else if (p.pin.type === 'loc') {
       const l = p.pin.loc;
       $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>${SECTORS[co.sector].loc.name}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
         <div class="stats3 box"><div><span>Profit / week</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}</b></div><div><span>Customers</span><b>${l.cust}</b></div><div><span>Satisfaction</span><b>${l.sat.toFixed(1)}★</b></div></div>
         <p class="muted small">Staff ${l.staff} · Rent ${fmtMoney(l.rent)}/week · Traffic ${l.traffic}</p>
         <button class="btn" data-a="closeLoc" data-x="${co.a3}|${l.id}">CLOSE LOCATION</button></div>`;
     } else if (p.pin.type === 'lease') {
-      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>For lease</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
-        <p class="muted small">Traffic ${lot.traffic} · Rent ${fmtMoney(lotRent(co, lot))}/week · Fit-out ${fmtMoney(buildCost(co, 1))}</p>
-        <p class="muted small">Only companies you control can lease here. ${controlled(city.a3) ? '' : 'Buy a majority of ' + esc(co.name) + ' stock first, or use your home company in its own capital.'}</p>
-        <div class="row"><button class="btn3d orange flex" data-a="lease" data-x="${lot.t}|1">LEASE · BASIC</button><button class="btn flex" data-a="lease" data-x="${lot.t}|2">LEASE · PREMIUM</button></div></div>`;
+      const rentW = lotRent(co, lot), deposit = Math.round(rentW * 10);
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Property for lease</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">${esc(city.name)} · Foot traffic ${lot.traffic.toLocaleString()} per week</p>
+        <div class="stats3 box"><div><span>Weekly rent</span><b>${fmtMoney(rentW)}/week</b></div><div><span>Security deposit</span><b>${fmtMoney(deposit)} upfront</b></div><div><span>Foot traffic</span><b>${lot.traffic.toLocaleString()}/week</b></div></div>
+        <button class="btn3d orange wide" data-a="buildStoreOpen" data-x="${city.id}|${lot.t}">BUILD STORE</button>
+        <p class="muted small">A store pays the deposit and a fit-out on top of rent, then earns every week from customers. Or lease it for a company you control:</p>
+        <div class="row"><button class="btn flex" data-a="lease" data-x="${lot.t}|1">LEASE · BASIC</button><button class="btn flex" data-a="lease" data-x="${lot.t}|2">LEASE · PREMIUM</button></div></div>`;
     } else if (p.pin.type === 'sale') {
-      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Building for sale</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
-        <div class="stats3 box"><div><span>Price</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Units</span><b>${lot.units}</b></div><div><span>Rent / unit</span><b>${fmtMoney(lot.mrent)}</b></div></div>
-        <button class="btn3d orange wide" data-a="buyBld" data-x="${lot.t}">BUY BUILDING</button></div>`;
+      const wkRent = Math.round(lot.units * lot.mrent * 0.622 / 4.33), roi = lot.price ? wkRent * 52 / lot.price : 0;
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Real estate for sale</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">${esc(city.name)} · ${lot.units} units · Condition ${Math.round(lot.cond * 100)}%</p>
+        <div class="stats3 box"><div><span>Estimated value</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Weekly rent income</span><b>${fmtMoney(wkRent)}</b></div><div><span>ROI</span><b>${(roi * 100).toFixed(2)}%</b></div></div>
+        <div class="kv"><span>Annual rent / unit</span><b>${fmtMoney(lot.mrent * 12)}</b></div><div class="kv"><span>Occupancy</span><b>62.2%</b></div><div class="kv"><span>Asking price</span><b>${fmtMoney(Math.round(lot.price * 1.17), true)}</b></div>
+        <button class="btn3d orange wide" data-a="buyBld" data-x="${lot.t}">OFFER PURCHASE</button></div>`;
     } else if (p.pin.type === 'prop') {
       const pr = S.props.find(x => x.city === city.id && x.t === lot.t);
       $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Your building</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
@@ -1204,6 +1219,153 @@ PANELS.settings = () => {
     <button class="btn" data-a="exportSave">COPY SAVE TO CLIPBOARD</button>
     <button class="btn" data-a="restart">RESTART GAME</button>`);
 };
+// ---------- sports, stores, bank, and the new Markets format ----------
+function sportStars(p) { return '★'.repeat(Math.floor(p.stars)) + (p.stars % 1 ? '½' : ''); }
+function sportStatLine(lgId, p) {
+  const s = p.stats || {};
+  if (lgId === 'base') return p.pos.match(/SP|RP|CP/) ? `W ${s.W || 0} L ${s.L || 0} SV ${s.SV || 0} SO ${s.SO || 0} ERA ${s.ERA != null ? s.ERA : '-'}` : `.${String(Math.round((s.AVG || 0) * 1000))} HR ${s.HR || 0} RBI ${s.RBI || 0} SB ${s.SB || 0}`;
+  return `PTS ${s.PTS || 0} REB ${s.REB || 0} AST ${s.AST || 0}`;
+}
+PANELS.sports = () => {
+  ensureSports();
+  const teamId = UI.stack[0];
+  if (teamId) {
+    const t = sportTeam(teamId); if (!t) return panelShell('Sports', '', '<p class="muted">Team not found.</p>');
+    const lg = sportLeague(t.league), tab = UI.sportTab || 'franchise', mine = t.owner === 'you';
+    const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
+    const place = sorted.findIndex(x => x.id === t.id) + 1;
+    const tabs = ['franchise', 'uniform', 'players', 'trade', 'finance', 'draft'];
+    const tabBtns = tabs.map(x => `<button class="chip ${tab === x ? 'on' : ''}" data-a="sportTab" data-x="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('');
+    let body = `<div class="row wrap">${tabBtns}</div>`;
+    if (tab === 'franchise') {
+      const fin = t.finance || sportFinance(t);
+      body += `<div class="card in"><div class="row between"><div><b>${esc(t.name)}</b><div class="muted small">${lg.name} · ${place <= 5 ? 'East' : 'West'} Division · Season ${lg.seasonYear}</div></div><span class="avatar" style="background:${t.color}">${esc(t.logo)}</span></div>
+      <div class="stats3 box"><div><span>Record</span><b>${t.wins}W - ${t.losses}L</b></div><div><span>Place</span><b>${place} / ${lg.teams.length}</b></div><div><span>Value</span><b>${fmtMoney(t.value, true)}</b></div></div>
+      <p class="muted small">${esc(t.name)} is a professional ${lg.short.toLowerCase()} team in ${esc(t.cityName)}. Stadium: ${esc(t.stadium.name)}, ${t.stadium.capacity.toLocaleString()} seats, level ${t.stadium.level}. Owner: ${mine ? 'You' : 'Independent club'}.</p>
+      <h4>History</h4>${t.history.map(h => `<div class="kv"><span>${h.year} ${h.champion ? '🏆 Champion' : 'Regular season'}</span><b>${h.place}${h.place === 1 ? 'st' : h.place === 2 ? 'nd' : h.place === 3 ? 'rd' : 'th'} · ${h.wins}-${h.losses}</b></div>`).join('') || '<p class="muted small">No seasons played yet. Age a year to play a season.</p>'}
+      ${mine ? `<button class="btn" data-a="stadiumUp" data-x="${t.id}">UPGRADE STADIUM ${fmtMoney(40000000 * t.stadium.level, true)}</button>` : `<button class="btn3d orange wide" data-a="buyTeam" data-x="${t.id}">OFFER PURCHASE · ${fmtMoney(t.value, true)}</button>`}</div>`;
+    } else if (tab === 'uniform') {
+      body += `<div class="card in"><p class="muted small">The franchise owner can change the team name and logo.</p>
+      <label class="muted small">TEAM NAME</label><input id="sportName" class="search" value="${esc(t.name)}">
+      <label class="muted small">TEAM LOGO</label><div class="row wrap">${SPORT_LOGOS.map(l => `<button class="chip ${t.logo === l ? 'on' : ''}" data-a="sportLogo" data-x="${t.id}|${l}">${l}</button>`).join('')}</div>
+      <label class="muted small">COLOURS</label><div class="row wrap">${SPORT_COLORS.map(c => `<button class="chip ${t.color === c ? 'on' : ''}" style="background:${c};color:#fff" data-a="sportColor" data-x="${t.id}|${c}">■</button>`).join('')}</div>
+      ${mine ? `<button class="btn3d orange wide" data-a="sportRename" data-x="${t.id}">SAVE NAME</button>` : '<p class="muted small">Buy this team to change its name and logo.</p>'}</div>`;
+    } else if (tab === 'players') {
+      const stars = [...t.players].sort((a, b) => b.rating - a.rating).slice(0, 3);
+      const payroll = t.players.reduce((a, p) => a + p.salary, 0);
+      body += `<div class="card in"><h4>STAR PLAYERS · ${fmtMoney(payroll, true)} payroll</h4>${stars.map(p => `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.pos} · Age ${p.age} · ${sportStars(p)}</span><b>${fmtMoney(p.salary)} until ${yearOf(S.day) + p.yrs}</b></div><p class="muted small">${sportStatLine(t.league, p)}</p>`).join('')}
+      <h4>OTHER PLAYERS</h4>${t.players.filter(p => !stars.includes(p)).map(p => `<div class="kv"><span>${esc(p.name)} · ${p.pos} · Age ${p.age} · ${sportStars(p)}</span><b>${fmtMoney(p.salary)}</b></div><p class="muted small">${sportStatLine(t.league, p)}</p>`).join('') || '<p class="muted small">No other players.</p>'}</div>`;
+    } else if (tab === 'trade') {
+      const fa = lg.freeAgents.slice(0, 30);
+      body += `<div class="card in"><h4>Available players</h4><p class="muted small">${fa.length} players currently available.</p>
+      ${fa.map(p => `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.pos} · Age ${p.age} · ${sportStars(p)}</span><b>${fmtMoney(p.salary * p.yrs, true)} / ${p.yrs} years</b></div><div class="row"><button class="btn flex" data-a="signFA" data-x="${t.id}|${p.id}">SIGN · ${fmtMoney(Math.round(p.salary * p.yrs * 0.10), true)} bonus</button></div>`).join('') || '<p class="muted small">No free agents right now.</p>'}
+      <h4>Trade with another club</h4><p class="muted small">Pick one of your players, then pick a player from another club. The other club accepts if the ratings are close, or if you add enough cash.</p>
+      <label class="muted small">YOUR PLAYER</label><div class="row wrap">${t.players.map(p => `<button class="chip ${UI.tradeOut === p.id ? 'on' : ''}" data-a="tradeOut" data-x="${p.id}">${esc(p.name)} ${p.rating}</button>`).join('')}</div>
+      <label class="muted small">THEIR PLAYER</label><div class="row wrap">${lg.teams.filter(x => x.id !== t.id).flatMap(x => x.players.slice(0, 4).map(p => `<button class="chip ${UI.tradeIn === p.id ? 'on' : ''}" data-a="tradeIn" data-x="${x.id}|${p.id}">${esc(x.name)}: ${esc(p.name)} ${p.rating}</button>`)).join('')}</div>
+      <label class="muted small">CASH OFFER</label><input id="tradeCash" class="search" type="number" value="0">
+      ${mine && UI.tradeOut && UI.tradeIn ? `<button class="btn3d orange wide" data-a="doSportTrade" data-x="${t.id}">MAKE TRADE</button>` : '<p class="muted small">Select both players to trade.</p>'}</div>`;
+    } else if (tab === 'finance') {
+      const fin = t.finance || sportFinance(t), finTab = UI.sportFin || 'income';
+      body += `<div class="card in"><div class="seg"><button class="${finTab === 'income' ? 'on' : ''}" data-a="sportFin" data-x="income">INCOME</button><button class="${finTab === 'balance' ? 'on' : ''}" data-a="sportFin" data-x="balance">BALANCE SHEET</button></div>
+      ${finTab === 'income' ? `<p class="muted small">Franchise financial reports are available to the public.</p>
+      <div class="kv"><span>Tickets and Concessions</span><b>${fmtMoney(fin.tickets + fin.concessions, true)}</b></div><div class="kv"><span>Broadcasting</span><b>${fmtMoney(fin.broadcast, true)}</b></div><div class="kv"><span>Sponsors</span><b>${fmtMoney(fin.sponsors, true)}</b></div><div class="kv"><span>Total Revenues</span><b>${fmtMoney(fin.revenue, true)}</b></div>
+      <div class="kv"><span>Player Payrolls</span><b>${fmtMoney(fin.payroll, true)}</b></div><div class="kv"><span>Administrative Cost</span><b>${fmtMoney(fin.admin, true)}</b></div><div class="kv"><span>Total Expenses</span><b>${fmtMoney(fin.payroll + fin.admin, true)}</b></div>
+      <div class="kv"><span>Net Income</span><b class="${upCls(fin.net)}">${fmtMoney(fin.net, true)}</b></div>` : `<div class="kv"><span>Franchise value</span><b>${fmtMoney(t.value, true)}</b></div><div class="kv"><span>Stadium value</span><b>${fmtMoney(t.stadium.capacity * 8000, true)}</b></div><div class="kv"><span>Championships</span><b>${t.champions}</b></div><div class="kv"><span>Profit streak</span><b>${t.profitStreak || 0} seasons</b></div>`}
+      <h4>IPO</h4><p class="muted small">No stock at first. When you want it, take the team public: sell 30% to the public, keep 70%, and trade its shares here afterwards.</p>
+      ${t.ipo ? `<div class="kv"><span>Share price</span><b>${fmtMoney(t.ipo.price)}</b></div><div class="kv"><span>Your shares</span><b>${t.ipo.yourShares.toLocaleString()}</b></div><div class="kv"><span>Public shares</span><b>${t.ipo.publicShares.toLocaleString()}</b></div>
+      <div class="row"><input id="ipoQty" class="qty" type="number" value="1000" min="1"><button class="btn flex" data-a="ipoBuy" data-x="${t.id}">BUY SHARES</button><button class="btn flex" data-a="ipoSell" data-x="${t.id}">SELL SHARES</button></div>` : (sportIpoEligible(t) ? `<button class="btn3d orange wide" data-a="sportIpo" data-x="${t.id}">TAKE PUBLIC · IPO</button>` : `<p class="muted small">IPO-ready when: you own it, value $200M+, and 2 profitable seasons in a row. Current: value ${fmtMoney(t.value, true)}, streak ${t.profitStreak || 0}.</p>`)}</div>`;
+    } else if (tab === 'draft') {
+      body += `<div class="card in"><h4>Draft class ${lg.draftYear || yearOf(S.day)}</h4><p class="muted small">Worst team picks first. Rookies sign for 4 years at a rookie salary.</p>
+      ${lg.draftClass.map(p => `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.pos} · Age ${p.age} · ${sportStars(p)} (${p.rating})</span><b>${mine ? '' : ''}${fmtMoney(sportSalary(p.rating))}/yr</b></div>${mine ? `<button class="btn" data-a="draftPick" data-x="${t.id}|${p.id}">DRAFT</button>` : ''}`).join('') || '<p class="muted small">No draft class yet. Age a year to run a season and generate the next class.</p>'}
+      ${mine ? '' : '<p class="muted small">Buy a team to draft players.</p>'}</div>`;
+    }
+    return panelShell(`${t.name}`, `${lg.name} · ${esc(t.cityName)} · ${mine ? 'Your team' : 'Click a tab'}`, body);
+  }
+  const lgId = S.sports.tab || 'base', lg = sportLeague(lgId);
+  const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
+  return panelShell('Sports', 'Leagues are businesses. Buy a team, run it, and IPO it only when you want to.',
+    `<div class="row wrap">${SPORT_LEAGUES.map(l => `<button class="chip ${lgId === l.id ? 'on' : ''}" data-a="sportLeague" data-x="${l.id}">${l.icon} ${l.name}</button>`).join('')}</div>
+    <p class="muted small">${lg.champion ? `Champion: ${esc(sportTeam(lg.champion).name)}` : 'No champion yet — age a year to play a season.'} · Season ${lg.seasonYear || yearOf(S.day)}</p>
+    <div class="list">${sorted.map((t, i) => `<button class="srow" data-a="sportTeam" data-x="${t.id}"><span class="avatar" style="background:${t.color}">${esc(t.logo)}</span><span class="sname"><b>${esc(t.name)}</b><small>${i + 1}. · ${t.wins}W - ${t.losses}L · ${esc(t.stadium.name)}</small></span><span class="sprice"><b>${fmtMoney(t.value, true)}</b><small>${t.owner === 'you' ? 'Yours' : 'OFFER PURCHASE'}</small></span></button>`).join('')}</div>
+    <p class="muted small">Tap a team for Franchise, Uniform, Players, Trade, Finance and Draft. Tap its stadium on the city map to open it there too.</p>`);
+};
+PANELS.stores = () => {
+  ensureStores();
+  const storeId = UI.stack[0];
+  if (storeId) {
+    const st = storeById(storeId); if (!st) return panelShell('Stores', '', '<p class="muted">Store not found.</p>');
+    const tab = UI.storeTab || 'service', def = STORE_TYPES[st.type] || STORE_TYPES.coffee, share = storeMarketShare(st);
+    const tabs = ['service', 'product', 'marketing', 'finance'];
+    let body = `<div class="row wrap">${tabs.map(x => `<button class="chip ${tab === x ? 'on' : ''}" data-a="storeTab" data-x="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>`;
+    if (tab === 'service') {
+      const m = st.manager, bar = v => `<div style="background:#eef5ff;border-radius:6px;height:10px;overflow:hidden"><div style="width:${v}%;height:100%;background:#2f7cf6"></div></div>`;
+      body += `<div class="card in"><h4>Manager · ${esc(m.name)}</h4><p class="muted small">Manager since ${m.since} · Staff ${st.staff}</p>
+      <p class="muted small">People ${m.people}</p>${bar(m.people)}<p class="muted small">Product ${m.product}</p>${bar(m.product)}<p class="muted small">Marketing ${m.marketing}</p>${bar(m.marketing)}<p class="muted small">Ethics ${m.ethics}</p>${bar(m.ethics)}
+      <div class="row"><button class="btn" data-a="mgrSalary" data-x="${st.id}|-5000">− $5K</button><b>${fmtMoney(m.salary)}/yr</b><button class="btn" data-a="mgrSalary" data-x="${st.id}|5000">+ $5K</button></div>
+      <h4>MANAGER DELEGATION</h4>${Object.entries({ staffing: 'Delegate staffing and salary', products: 'Delegate products and pricing', marketing: 'Delegate store marketing', troubles: 'Delegate store troubles' }).map(([k, label]) => `<div class="kv"><span>${label}</span><button class="btn" data-a="storeDel" data-x="${st.id}|${k}">${st.delegation[k] ? 'ON' : 'OFF'}</button></div>`).join('')}
+      <button class="btn" data-a="fireMgr" data-x="${st.id}">FIRE MANAGER</button>
+      <h4>CUSTOMER REVIEWS ${st.reviews.overall} ★ · ${st.reviews.count} reviews</h4>
+      <div class="kv"><span>Price</span><b>${st.reviews.price.toFixed(1)}</b></div><div class="kv"><span>Product</span><b>${st.reviews.product.toFixed(1)}</b></div><div class="kv"><span>Service</span><b>${st.reviews.service.toFixed(1)}</b></div><div class="kv"><span>Atmosphere</span><b>${st.reviews.atmosphere.toFixed(1)}</b></div></div>`;
+    } else if (tab === 'product') {
+      body += `<div class="card in">${st.products.map((p, i) => { const d = p.prevSold ? (p.sold - p.prevSold) / Math.max(1, p.prevSold) : 0; return `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.sold.toLocaleString()} sold ${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)}%</span><b>${fmtMoney(p.price)}</b></div><div class="row"><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|-0.5">− $0.50</button><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|0.5">+ $0.50</button></div>`; }).join('')}
+      <h4>COMPANY BLEND</h4><p class="muted small">Your house blend is the ${esc(def.products[0].name)} line above — price it like any other product, or rename the store to name the blend.</p>
+      <label class="muted small">STORE NAME</label><input id="storeName" class="search" value="${esc(st.name)}"><button class="btn" data-a="storeRename" data-x="${st.id}">SAVE NAME</button></div>`;
+    } else if (tab === 'marketing') {
+      body += `<div class="card in"><h4>MARKET SHARES IN AREA</h4>
+      <div style="width:120px;height:120px;border-radius:50%;background:conic-gradient(#2f7cf6 0 ${Math.round(share.mine * 360)}deg, #c9dcf5 ${Math.round(share.mine * 360)}deg 360deg);margin:8px auto"></div>
+      <div class="kv"><span>${esc(st.name)} · ${esc(st.address)}</span><b>${(share.mine * 100).toFixed(1)}%</b></div><div class="kv"><span>Other shops in ${esc(W.cities[st.cityId] ? W.cities[st.cityId].name : '')}</span><b>${(share.ai * 100).toFixed(1)}%</b></div>
+      <h4>MARKETING CAMPAIGNS</h4>${STORE_CAMPAIGNS.map(c => { const on = st.campaigns.some(x => x.id === c.id); return `<div class="kv"><span><b>${c.name}</b> · +${Math.round(c.boost * 100)}% foot traffic · ${fmtMoney(c.cost)}/week</span><button class="btn" data-a="storeCamp" data-x="${st.id}|${c.id}">${on ? 'RUNNING' : 'START'}</button></div>`; }).join('')}</div>`;
+    } else if (tab === 'finance') {
+      const wk = st.weeks[0] || { rev: 0, income: 0 };
+      body += `<div class="card in"><div class="stats3 box"><div><span>Store Revenue</span><b>${fmtMoney(wk.rev, true)}</b></div><div><span>Store Income</span><b class="${upCls(wk.income)}">${fmtMoney(wk.income, true)}</b></div><div><span>Rent / week</span><b>${fmtMoney(st.rent)}</b></div></div>
+      <h4>Last weeks</h4>${st.weeks.slice(0, 5).map((w, i) => `<div class="kv"><span>Week ${st.weeksOpen - i}</span><b>${fmtMoney(w.rev, true)} rev · ${fmtMoney(w.income, true)} income</b></div>`).join('') || '<p class="muted small">No weeks traded yet — weeks run every in-game week.</p>'}
+      <h4>STORE INCOME STATEMENT</h4>${st.products.map(p => `<div class="kv"><span>${esc(p.name)} · ${p.sold.toLocaleString()} sold</span><b>${fmtMoney(p.sold * p.price, true)}</b></div>`).join('')}
+      <div class="kv"><span>Total Revenues</span><b>${fmtMoney(wk.rev, true)}</b></div><div class="kv"><span>Rent + wages + ingredients (this week)</span><b>${fmtMoney(Math.max(0, wk.rev - wk.income), true)}</b></div><div class="kv"><span>Net income</span><b class="${upCls(wk.income)}">${fmtMoney(wk.income, true)}</b></div>
+      <button class="btn" data-a="closeStore" data-x="${st.id}">CLOSE STORE</button></div>`;
+    }
+    return panelShell(`${esc(st.name)}`, `${esc(st.address)} · Rent ${fmtMoney(st.rent)}/week · Foot traffic ${st.footTraffic.toLocaleString()}/week`, body);
+  }
+  return panelShell('Stores', 'Stores you built from a FOR LEASE lot. Tap one to manage it.',
+    `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${(STORE_TYPES[st.type] || STORE_TYPES.coffee).icon}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
+    <p class="muted small">Stores earn every in-game week: customers pay, the store pays rent, wages, ingredients and campaigns, and the net lands in your cash.</p>`);
+};
+PANELS.bank = () => {
+  ensureStores();
+  return panelShell('Bank', 'Business loans. Borrow to build, repay every week from your cash.',
+    `<div class="card in"><h4>New business loan</h4><p class="muted small">Interest 6.50% a year. Weekly payment is fixed for the whole term.</p>
+    <label class="muted small">LOAN AMOUNT</label><input id="loanAmt" class="search" type="number" value="1000000">
+    <label class="muted small">MATURITY (months)</label><input id="loanMonths" class="search" type="number" value="36">
+    <button class="btn3d orange wide" data-a="takeLoan">TAKE LOAN</button></div>
+    <div class="card in"><h4>Your loans</h4>${S.loans.map(l => `<div class="kv"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || '<p class="muted small">No loans outstanding.</p>'}
+    <p class="muted small">Your main loan balance is in Portfolio. These business loans are separate, for stores, stadiums and buildings.</p></div>`);
+};
+// New Markets format: sector cards with sparkline, plus Market / Equity / M&A tabs.
+PANELS.markets = () => {
+  const mkt = UI.mktTab || 'market';
+  const tabs = `<div class="row"><button class="btn flex ${mkt === 'market' ? 'on' : ''}" data-a="mktTab" data-x="market">🏦 Market</button><button class="btn flex ${mkt === 'equity' ? 'on' : ''}" data-a="mktTab" data-x="equity">💳 Equity</button><button class="btn flex ${mkt === 'ma' ? 'on' : ''}" data-a="mktTab" data-x="ma">🧩 M&amp;A</button></div>`;
+  if (mkt === 'equity') {
+    const mine = mine();
+    const first = mine[0] || Object.values(S.co).find(c => c.listed);
+    return panelShell('Stock Market', 'Trade stocks, or issue new shares for a company you control.', tabs + `<div class="card in"><h4>TRADE STOCKS</h4><p class="muted small">Available cash: ${fmtMoney(S.cash, true)}</p>
+    ${first ? `<div class="kv"><span><b>${esc(first.name)}</b> · ${first.sym}</span><b>${fmtMoney(first.price)}</b></div>
+    <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${first.a3}">MAX</button></div>
+    <div class="row"><button class="btn3d buy flex" data-a="doTrade" data-x="${first.a3}|buy">BUY</button><button class="btn3d sell flex" data-a="doTrade" data-x="${first.a3}|sell">SELL</button></div>
+    <p class="muted small">Pick another stock from the Market tab first, then come back here to trade it.</p>` : '<p class="muted small">No listed companies yet.</p>'}</div>
+    <div class="card in"><h4>SECONDARY OFFERING</h4><p class="muted small">Issue new shares for a company you control. Underwriting fee 3.85%.</p>
+    ${mine.map(c => `<div class="kv"><span>${esc(c.name)} · ${c.sym} · ${fmtMoney(c.price)}/share</span><b>${c.shares.toLocaleString()} shares</b></div>`).join('') || '<p class="muted small">You control no companies yet. Buy 50% of a stock to control it.</p>'}
+    ${mine.length ? `<label class="muted small">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="btn3d orange wide" data-a="issueShares" data-x="${mine[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
+  }
+  if (mkt === 'ma') {
+    const rows = marketRows().filter(c => c.listed).slice(0, 30);
+    return panelShell('Stock Market', 'Mergers and acquisitions. Offer to buy a whole company.', tabs + `<div class="list">${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="card in"><div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${c.sym} · Market cap ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="btn" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}</div>`);
+  }
+  const cats = ['All', ...SECTOR_LIST.slice(0, 12)];
+  const rows = marketRows().slice(0, 60);
+  return panelShell('Stock Market', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`, tabs +
+    `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
+    <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
+    <div class="list">${rows.map(c => { const ch = chgVs(c), closes = (c.h.d || []).slice(-30), cap = companyValue(c), hi = closes.length ? Math.max(...closes) : c.price, lo = closes.length ? Math.min(...closes) : c.price; return `<button class="srow" data-a="stock" data-x="${c.a3}" style="flex-direction:column;align-items:stretch"><span class="row between" style="width:100%"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname" style="flex:1"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span></span>${lineChart(closes, { h: 50 })}<span class="row between muted small" style="width:100%"><span>Market cap ${fmtMoney(cap, true)}</span><span>Dividend ${(SECTORS[c.sector].div * 100).toFixed(1)}%</span><span>52w ${fmtMoney(lo)} - ${fmtMoney(hi)}</span><span>P/E ${c.pe.toFixed(1)}</span></span></button>`; }).join('') || '<div class="card in empty">Nothing here yet.</div>'}</div>`);
+};
 PANELS.help = () => {
   return panelShell('Help', '',
     `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
@@ -1215,7 +1377,8 @@ function moreSheet() {
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
-    ['leaderboard', '🏆', 'Leaderboard'], ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
+    ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
+    ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
   openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
@@ -1298,6 +1461,45 @@ const A = {
     const [a3, p] = x.split('|');
     act(() => takeover(a3, +p), 'Takeover complete! You now own it outright.');
   },
+  mktTab: x => { UI.mktTab = x; renderPanel(); },
+  issueShares: x => {
+    const c = S.co[x]; if (!c) return toast('Company not found', 'bad');
+    const qty = Math.floor(+($('issueQty') ? $('issueQty').value : 0)); if (!qty || qty <= 0) return toast('Enter a share count', 'bad');
+    const price = c.price, proceeds = qty * price, fee = Math.round(proceeds * 0.0385), raised = proceeds - fee;
+    c.shares += qty; c.price = Math.max(0.01, c.price * 0.97); S.cash += raised;
+    news('Market', `${c.name} issued ${qty.toLocaleString()} new shares at ${fmtMoney(price)}. Raised ${fmtMoney(raised, true)} after ${fmtMoney(fee, true)} fees.`, x);
+    toast(`Issued ${qty.toLocaleString()} shares, raised ${fmtMoney(raised, true)}`, 'good'); save(); renderPanel();
+  },
+  sportLeague: x => { ensureSports(); S.sports.tab = x; UI.stack = []; renderPanel(); },
+  sportTeam: x => { pushPanel(x); },
+  sportTab: x => { UI.sportTab = x; renderPanel(); },
+  sportFin: x => { UI.sportFin = x; renderPanel(); },
+  buyTeam: x => act(() => buySportTeam(x), 'Team bought!'),
+  stadiumUp: x => act(() => upgradeStadium(x), 'Stadium upgraded'),
+  sportRename: x => { const inp = document.getElementById('sportName'); act(() => renameSportTeam(x, inp ? inp.value : ''), 'Team renamed'); },
+  sportLogo: x => { const [id, logo] = x.split('|'); act(() => setSportLogo(id, logo, null), 'Logo changed'); },
+  sportColor: x => { const [id, col] = x.split('|'); act(() => setSportLogo(id, null, col), 'Colour changed'); },
+  signFA: x => { const [tid, pid] = x.split('|'); act(() => signFreeAgent(tid, pid), 'Player signed!'); },
+  draftPick: x => { const [tid, pid] = x.split('|'); act(() => draftSportPlayer(tid, pid), 'Draft pick signed!'); },
+  tradeOut: x => { UI.tradeOut = x; renderPanel(); },
+  tradeIn: x => { const [tid, pid] = x.split('|'); UI.tradeTarget = tid; UI.tradeIn = pid; renderPanel(); },
+  doSportTrade: x => { const cash = Math.floor(+($('tradeCash') ? $('tradeCash').value : 0)); act(() => tradeSportPlayer(x, UI.tradeOut, UI.tradeTarget, UI.tradeIn, cash), 'Trade done!'); UI.tradeOut = null; UI.tradeIn = null; },
+  sportIpo: x => act(() => sportIpo(x), 'Team is now public!'),
+  ipoBuy: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'buy', qty), 'Shares bought'); },
+  ipoSell: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'sell', qty), 'Shares sold'); },
+  storeOpen: x => { pushPanel(x); },
+  storeTab: x => { UI.storeTab = x; renderPanel(); },
+  storePrice: x => { const [id, idx, d] = x.split('|'); act(() => setStorePrice(id, +idx, (storeById(id).products[+idx].price + +d)), 'Price changed'); },
+  storeDel: x => { const [id, k] = x.split('|'); act(() => toggleStoreDelegation(id, k), 'Delegation changed'); },
+  mgrSalary: x => { const [id, d] = x.split('|'); act(() => adjustManagerSalary(id, +d), 'Manager salary changed'); },
+  fireMgr: x => act(() => fireStoreManager(x), 'New manager hired'),
+  storeCamp: x => { const [id, cid] = x.split('|'); act(() => startStoreCampaign(id, cid), 'Campaign started'); },
+  storeRename: x => { const inp = document.getElementById('storeName'); act(() => renameStore(x, inp ? inp.value : ''), 'Store renamed'); },
+  closeStore: x => { act(() => closeStore(x), 'Store closed'); closePanel(); openPanel('stores'); },
+  takeLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeLoan(amt, mo), 'Loan taken'); },
+  buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); UI.buildLot = { cityId: +cityId, lotT: +lotT }; openModal(`<h2>Build a store</h2><p class="muted">Choose a store type for this leased lot.</p><div class="row wrap">${Object.entries(STORE_TYPES).map(([k, d]) => `<button class="btn flex" data-a="buildStoreDo" data-x="${k}">${d.icon} ${d.name}</button>`).join('')}</div>`, 'sheet'); },
+  buildStoreDo: x => { const lot = UI.buildLot; if (!lot) return toast('Pick a FOR LEASE pin first', 'bad'); const err = buildStore(lot.cityId, lot.lotT, x); if (err) return toast(err, 'bad'); closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Store opened! Results arrive every week.', 'good'); save(); refreshAll(); },
+  openStadium: x => { closePopup(); if (CityView.isOpen()) leaveCity(); ensureSports(); S.sports.tab = sportTeam(x).league; openPanel('sports'); UI.stack = [x]; renderPanel(); },
   webCo: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
