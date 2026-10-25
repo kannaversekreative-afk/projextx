@@ -80,8 +80,11 @@ function migrateSave(s) {
   if (s.leader == null) s.leader = false;
   if (s.countryName === undefined) s.countryName = null;
   for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05; if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54; }
+  if (s.idx && !isFinite(s.idx.v)) { const fin = (s.idx.h && s.idx.h.w || []).filter(v => isFinite(v)); s.idx.v = fin.length ? fin[fin.length - 1] : 1000; if (s.idx.h) for (const k in s.idx.h) s.idx.h[k] = (s.idx.h[k] || []).filter(v => isFinite(v)); }
   for (const a3 in s.co) {
     const c = s.co[a3];
+    if (!isFinite(c.price) || c.price <= 0) c.price = (isFinite(c.p0) && c.p0 > 0) ? c.p0 : 100;
+    if (c.h) for (const k in c.h) { const fin = (c.h[k] || []).filter(v => isFinite(v) && v > 0); if (fin.length) c.h[k] = fin; }
     if (!c.yearStats) c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
     if (c.lastYearProfit === undefined) c.lastYearProfit = null;
     if (!c.ratingReasons) c.ratingReasons = [];
@@ -438,9 +441,11 @@ function pushPaperEdition() {
   paperEdIdx = 0; paperPage = 0;
 }
 function paperChg(h) {
-  if (!h || !h.w || h.w.length < 2) return 0;
-  const n = h.w.length, base = h.w[Math.max(0, n - 53)];
-  return base ? h.w[n - 1] / base - 1 : 0;
+  if (!h || !h.w) return 0;
+  const vals = h.w.filter(v => isFinite(v) && v > 0);
+  if (vals.length < 2) return 0;
+  const base = vals[Math.max(0, vals.length - 53)];
+  return base ? vals[vals.length - 1] / base - 1 : 0;
 }
 function playerSnapshot() {
   try {
@@ -485,17 +490,17 @@ function makePaperEdition(year) {
   const warsElse = S.wars.filter(w => w.a !== S.home && w.b !== S.home);
   const war = warsElse[0] || S.wars[0];
   let headline = '', headBody = '';
-  let frontKind = 'growth', frontCaption = 'The world, this year.';
+  let frontKind = 'growth', frontCaption = 'The world, this year.', frontDeck = '';
   if (war) {
-    frontKind = 'war'; frontCaption = `The front in the war between ${cname(war.a)} and ${cname(war.b)}, as the fighting moves on.`;
+    frontKind = 'war'; frontCaption = `The front in the war between ${cname(war.a)} and ${cname(war.b)}, as the fighting moves on.`; frontDeck = `The front has moved to ${Math.round(war.front)}% as trade routes through both nations strain.`;
     headline = `${cname(war.a)} AT WAR WITH ${cname(war.b)}`;
     headBody = `The front has moved to ${Math.round(war.front)}%. Capitals are watching, neighbours are nervous, and trade routes through both nations are under strain. The world waits to see whether talks, or tanks, win the year.`;
   } else if (unrestC) {
-    frontKind = 'unrest'; frontCaption = `Crowds in the streets of ${cname(unrestC.a3)}, where protests have paralysed the capital.`;
+    frontKind = 'unrest'; frontCaption = `Crowds in the streets of ${cname(unrestC.a3)}, where protests have paralysed the capital.`; frontDeck = `Mass protests paralyse the capital. The government calls for calm, the crowds call for change.`;
     headline = `UNREST IN ${cname(unrestC.a3).toUpperCase()}`;
     headBody = `Mass protests have paralysed the streets. The government calls for calm, the crowds call for change, and the rest of the world is watching what happens next.`;
   } else {
-    frontKind = boomC ? 'boom' : 'growth'; frontCaption = boomC ? `Factories at full steam in ${cname(boomC.a3)}, in a boom year for the country.` : `A skyline on the rise in ${fastest ? fastest.name : 'the world'}, the fastest riser this year.`;
+    frontKind = 'growth'; frontCaption = `A skyline on the rise in ${fastest ? fastest.name : 'the world'}, the fastest riser this year.`; frontDeck = `${fastest ? fastest.name : 'The world'} grew ${fmtPct(fastest ? fastest.g : 0)} this year, ahead of every rival.`;
     headline = `${(fastest ? fastest.name : 'THE WORLD').toUpperCase()} LEADS THE WORLD`;
     headBody = `No war dominates the front page this year. Instead, the story is growth: new factories, new trade, and a country that outpaced every rival.`;
   }
@@ -535,7 +540,7 @@ function makePaperEdition(year) {
   });
   return {
     year, day: S.day, date: fmtDate(S.day),
-    front: { headline, body: headBody, stories: frontStories.slice(0, 4), kind: frontKind, caption: frontCaption },
+    front: { headline, body: headBody, deck: frontDeck, stories: frontStories.slice(0, 4), kind: frontKind, caption: frontCaption },
     business: { idx: S.idx.v, idxChg, oil: S.oil, gainers, losers, tip, stories: bizStories },
     sports: { leagues: sports, story: `Champions are crowned in every league this year, from the gridiron to the diamond to the ice. The ${sports[0].champ} took the ${sports[0].l} crown, and the ${sports[1].champ} did the same in the ${sports[1].l}. New stars, old rivalries, and one more season for the history books.` },
     numbers: { worldGdp, worldPop, avgStab: playable.length ? stabSum / playable.length : 0, wars: S.wars.length, booms, unrest, topGrowth: growth.slice(0, 5), slowest: growth.slice(-3).reverse(), idx: S.idx.v, idxChg },
@@ -572,7 +577,7 @@ function paperHTML() {
       <div class="near">EST.<br>1926</div>
     </div>
     <div class="nmarket">MARKETS: World Index ${ed.business.idx.toFixed(0)} (${fmtPct(ed.business.idxChg)}) · Oil ${ed.business.oil.toFixed(2)}x · World GDP ${fmtMoney(ed.numbers.worldGdp, true)} · ${fmtPop(ed.numbers.worldPop)} people</div>
-    <div class="nbanner"><div class="pkicker">THE LEAD STORY · WORLD</div><h2>${esc(ed.front.headline)}</h2><p class="ndeck">${esc(ed.front.body)}</p></div>
+    <div class="nbanner"><div class="pkicker">THE LEAD STORY · WORLD</div><h2>${esc(ed.front.headline)}</h2><p class="ndeck">${esc(ed.front.deck || ed.front.body)}</p></div>
     <div class="nbyline"><span>By The Ticker Times Staff</span><span>WORLD — ${ed.date.toUpperCase()}</span></div>
     <figure class="ncut">${paperCutSVG(ed.front.kind || 'growth')}<figcaption><b>${esc(ed.front.caption)}</b> <span class="ncredit">Ticker Times illustration.</span></figcaption></figure>
     <div class="nlead"><p class="pdrop">${esc(ed.front.body)}</p><p class="pbody">The story above is the one every capital is talking about this year. What happens next will be written in trade, in politics, and in the markets — and it will be in this paper first.</p></div>
@@ -609,7 +614,7 @@ function paperHTML() {
       <div class="pheadline"><div class="pkicker">YOUR YEAR · THE INDIVIDUAL LEDGER</div><h2>Your year, in numbers</h2><p class="pdrop">Not the world. You. What you built, what you bought, what you ran, and what it was worth at the end of the year.</p></div>
       <div class="pbox"><b>THE BOTTOM LINE</b><span>Net worth ${fmtMoney(pl.netWorth, true)}${pl.yearAgo != null ? ` · ${(pl.netWorth - pl.yearAgo) >= 0 ? '+' : ''}${fmtMoney(pl.netWorth - pl.yearAgo, true)} this year (${fmtPct(pl.yearAgo ? (pl.netWorth - pl.yearAgo) / pl.yearAgo : 0)})` : ''}</span><span>Cash ${fmtMoney(pl.cash, true)} · Loans ${fmtMoney(pl.loan, true)}</span><span>Stocks held ${fmtMoney(pl.holdingsValue, true)} · Buildings ${fmtMoney(pl.propValue, true)}</span></div>
       <h3 class="psec">COMPANIES YOU RUN</h3>${pl.controlled.length ? `<div class="ptable">${pl.controlled.map(c => `<div class="prow"><span>${esc(c.name)} (${esc(c.sym)}) · ${c.locs} locations${c.fleet ? ` · fleet ${c.fleet}` : ''}</span><b>${c.old != null ? `${c.old.toFixed(1)} → ${c.nw.toFixed(1)} stars` : `${c.rating.toFixed(1)} stars`}</b></div>`).join('')}</div>${pl.controlled.filter(c => c.reasons.length).map(c => `<p class="psmall">${esc(c.name)}: ${esc(c.reasons[0])}</p>`).join('')}` : '<p class="psmall">You do not control a company yet. Buy a majority stake or take one over, then age up.</p>'}
-      <h3 class="psec">OUTCOMES THIS YEAR</h3>${pl.yearEntries.length ? `<div class="ptable">${pl.yearEntries.map(e => `<div class="prow"><span>${esc(e.name)}</span><b>${e.old.toFixed(1)} → ${e.new.toFixed(1)} stars</b></div>`).join('')}</div>` : '<p class="psmall">No year-end ratings yet for companies you run.</p>'}${pl.taxLines.length ? `<p class="psmall">${esc(pl.taxLines.join(' '))}</p>` : ''}${pl.taxRev ? `<p class="psmall">Government corporate-tax revenue this year: ${fmtMoney(pl.taxRev, true)}.</p>` : ''}
+      <h3 class="psec">OUTCOMES THIS YEAR</h3>${pl.yearEntries.length ? `<div class="ptable">${pl.yearEntries.map(e => `<div class="prow"><span>${esc(e.name)}</span><b>${e.old.toFixed(1)} → ${e.new.toFixed(1)} stars</b></div>`).join('')}</div>` : '<p class="psmall">No year-end ratings yet for companies you run.</p>'}${pl.taxLines.length ? `<p class="psmall">${esc(pl.taxLines.join(' '))}</p>` : ''}
       ${pl.leader ? `<h3 class="psec">YOUR NATION</h3><div class="pbox"><b>TREASURY & DEBT</b><span>Treasury ${fmtMoney(pl.leader.treasury, true)} · Debt ${fmtMoney(pl.leader.debt, true)}</span>${pl.leader.lastWeek ? `<span>Last week: revenue ${fmtMoney(pl.leader.lastWeek.revenue, true)} · spending ${fmtMoney(pl.leader.lastWeek.spending, true)} · net ${fmtMoney(pl.leader.lastWeek.net, true)}</span>` : ''}</div>` : ''}
       <h3 class="psec">YOUR NUMBERS</h3><div class="ptable">
         <div class="prow"><span>Level · XP</span><b>Lv ${pl.level} · ${pl.xp} XP</b></div>
@@ -741,7 +746,8 @@ const TUT = [
 function renderTutorial() {
   if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
   const s = TUT[S.tutorial];
-  $('tut').innerHTML = `<div class="tut card"><p>${s.t}</p><div class="row end"><button data-a="tutSkip">Skip</button>${s.btn ? `<button class="btn" data-a="tutNext">${s.btn}</button>` : '<span class="muted small">Do this to continue</span>'}</div></div>`;
+  const tutText = typeof s.t === 'function' ? s.t() : s.t;
+  $('tut').innerHTML = `<div class="tut card"><p>${tutText}</p><div class="row end"><button data-a="tutSkip">Skip</button>${s.btn ? `<button class="btn" data-a="tutNext">${s.btn}</button>` : '<span class="muted small">Do this to continue</span>'}</div></div>`;
 }
 function tutCheck() {
   if (S && S.tutorial >= 0 && S.tutorial < TUT.length && TUT[S.tutorial].done && TUT[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
@@ -1308,7 +1314,15 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
-  ageUp: () => { ageUp(); pushPaperEdition(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); openPaper(0); },
+  ageUp: () => {
+    if (UI.aging) return; UI.aging = true;
+    openModal(`<div class="card in"><h3>Aging a year…</h3><p class="muted small">Simulating a full year of the world. This takes a moment.</p></div>`, 'center');
+    setTimeout(() => {
+      try { ageUp(); pushPaperEdition(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); openPaper(0); }
+      catch (e) { toast('Age up failed. Try again.', 'bad'); }
+      finally { UI.aging = false; }
+    }, 50);
+  },
   ageDown: () => {
     if (!canAgeDown()) return toast('No earlier year to go back to in this session. Age up first, then age down.', 'bad');
     if (window.AD_TIMER) clearInterval(window.AD_TIMER);
