@@ -422,9 +422,11 @@ const MapView = (() => {
         };
         const links = [];
         const portN = scr.find(n => n.kind === 'port'), milN = scr.find(n => n.kind === 'milPort');
+        // No triangle loop: each port connects to the capital only.
+        // The port-to-port link is removed, so capital + two ports no
+        // longer form a closed triangle on the map.
         if (portN) links.push(road(f.capLandCell, f.portLandCell, [cx, cy], [portN.sx, portN.sy]));
         if (milN) links.push(road(f.capLandCell, f.milPortLandCell, [cx, cy], [milN.sx, milN.sy]));
-        if (portN && milN && f.portLandCell !== f.milPortLandCell) links.push(road(f.portLandCell, f.milPortLandCell, [portN.sx, portN.sy], [milN.sx, milN.sy]));
         links.forEach(pts => {
           const stroke = (style, width) => { c.strokeStyle = style; c.lineWidth = width; c.lineJoin = 'round'; c.lineCap = 'round'; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); };
           stroke('rgba(47,124,246,0.35)', 3);
