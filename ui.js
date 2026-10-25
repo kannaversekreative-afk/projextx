@@ -1196,11 +1196,11 @@ PANELS.shop = () => {
     SHOP.filter(s => s.id !== 'cash').map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'GET FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
 };
 PANELS.search = () => {
-  const q = UI.q.trim().toLowerCase();
+  const q = (UI.sq || '').trim().toLowerCase();
   const cos = Object.values(S.co).filter(c => !q || c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q)).slice(0, 20);
   const cts = W.countries.filter(c => c.playable && (!q || c.name.toLowerCase().includes(q))).slice(0, 20);
   return panelShell('Search', 'Companies and countries',
-    `<input id="msearch" class="search" placeholder="Search anything" value="${esc(UI.q)}" autocomplete="off">
+    `<input id="ssearch" class="search" placeholder="Search anything" value="${esc(UI.sq || '')}" autocomplete="off">
     <h4>Companies</h4><div class="list">${cos.map(c => `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)}</small></span></button>`).join('') || '<p class="muted small">No matches.</p>'}</div>
     <h4>Countries</h4><div class="list">${cts.map(c => `<button class="srow" data-a="flyCountry" data-x="${c.a3}"><span class="avatar">${c.flag}</span><span class="sname"><b>${esc(c.name)}</b><small>${fmtPop(c.pop0)} people</small></span></button>`).join('') || '<p class="muted small">No matches.</p>'}</div>`);
 };
@@ -1430,7 +1430,7 @@ const A = {
   },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
-  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); openPanel(x); },
+  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; openPanel(x); },
   closePanel: () => closePanel(),
   panelBack: () => { UI.stack.pop(); renderPanel(); },
   closePopup: () => closePopup(),
@@ -1643,6 +1643,7 @@ function onClick(e) {
 function onInput(e) {
   const t = e.target;
   if (t.id === 'csearch') { UI.pq = t.value; const pos = t.selectionStart; renderPick(); const n = $('csearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
+  if (t.id === 'ssearch') { UI.sq = t.value; renderPanel(); return; }
   if (t.id === 'msearch') {
     UI.q = t.value;
     if (UI.panel === 'markets') { const l = $('mlist'); if (l) l.innerHTML = marketsListHTML(); }
