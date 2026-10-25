@@ -11,7 +11,8 @@ const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: f
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const upCls = x => x >= 0 ? 'up' : 'down';
-const DAY_MS_BY_SPEED = [Infinity, 1400, 650, 200];
+// Time runs always and slow: no pause, no skip, one day every 4 seconds.
+const DAY_MS_BY_SPEED = [4000, 4000, 4000, 4000];
 const IC = {
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
@@ -208,33 +209,25 @@ function renderHUD() {
   if (!S || UI.pick) return;
   const nw = netWorth(), lv = level(), unread = S.mail.filter(m => !m.read).length;
   const co = homeCo();
-  // HUD like the airline screenshot: dark pill top-left, company card under it,
-  // settings + zoom + locate on the right, and a bottom bar. The map fills
-  // the whole screen behind all of it. No Claim button and no Shop button
-  // up here: daily money is added to cash automatically, and Shop lives
-  // only in the More (…) menu.
-  $('hud').innerHTML = `<div class="topleft-pill">
-    <button class="pill-btn logo-btn" data-a="locate" aria-label="Go home"><span class="logo" style="background:${co.color}">${LOGO_SVG}</span></button>
-    <button class="pill-btn" data-a="more" aria-label="Menu">☰</button>
-    <button class="pill-btn" data-a="panel" data-x="inbox" aria-label="Inbox">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
-    <button class="pill-btn" data-a="panel" data-x="help" aria-label="Help">?</button>
-  </div>
-  <div class="company-card card">
+  // HUD: company card top-left, a small notification circle beside the
+  // settings button top-right, zoom + locate on the right, and a bottom
+  // bar. The map fills the whole screen behind all of it. No top-left
+  // pill, no Claim button, no Shop button up here: daily money is added
+  // to cash automatically, and Shop lives only in the More (…) menu.
+  // Menu and Help are also in More, and Locate (home) is on the right.
+  $('hud').innerHTML = `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
     <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
   </div>
   <div class="rail-top">
+    <button class="rail-btn notif-btn" data-a="panel" data-x="inbox" aria-label="Notifications">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
     <button class="rail-btn" data-a="panel" data-x="settings" aria-label="Settings">⚙</button>
   </div>
   <div class="rail-bottom">
     <button class="rail-btn" data-a="zoom" data-x="1.4" aria-label="Zoom in">＋</button>
     <button class="rail-btn" data-a="zoom" data-x="0.7" aria-label="Zoom out">－</button>
     <button class="rail-btn" data-a="locate" aria-label="Go home">⌖</button>
-  </div>
-  <div class="speedpill card">
-    <div class="speeds">${[0, 1, 2, 3].map(i => `<button class="${S.speed === i ? 'on' : ''}" data-a="speed" data-x="${i}" aria-label="${['Pause', 'Normal speed', 'Fast', 'Fastest'][i]}">${[IC.pause, IC.play1, IC.play2, IC.play3][i]}</button>`).join('')}</div>
-    ${S.mode === 'infinite' ? '<button class="skip" data-a="skipMenu">SKIP ⏩</button>' : '<span class="muted small">Normal mode: time never skips</span>'}
   </div>
   <div class="bottombar card">
     <button class="bb-btn" data-a="panel" data-x="markets"><span>📈</span>Markets</button>
@@ -312,6 +305,7 @@ function nameCompany() {
 }
 function enterGame(returning) {
   UI.pick = null; MapView.setPick(false); closeModal();
+  S.speed = 1; // Time runs always: old saves with pause (0) resume at slow speed.
   const da = autoCreditDaily(), ca = autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   renderHUD(); MapView.home();
@@ -324,7 +318,7 @@ const TUT = [
   { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
   { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
-  { t: () => S.mode === 'infinite' ? 'Time runs on its own. Use the speed buttons up top, or Skip to jump ahead. Wars, booms and disasters move stock prices, so watch the news.' : 'Time runs on its own. Speed it up or pause up top. Wars, booms and disasters move stock prices, so watch the news.', btn: 'Got it' },
+  { t: () => 'Time runs on its own, slowly. There is no pause and no skipping. Wars, booms and disasters move stock prices, so watch the news.', btn: 'Got it' },
 ];
 function renderTutorial() {
   if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
@@ -437,7 +431,7 @@ function loop(now) {
   if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
   const dt = Math.min(1000, now - (lastT || now)); lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
-  if (S.speed > 0 && !document.hidden && !UI.modal) {
+  if (!document.hidden) {
     UI.acc += dt;
     const per = DAY_MS_BY_SPEED[S.speed]; let stepped = false; const wars = S.wars.length;
     while (UI.acc >= per) { UI.acc -= per; stepDay(); stepped = true; if (S.over) break; }
@@ -709,8 +703,7 @@ function moreSheet() {
     ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'], ['leaderboard', '🏆', 'Leaderboard'],
     ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
-  if (S.mode === 'infinite') items.push(['timewarp', '⏩', 'Time warp']);
-  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'timewarp' ? 'skipMenu' : 'panel'}" ${x === 'timewarp' ? '' : `data-x="${x}"`}><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
+  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="panel" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
 
 // ---------- actions ----------

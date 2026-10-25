@@ -51,20 +51,17 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 /* HUD like the airline screenshot: dark pill top-left, company card under it,
    settings + zoom + locate on the right, speed above a bottom bar.
    The map already fills the whole screen behind all of this. */
-.topleft-pill { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 4px; background: #111827; border-radius: 999px; padding: 6px; box-shadow: var(--shadow); }
-.pill-btn { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 22px; font-weight: 900; }
-.pill-btn .logo { width: 40px; height: 40px; }
-.pill-btn .badge { position: absolute; top: 0; right: 0; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
-.company-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 64px); padding: 12px 16px; max-width: calc(100vw - 24px); }
+.company-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); padding: 12px 16px; max-width: calc(100vw - 130px); }
 .cc-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .cc-top b { font-size: 18px; }
 .cc-money { display: flex; gap: 16px; margin-top: 4px; font-size: 13px; flex-wrap: wrap; }
 .cc-money b { font-variant-numeric: tabular-nums; }
 .cc-goals { display: flex; gap: 14px; margin-top: 4px; font-size: 12px; flex-wrap: wrap; }
 .cc-goals span { white-space: nowrap; } .cc-goals b { font-variant-numeric: tabular-nums; } .cc-goals em { font-style: normal; font-weight: 900; }
-.rail-top { position: absolute; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); }
-.rail-bottom { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 148px); display: flex; flex-direction: column; gap: 10px; }
-.rail-btn { width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; font-weight: 900; }
+.rail-top { position: absolute; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); display: flex; gap: 10px; }
+.rail-bottom { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 90px); display: flex; flex-direction: column; gap: 10px; }
+.rail-btn { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; font-weight: 900; }
+.rail-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
 .speedpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
 .bottombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 999px; max-width: calc(100vw - 24px); }
 .bb-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 900; white-space: nowrap; }
@@ -191,7 +188,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .sw.on { box-shadow: 0 0 0 3px var(--ink); }
 .toast { background: #12192b; color: #fff; border-radius: 30px; padding: 12px 20px; font-size: 15px; box-shadow: var(--shadow); animation: pop .18s ease-out; max-width: 90vw; text-align: center; }
 .toast.good { background: #0d7a3d; } .toast.bad { background: #b9362f; }
-#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 160px); z-index: 30; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 95px); z-index: 30; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 
 body.in-city #hud, body.in-city #popup { display: none; }
 @media (max-width: 760px) {
@@ -201,7 +198,7 @@ body.in-city #hud, body.in-city #popup { display: none; }
   .company-card { max-width: calc(100vw - 80px); }
   .cc-goals { font-size: 11px; gap: 8px; }
   .bb-btn { padding: 6px 10px; font-size: 11px; }
-  .rail-bottom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 142px); }
+  .rail-bottom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px); }
   .tut { top: calc(max(12px, env(safe-area-inset-top)) + 182px); }
   .more-grid { grid-template-columns: repeat(3, 1fr); }
 }
