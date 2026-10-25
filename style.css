@@ -6,7 +6,7 @@
   --font: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #eaf2ff; color: var(--ink); font-family: var(--font); font-weight: 700; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #eaf2ff; color: var(--ink); color-scheme: light; font-family: var(--font); font-weight: 700; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
 button:disabled { opacity: 0.45; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(47,124,246,0.6); outline-offset: 2px; }
@@ -69,6 +69,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .rail-btn { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; font-weight: 900; }
 .rail-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
 .speedpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
+.bottombar, .company-card, .popup, .citybar, .tut, .speedpill { background: #fff; color: var(--ink); }
 .bottombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 999px; max-width: calc(100vw - 24px); }
 /* Fixed Age stepper: always in the same spot at the bottom, above the
    bottom bar, small and thumb-reachable. It sits in #hud (z-index 5),
@@ -318,9 +319,18 @@ body.in-city #hud, body.in-city #popup { display: none; }
 @media (prefers-reduced-motion: reduce) { #panel.open, .mbox, .toast { animation: none; } }
 
 /* Leader inherit screen: white, full screen, above everything else. */
-#inherit { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; background: #fff; color: #1f5fd0; padding: 24px; text-align: center; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#inherit { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; background: #000; color: #fff; padding: 24px; text-align: center; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #inherit.open { display: flex; }
-#inherit h1 { font-size: 28px; font-weight: 900; margin: 0; }
-#inherit p { color: #667085; max-width: 480px; margin: 0; }
-#inherit select { width: min(480px, 90vw); padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; background: #fff; color: #1f5fd0; border: 1.5px solid #d0d7e3; }
+#inherit h1 { font-size: 44px; font-weight: 900; margin: 0; letter-spacing: 4px; }
+#inherit p { color: #bbb; max-width: 480px; margin: 0; }
+#inherit select { width: min(480px, 90vw); padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; background: #fff; color: #10243e; border: 1.5px solid #d0d7e3; }
 #inherit .btn3d { width: min(480px, 90vw); }
+.intro-modes { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; width: min(900px, 96vw); }
+.intro-mode { flex: 1 1 220px; max-width: 280px; text-align: left; background: #1a1a1a; color: #fff; border: 2px solid #444; border-radius: 20px; padding: 18px; }
+.intro-mode.on { border-color: #2f7cf6; box-shadow: 0 0 0 2px #2f7cf6; }
+.intro-mode b { display: block; font-size: 22px; margin-bottom: 6px; }
+.intro-mode span { display: block; color: #bbb; font-size: 14px; line-height: 1.4; }
+.intro-mode .later { display: inline-block; margin-top: 10px; font-size: 11px; font-weight: 900; letter-spacing: 1px; color: #f5b301; }
+.intro-step { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(480px, 90vw); }
+.intro-step .inherit-line { font-size: 22px; font-weight: 900; color: #fff; }
+@media (prefers-color-scheme: dark) { html, body { background: #eaf2ff; color: var(--ink); } .card, #panel, .bottombar, .company-card, .popup, .citybar, .tut, .mbox { background: #fff !important; color: var(--ink) !important; } input, select, textarea { background: #fff !important; color: var(--ink) !important; } }

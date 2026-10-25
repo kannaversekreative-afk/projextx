@@ -672,27 +672,43 @@ async function boot() {
   else showInherit();
 }
 function showInherit() {
-  $('hud').innerHTML = ''; MapView.setPick(false); closeModal();
-  const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
-  $('inherit').innerHTML = `<h1>You have inherited</h1>
-    <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
-    <div id="inheritInfo" style="color:#667085;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
-    <label style="color:#667085;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
-    <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
-    <p>You are now the leader of this country, as it is today. Tax its businesses, pay your people, trade, and grow — or invade a neighbour for the challenge.</p>
-    <button class="btn3d orange wide" data-a="inheritContinue">CONTINUE</button>`;
+  $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); UI.introMode = null;
+  $('inherit').innerHTML = `<h1>WORL</h1>
+    <div class="intro-modes">
+      <button class="intro-mode" data-a="introMode" data-x="world"><b>World</b><span>Offline. The mode we are working on now. Lead a real country as it is today.</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="worl"><b>Worl Mode</b><span>Random situations, events, and random landmasses and countries. PvP or vs CPU.</span><span class="later">COMING LATER</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="domination"><b>Domination</b><span>PvP against 19 other players, with different rules from the other modes.</span><span class="later">COMING LATER</span></button>
+    </div>
+    <div id="inheritStep" class="intro-step"></div>`;
   $('inherit').classList.add('open');
-  const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName');
-  const infoEl = document.getElementById('inheritInfo');
-  const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
-  if (sel) sel.addEventListener('change', updateInheritInfo);
-  updateInheritInfo();
+}
+function renderInheritStep() {
+  const step = document.getElementById('inheritStep'); if (!step) return;
+  document.querySelectorAll('.intro-mode').forEach(b => b.classList.toggle('on', b.dataset.x === UI.introMode));
+  if (UI.introMode === 'world') {
+    const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
+    step.innerHTML = `<div class="inherit-line">You have inherited</div>
+      <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
+      <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
+      <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
+      <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
+      <p>You are now the leader of this country, as it is today. Tax its businesses, pay your people, trade, and grow — or invade a neighbour for the challenge.</p>
+      <button class="btn3d orange wide" data-a="inheritContinue">CONTINUE</button>`;
+    const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
+    const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
+    if (sel) sel.addEventListener('change', updateInheritInfo);
+    updateInheritInfo();
+  } else if (UI.introMode === 'worl') {
+    step.innerHTML = `<p>Worl Mode is coming later. Random situations, events, and random landmasses and countries, PvP or vs CPU — we will build it after World.</p>`;
+  } else if (UI.introMode === 'domination') {
+    step.innerHTML = `<p>Domination is coming later. PvP against 19 other players, with different rules from the other modes — we will build it after World.</p>`;
+  }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
 function showTitle() {
   $('hud').innerHTML = ''; MapView.setPick(false);
   openModal(`<div class="title-card">
-    <div class="brand"><span class="logo big" style="background:#2f7cf6">${LOGO_SVG}</span><div><h1>Ticker Tycoon</h1><p>Build an empire across the real world. Grow your nation, grow your money, and beat the market.</p></div></div>
+    <div class="brand"><span class="logo big" style="background:#2f7cf6">${LOGO_SVG}</span><div><h1>Worl</h1><p>Build an empire across the real world. Grow your nation, grow your money, and beat the market.</p></div></div>
     ${UI.lastOver ? `<div class="note">Your last run ended with a score of <b>${UI.lastOver.score}</b>.</div>` : ''}
     <button class="btn3d orange wide" data-a="newGame">NEW GAME</button>
   </div>`, 'center');
@@ -1423,6 +1439,7 @@ const A = {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
   },
+  introMode: x => { UI.introMode = x; renderInheritStep(); },
   inheritContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
