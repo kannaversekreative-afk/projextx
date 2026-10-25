@@ -409,28 +409,32 @@ const MapView = (() => {
         const scr = nodes.map(n => { const [sx, sy] = toScreen(n.xy[0], n.xy[1]); return { ...n, sx, sy }; }).filter(n => n.sx > -30 && n.sy > -30 && n.sx < vw + 30 && n.sy < vh + 30);
         if (!scr.length) return;
         const [cx, cy] = toScreen(f.cap.x, f.cap.y);
-        // Real roads, not straight fastest-path lines: each link follows
-        // a land A* path, so the thin white line winds around water and
-        // along the coast like a road. Falls back to a straight line only
-        // if no land route exists (e.g. across a strait).
-        const road = (fromCell, toCell, a, b) => {
-          if (fromCell == null || toCell == null) return [a, b];
-          if (fromCell === toCell) return [a, b];
+        // ONE chain, no double, no triangle:
+        // capital -> civilian port -> military port.
+        // No second road from the capital, no port-to-port loop back to
+        // the capital, and no road drawn twice. Each road is a single
+        // thin white stroke, with endpoints exactly on the capital dot
+        // and on the port icon, so nothing ends disconnected.
+        const roadPts = (fromCell, toCell, startPt, endPt) => {
+          if (fromCell == null || toCell == null) return [startPt, endPt];
           const pts = roadPath(k.a3, fromCell, toCell);
-          if (!pts || pts.length < 2) return [a, b];
-          return pts.map(p => toScreen(p[0], p[1]));
+          if (!pts || pts.length < 2) return [startPt, endPt];
+          const scr = pts.map(p => toScreen(p[0], p[1]));
+          // Replace the grid endpoints with the exact icon/dot points.
+          scr[0] = startPt; scr[scr.length - 1] = endPt;
+          return scr;
         };
         const links = [];
         const portN = scr.find(n => n.kind === 'port'), milN = scr.find(n => n.kind === 'milPort');
-        // No triangle loop: each port connects to the capital only.
-        // The port-to-port link is removed, so capital + two ports no
-        // longer form a closed triangle on the map.
-        if (portN) links.push(road(f.capLandCell, f.portLandCell, [cx, cy], [portN.sx, portN.sy]));
-        if (milN) links.push(road(f.capLandCell, f.milPortLandCell, [cx, cy], [milN.sx, milN.sy]));
+        if (portN) links.push(roadPts(f.capLandCell, f.portLandCell, [cx, cy], [portN.sx, portN.sy]));
+        if (portN && milN) {
+          if (f.milPortCell === f.portCell) links.push([[portN.sx, portN.sy], [milN.sx, milN.sy]]);
+          else links.push(roadPts(f.portLandCell, f.milPortLandCell, [portN.sx, portN.sy], [milN.sx, milN.sy]));
+        }
         links.forEach(pts => {
-          const stroke = (style, width) => { c.strokeStyle = style; c.lineWidth = width; c.lineJoin = 'round'; c.lineCap = 'round'; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); };
-          stroke('rgba(47,124,246,0.35)', 3);
-          stroke('rgba(255,255,255,0.95)', 1.4);
+          c.save(); c.shadowColor = 'rgba(47,124,246,0.55)'; c.shadowBlur = 3;
+          c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 1.6; c.lineJoin = 'round'; c.lineCap = 'round';
+          c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); c.restore();
         });
         scr.forEach(n => {
           const bg = n.kind === 'port' ? '#2f7cf6' : n.kind === 'milPort' ? '#b9362f' : '#1f5fd0';

@@ -140,46 +140,22 @@ function touchesCountry(a3, cell) {
   }
   return false;
 }
+// Landlocked countries: no ocean, no ports. Hard list, because the grid
+// alone cannot tell a lake from an ocean — a country next to a lake
+// would otherwise be counted as coastal.
+const LANDLOCKED = new Set(['AFG','AND','ARM','AUT','AZE','BDI','BFA','BLR','BOL','BTN','BWA','CAF','CHE','CZE','ETH','HUN','KAZ','KGZ','LAO','LIE','LSO','LUX','MDA','MKD','MLI','MNG','MWI','NER','NPL','PRY','RWA','SMR','SRB','SSD','SVK','SWZ','TCD','TJK','TKM','UGA','UZB','VAT','ZMB','ZWE','KOS']);
 function ownCoastWater(a3, lon, lat, maxR) {
   const G = W.ww, x0 = Math.floor((lon + 180) / 2), y0 = Math.floor((90 - lat) / 2);
   for (let r = 0; r <= maxR; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
     const X = (x0 + dx + G) % G, Y = y0 + dy; if (Y < 0 || Y >= W.wh) continue;
-    const c = Y * G + X; if (W.water[c] && touchesCountry(a3, c)) return c;
+    const c = Y * G + X;
+    if (!W.water[c]) continue;
+    // Skip tiny lake basins, not ocean/sea water.
+    if (W.basinSize && W.basin[c] >= 0 && W.basinSize[W.basin[c]] < 15) continue;
+    if (touchesCountry(a3, c)) return c;
   }
   return null;
-}
-// A port is not in the water. It sits on the edge of the land, connected
-// to land. So the icon goes on the land cell that touches the water —
-// the country's own land cell if one is found, any neighbouring land
-// cell otherwise, the capital itself for a tiny island with no land
-// cell in the grid. Never the water cell centre out at sea.
-function coastCell(a3, cell, cap) {
-  const G = W.ww, x = cell % G, y = (cell / G) | 0;
-  let anyLand = null;
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-    if (!dx && !dy) continue;
-    const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= W.wh) continue;
-    const nc = ny * G + nx; if (W.water[nc]) continue;
-    if (!anyLand) anyLand = nc;
-    const k = W.byA3[a3];
-    if (k && k.path && FAC_CTX && typeof FAC_CTX.isPointInPath === 'function') {
-      try { const lxy = cellXY(W, nc); if (FAC_CTX.isPointInPath(k.path, lxy[0], lxy[1])) return nc; } catch (e) {}
-    }
-  }
-  if (anyLand != null) return anyLand;
-  // No land cell in the grid (tiny island): use the capital's cell.
-  if (cap) return Math.floor((90 - cap.lat) / 2) * G + Math.floor((cap.lon + 180) / 2);
-  return cell;
-}
-function nearestLandCell(lon, lat) {
-  const G = W.ww, x0 = Math.floor((lon + 180) / 2), y0 = Math.floor((90 - lat) / 2);
-  for (let r = 0; r <= 10; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-    const X = (x0 + dx + G) % G, Y = y0 + dy; if (Y < 0 || Y >= W.wh) continue;
-    const c = Y * G + X; if (!W.water[c]) return c;
-  }
-  return y0 * G + x0;
 }
 let FAC_CACHE = {};
 function facilitiesFor(a3) {
@@ -196,7 +172,7 @@ function facilitiesFor(a3) {
   // Port: nearest water that touches this country's own coast, not just
   // nearest water anywhere. Fall back to nearest water only if no own
   // coast water is found (tiny countries with no shape).
-  const portCell = k.coastal ? (ownCoastWater(a3, cap.lon, cap.lat, 40) ?? nearestWater(W, cap.lon, cap.lat)) : null;
+  const portCell = LANDLOCKED.has(a3) ? null : ownCoastWater(a3, cap.lon, cap.lat, 40);
   let milPortCell = null;
   if (portCell != null) {
     // Military port: the closest different water cell in the same basin
@@ -220,8 +196,15 @@ function facilitiesFor(a3) {
   const portLandCell = portCell != null ? coastCell(a3, portCell, cap) : null;
   const milPortLandCell = milPortCell != null ? coastCell(a3, milPortCell, cap) : null;
   const capLandCell = nearestLandCell(cap.lon, cap.lat);
-  const portXY = portLandCell != null ? cellXY(W, portLandCell) : null;
-  let milPortXY = milPortLandCell != null ? cellXY(W, milPortLandCell) : null;
+  // Port icon: in the water, shifted 40% toward its land cell so it sits
+  // at the water's edge, touching land — never on land, never out at sea.
+  const waterEdge = (waterCell, landCell) => {
+    if (waterCell == null) return null;
+    const w = cellXY(W, waterCell); if (landCell == null) return w;
+    const l = cellXY(W, landCell); return [w[0] + (l[0] - w[0]) * 0.4, w[1] + (l[1] - w[1]) * 0.4];
+  };
+  const portXY = waterEdge(portCell, portLandCell);
+  let milPortXY = waterEdge(milPortCell, milPortLandCell);
   if (milPortXY && portXY && milPortXY[0] === portXY[0] && milPortXY[1] === portXY[1]) milPortXY = [portXY[0] + 18, portXY[1] - 10];
   FAC_CACHE[a3] = { portCell, milPortCell, portXY, milPortXY, base: bases[0], portLandCell, milPortLandCell, capLandCell };
   return { a3, cap, portCell, milPortCell, portXY, milPortXY, bases, portLandCell, milPortLandCell, capLandCell };
