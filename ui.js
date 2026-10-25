@@ -11,11 +11,12 @@ const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: f
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const upCls = x => x >= 0 ? 'up' : 'down';
-// Year by year, not day by day: 1 game day every 33ms real time, so a
-// full year passes in about 12 seconds. Vehicles animate on the map's
-// own requestAnimationFrame loop, independent of this day loop, so they
-// keep moving while years pass. A manual 'Next year' jump is also offered.
-const DAY_MS_BY_SPEED = [33, 33, 33, 33];
+// Time does NOT move on its own, and there is no age limit. The game
+// year only moves when the player presses the small Age button, which
+// runs stepYear(). Vehicles animate on the map's own requestAnimationFrame
+// loop, independent of game time, so they keep moving while the player
+// waits between Age presses. A player can live 100 years, or 1000.
+const DAY_MS_BY_SPEED = [0, 0, 0, 0];
 const IC = {
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
@@ -229,7 +230,7 @@ function renderHUD() {
   $('hud').innerHTML = `<div class="company-card card">
     <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
     <div class="cc-money"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span></div>
-    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)} · ${Math.max(0, Math.ceil(((S.maxDays || NORMAL_DAYS) - S.day) / 365.25))} yrs left</span><button class="btn small" data-a="nextYear">Next year ▶</button></div>
+    <div class="cc-goals"><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span><button class="btn small" data-a="ageUp">Age +1</button></div>
   </div>
   <div class="rail-top">
     <button class="rail-btn notif-btn" data-a="panel" data-x="inbox" aria-label="Notifications">✉${unread ? `<span class="badge">${unread}</span>` : ''}</button>
@@ -463,8 +464,8 @@ function showTitle() {
 function chooseMode() {
   openModal(`<h2>Choose a game mode</h2><p class="muted">You can't change this later.</p>
     <div class="modes">
-      <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>About 100 years, from ${START_YEAR} to ${START_YEAR + NORMAL_YEARS}. Time runs year by year, vehicles keep moving, and you can buy 25 more years at a time in the Shop. At the end you get a final score for population, money and how far you beat the market.</span></button>
-      <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Skip ahead a day, a week, a month or a year whenever you want.</span></button>
+      <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>No time limit. Press Age to move a year forward, vehicles keep moving while you wait. At the end you get a final score for population, money and how far you beat the market.</span></button>
+      <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Press Age to move a year forward whenever you want.</span></button>
     </div>`, 'center');
 }
 function startPick() {
@@ -493,7 +494,7 @@ function nameCompany() {
 }
 function enterGame(returning) {
   UI.pick = null; MapView.setPick(false); closeModal();
-  S.speed = 1; // Time runs always: old saves with pause (0) resume at slow speed.
+  S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
   const da = autoCreditDaily(), ca = autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   renderHUD(); MapView.home();
@@ -501,12 +502,12 @@ function enterGame(returning) {
   renderTutorial();
 }
 const TUT = [
-  { t: () => S.mode === 'infinite' ? 'Welcome! There is no goal in Infinite mode. Play as long as you like and skip ahead whenever you want.' : `Welcome! You have 100 years. Grow ${esc(cname(S.home))}'s population, grow your money, and beat the stock market.`, btn: 'Next' },
+  { t: () => S.mode === 'infinite' ? 'Welcome! There is no goal in Infinite mode. Play as long as you like and press Age whenever you want.' : `Welcome! No time limit. Grow ${esc(cname(S.home))}'s population, grow your money, and beat the stock market. Press Age to move a year forward.`, btn: 'Next' },
   { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
   { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
   { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
-  { t: () => 'Time runs year by year, about 12 seconds per year, and vehicles keep moving while years pass. You start with 100 years and can buy 25 more at a time in the Shop.', btn: 'Got it' },
+  { t: () => 'Time only moves when you press Age, one year at a time. Vehicles keep moving while you wait. No age limit — you can live 100 years, or 1000.', btn: 'Got it' },
 ];
 function renderTutorial() {
   if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
@@ -606,7 +607,7 @@ function doSkip(days) {
 }
 function gameOver() {
   const o = S.over;
-  openModal(`<h2>${o.bankrupt ? 'Bankrupt' : `${START_YEAR + Math.round((S.maxDays || NORMAL_DAYS) / 365.25)}: the final report`}</h2><p class="muted">${o.bankrupt ? 'Your debts caught up with you.' : `${Math.round((S.maxDays || NORMAL_DAYS) / 365.25)} years have passed.`}</p>
+  openModal(`<h2>${o.bankrupt ? 'Bankrupt' : 'Game over'}</h2><p class="muted">${o.bankrupt ? 'Your debts caught up with you.' : 'Your run ended.'}</p>
     <div class="big center">${o.score} points</div>
     <div class="stats3 box"><div><span>👥 Population</span><b class="${upCls(o.pop)}">${fmtPct(o.pop)}</b></div><div><span>💰 Net worth</span><b>${fmtMoney(o.nw, true)}</b></div><div><span>📈 vs Market</span><b class="${upCls(o.beat)}">${fmtPct(o.beat)}</b></div></div>
     <p class="muted">You finished as <b>${o.stage}</b>. The market returned ${fmtPct(o.mkt)}; you returned ${fmtPct(o.mine)}.</p>
@@ -618,21 +619,19 @@ function loop(now) {
   // Daily money is automatic, even if the game stays open past midnight.
   const _da = autoCreditDaily(), _ca = autoCreditShopCash();
   if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
-  const dt = Math.min(1000, now - (lastT || now)); lastT = now;
+  lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  // Game time does NOT advance here. Only the Age button moves a year.
+  // Vehicles keep moving because MapView's own frame loop runs step()
+  // independently of this loop. This loop only refreshes the HUD and
+  // saves, and handles real-world daily cash grants above.
   if (!document.hidden) {
-    UI.acc += dt;
-    const per = DAY_MS_BY_SPEED[S.speed]; let stepped = false; const wars = S.wars.length;
-    while (UI.acc >= per) { UI.acc -= per; stepDay(); stepped = true; if (S.over) break; }
-    if (stepped) {
-      if (S.wars.length !== wars || S.day % 7 === 0) MapView.redraw();
-      if (!focused && now - UI.lastDraw > 250) {
-        UI.lastDraw = now; renderHUD(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD();
-        if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus')) renderPanel();
-      }
-      if (S.over) { save(); gameOver(); }
+    if (!focused && now - UI.lastDraw > 250) {
+      UI.lastDraw = now; renderHUD(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD();
+      if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus')) renderPanel();
     }
-  } else UI.acc = 0;
+    if (S.over) { save(); gameOver(); }
+  }
   if (now - UI.lastSave > 10000) { UI.lastSave = now; save(); }
 }
 function refreshAll() {
@@ -858,9 +857,7 @@ PANELS.inbox = () => {
     <h4>Latest news</h4><div class="list">${S.news.slice(0, 30).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('')}</div>`);
 };
 PANELS.shop = () => {
-  const yearsCost = S.mode === 'infinite' ? 0 : Math.round(Math.max(250000, netWorth() * 0.05) * Math.pow(1.5, S.yearsBought || 0) / 1000) * 1000;
-  return panelShell('Shop', 'Every power-up is free, once per real day. The cash grant is added to your cash automatically each day. Extra years are bought with in-game cash, not real money.',
-    (S.mode === 'infinite' ? '' : `<div class="card in"><h4>⏳ 25 more years</h4><p class="muted small">You have ${Math.max(0, Math.ceil(((S.maxDays || NORMAL_DAYS) - S.day) / 365.25))} years left. Buy 25 more, again and again. Price rises each time you buy.</p><button class="btn3d orange" data-a="buyYears">BUY · ${fmtMoney(yearsCost, true)}</button></div>`) +
+  return panelShell('Shop', 'Every power-up is free, once per real day. The cash grant is added to your cash automatically each day.',
     SHOP.filter(s => s.id !== 'cash').map(s => `<div class="card in"><h4>${s.icon} ${s.name}</h4><p class="muted small">${s.desc}</p><button class="btn3d orange" data-a="shopBuy" data-x="${s.id}" ${shopReady(s.id) ? '' : 'disabled'}>${shopReady(s.id) ? 'GET FREE' : 'COME BACK TOMORROW'}</button></div>`).join(''));
 };
 PANELS.search = () => {
@@ -889,7 +886,7 @@ PANELS.settings = () => {
 };
 PANELS.help = () => {
   return panelShell('Help', '',
-    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time runs year by year, vehicles keep moving, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
+    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves when you press Age, one year at a time, vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
 function moreSheet() {
@@ -1030,8 +1027,7 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
-  buyYears: () => act(() => buyYears(), '25 more years bought'),
-  nextYear: () => { stepYear(); UI.acc = 0; save(); renderHUD(); if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
+  ageUp: () => { stepYear(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); },
   claimDaily: () => {
     const r = dailyRewardInfo(); const e = claimDaily();
     if (e) return toast(e, 'bad');

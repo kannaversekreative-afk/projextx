@@ -341,14 +341,6 @@ function setTax(kind, value) {
   news('Nation', `${label} in ${cname(S.home)} is now ${Math.round(cs[kind] * 100)}%. Reactions will be reported at year end.`, S.home);
   return null;
 }
-function buyYears() {
-  if (S.mode === 'infinite') return 'Infinite mode has no time limit.';
-  const cost = Math.round(Math.max(250000, netWorth() * 0.05) * Math.pow(1.5, S.yearsBought || 0) / 1000) * 1000;
-  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; S.yearsBought = (S.yearsBought || 0) + 1; S.maxDays = (S.maxDays || NORMAL_DAYS) + Math.round(25 * 365.25);
-  news('Business', `You bought 25 more years. The game now runs to about ${START_YEAR + Math.round(S.maxDays / 365.25)}.`, S.home);
-  return null;
-}
 
 // ---------- day loop ----------
 function stepDay() {
@@ -367,7 +359,9 @@ function stepDay() {
   S.netWorth = netWorth();
   S.nh.d.push([S.day, Math.round(S.netWorth)]); if (S.nh.d.length > 400) S.nh.d.shift();
   checkCareer();
-  if (S.mode === 'normal' && S.day >= (S.maxDays || NORMAL_DAYS)) finishGame();
+  // No time limit: the game does NOT end at 100 years, or any age. It
+  // only ends on bankruptcy below. A long life just means more chances
+  // for a CPU superpower to try a takeover or a war.
   if (S.netWorth < -Math.max(2e6, S.stats.startNet)) { S.broke = (S.broke || 0) + 1; if (S.broke === 1) news('Business', 'Warning: you are close to bankruptcy. Close losing locations or sell assets.'); if (S.broke > 60) finishGame(true); } else S.broke = 0;
 }
 
