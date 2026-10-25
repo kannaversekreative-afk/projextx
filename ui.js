@@ -75,6 +75,7 @@ function migrateSave(s) {
   if (!Array.isArray(s.stores)) s.stores = [];
   if (!Array.isArray(s.loans)) s.loans = [];
   if (!s.sports) s.sports = null;
+  if (s.co) Object.values(s.co).forEach(c => { if (!Array.isArray(c.board)) c.board = []; if (!isFinite(c.weekProfitStreak)) c.weekProfitStreak = 0; if (!Array.isArray(c.weekNets)) c.weekNets = []; });
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
@@ -268,7 +269,7 @@ function renderHUD() {
     <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Companies</button>
     <button class="bb-btn" data-a="more"><span>•••</span>More</button>
   </div>
-  <div class="agebar card"><button class="btn small" data-a="ageDown" aria-label="Age down one year">−</button><span>Age · ${yearOf(S.day)}</span><button class="btn small" data-a="ageUp" aria-label="Age up one year">+</button></div>`;
+  <div class="agebar card"><button class="btn small" data-a="ageDown" aria-label="Age down one year">−</button><span>Age · ${yearOf(S.day)}</span><button class="btn small" data-a="ageUp" aria-label="Age up one year">+</button><button class="btn small" data-a="ageWeek" aria-label="Advance one week">WEEK</button></div>`;
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
@@ -943,7 +944,7 @@ PANELS.markets = () => {
       const held = S.holdings[c.a3], ch = chgVs(c), starred = S.watch.includes(c.a3);
       return `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span><span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span></button>`;
     }).join('') || '<div class="card in empty">Nothing here yet. Try another category, or star a stock to build your Watchlist.</div>'}</div>
-    ${UI.cat === 'IPOs' ? '<p class="muted small">IPOs here means private companies you control that can go public. Your home company needs to be worth $25M to list.</p>' : ''}`);
+    ${UI.cat === 'IPOs' ? '<p class="muted small">IPOs here means private companies you control that can go public. A company needs a full board room and 2 profitable weeks in a row to list.</p>' : ''}`);
 };
 function tradeView(a3) {
   const c = S.co[a3]; if (!c) return panelShell('Stock', '', '<p class="muted">Company not found.</p>');
@@ -1025,7 +1026,7 @@ PANELS.company = () => {
       ${F ? `<h5>Fleet</h5><div class="kv"><span>${F.levels[c.fleet].name}</span><b>${c.fleet < F.levels.length - 1 ? `<button class="btn" data-a="fleetUp" data-x="${c.a3}">Upgrade · ${fmtMoney(F.levels[c.fleet + 1].cost, true)}</button>` : 'Biggest there is'}</b></div>${c.fleet ? `<button class="btn" data-a="fleetSell" data-x="${c.a3}">Sell fleet level · +${fmtMoney(F.levels[c.fleet].cost * 0.6, true)}</button>` : ''}` : ''}
       <h5>Loans &amp; listing</h5>
       <div class="kv"><span>Your loan</span><b>${fmtMoney(S.loan, true)} · Bank will lend ${fmtMoney(maxLoan(), true)}</b></div>
-      <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs $25M value)</button>` : '<span class="muted small">Listed</span>'}</div>
+      <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs full board + 2 profitable weeks)</button>` : '<span class="muted small">Listed</span>'}</div>
       <h5>Website, stock &amp; tax</h5>
       <div class="kv"><span>Website</span><b>${WEB_TIERS[c.web.tier].name} · ${oe.visitors.toLocaleString()} visitors/week · ${fmtMoney(oe.profit, true)}/week</b></div>
       <div class="kv"><span>Tax in ${esc(cname(c.a3))}</span><b>${Math.round(country(c.a3).tax * 100)}% corporate — change it in Nation</b></div>
@@ -1271,9 +1272,11 @@ PANELS.sports = () => {
       <div class="kv"><span>Tickets and Concessions</span><b>${fmtMoney(fin.tickets + fin.concessions, true)}</b></div><div class="kv"><span>Broadcasting</span><b>${fmtMoney(fin.broadcast, true)}</b></div><div class="kv"><span>Sponsors</span><b>${fmtMoney(fin.sponsors, true)}</b></div><div class="kv"><span>Total Revenues</span><b>${fmtMoney(fin.revenue, true)}</b></div>
       <div class="kv"><span>Player Payrolls</span><b>${fmtMoney(fin.payroll, true)}</b></div><div class="kv"><span>Administrative Cost</span><b>${fmtMoney(fin.admin, true)}</b></div><div class="kv"><span>Total Expenses</span><b>${fmtMoney(fin.payroll + fin.admin, true)}</b></div>
       <div class="kv"><span>Net Income</span><b class="${upCls(fin.net)}">${fmtMoney(fin.net, true)}</b></div>` : `<div class="kv"><span>Franchise value</span><b>${fmtMoney(t.value, true)}</b></div><div class="kv"><span>Stadium value</span><b>${fmtMoney(t.stadium.capacity * 8000, true)}</b></div><div class="kv"><span>Championships</span><b>${t.champions}</b></div><div class="kv"><span>Profit streak</span><b>${t.profitStreak || 0} seasons</b></div>`}
-      <h4>IPO</h4><p class="muted small">No stock at first. When you want it, take the team public: sell 30% to the public, keep 70%, and trade its shares here afterwards.</p>
+      <h4>Rating · out of 5</h4>${(() => { const r = teamRating(t, fin); return `<div class="kv"><span>Overall</span><b>${r.rating.toFixed(1)} / 5</b></div><div class="kv"><span>Performance · Player likeness · Fans</span><b>${r.perf.toFixed(1)} · ${r.like.toFixed(1)} · ${r.fans.toFixed(1)}</b></div><div class="kv"><span>Profits · Attendees</span><b>${r.prof.toFixed(1)} · ${r.att.toFixed(1)}</b></div><p class="muted small">Rating drives revenue: a higher rating brings bigger crowds and sponsors, and that lifts valuation. Valuation now: ${fmtMoney(t.value, true)}.</p>`; })()}
+      <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full — hire in Offices'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
+      <h4>IPO</h4><p class="muted small">No stock at first. IPO whenever you want after you buy it, at today's valuation. Sell up to 100%, minus a 7% fee. If you just bought it for $200M, a 100% sale gets you $200M minus the fee — grow the rating first if you want more.</p>
       ${t.ipo ? `<div class="kv"><span>Share price</span><b>${fmtMoney(t.ipo.price)}</b></div><div class="kv"><span>Your shares</span><b>${t.ipo.yourShares.toLocaleString()}</b></div><div class="kv"><span>Public shares</span><b>${t.ipo.publicShares.toLocaleString()}</b></div>
-      <div class="row"><input id="ipoQty" class="qty" type="number" value="1000" min="1"><button class="btn flex" data-a="ipoBuy" data-x="${t.id}">BUY SHARES</button><button class="btn flex" data-a="ipoSell" data-x="${t.id}">SELL SHARES</button></div>` : (sportIpoEligible(t) ? `<button class="btn3d orange wide" data-a="sportIpo" data-x="${t.id}">TAKE PUBLIC · IPO</button>` : `<p class="muted small">IPO-ready when: you own it, value $200M+, and 2 profitable seasons in a row. Current: value ${fmtMoney(t.value, true)}, streak ${t.profitStreak || 0}.</p>`)}</div>`;
+      <div class="row"><input id="ipoQty" class="qty" type="number" value="1000" min="1"><button class="btn flex" data-a="ipoBuy" data-x="${t.id}">BUY SHARES</button><button class="btn flex" data-a="ipoSell" data-x="${t.id}">SELL SHARES</button></div>` : (mine ? `<div class="row"><label class="muted small">SELL %</label><input id="ipoPctTeam" class="qty" type="number" value="100" min="1" max="100"></div>${sportIpoEligible(t) ? `<button class="btn3d orange wide" data-a="sportIpo" data-x="${t.id}">TAKE PUBLIC · IPO</button>` : `<p class="muted small">IPO needs a full board room and 2 profitable weeks in a row. Board: ${(typeof boardFull === 'function' && boardFull(t)) ? 'full' : 'not full'}. Weekly streak: ${t.weekStreak || 0} / 2.</p>`}` : `<p class="muted small">Buy this team to take it public.</p>`)}</div>`;
     } else if (tab === 'draft') {
       body += `<div class="card in"><h4>Draft class ${lg.draftYear || yearOf(S.day)}</h4><p class="muted small">Worst team picks first. Rookies sign for 4 years at a rookie salary.</p>
       ${lg.draftClass.map(p => `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.pos} · Age ${p.age} · ${sportStars(p)} (${p.rating})</span><b>${mine ? '' : ''}${fmtMoney(sportSalary(p.rating))}/yr</b></div>${mine ? `<button class="btn" data-a="draftPick" data-x="${t.id}|${p.id}">DRAFT</button>` : ''}`).join('') || '<p class="muted small">No draft class yet. Age a year to run a season and generate the next class.</p>'}
@@ -1329,6 +1332,29 @@ PANELS.stores = () => {
     `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${(STORE_TYPES[st.type] || STORE_TYPES.coffee).icon}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
     <p class="muted small">Stores earn every in-game week: customers pay, the store pays rent, wages, ingredients and campaigns, and the net lands in your cash.</p>`);
 };
+
+PANELS.offices = () => {
+  const boardRow = (e, kind, id) => {
+    const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
+    return BOARD_ROLES.map(r => {
+      const m = b.find(x => x.role === r.role);
+      return m ? `<div class="kv"><span>${r.role} · ${esc(m.name)}</span><b>${fmtMoney(m.salary)}/yr <button class="btn small" data-a="fireBoard" data-x="${kind}|${id}|${r.role}">FIRE</button></b></div>`
+               : `<div class="kv"><span>${r.role} · empty</span><b><button class="btn" data-a="hireBoard" data-x="${kind}|${id}|${r.role}">HIRE ${fmtMoney(r.salary, true)}</button></b></div>`;
+    }).join('');
+  };
+  const companies = Object.values(S.co).filter(c => controlled(c.a3));
+  const teams = (typeof ownedSportTeams === 'function') ? ownedSportTeams() : [];
+  const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>
+    <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
+    ${boardRow(c, 'co', c.a3)}
+    ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}</div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
+  const teamCards = teams.map(t => `<div class="card in"><b>${esc(t.name)}</b><div class="muted small">${esc(t.cityName)} · Value ${fmtMoney(t.value, true)} · Rating ${(t.rating5 || 3).toFixed(1)} / 5</div>
+    <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
+    ${boardRow(t, 'team', t.id)}
+    ${t.ipo ? '<p class="muted small">Already public.</p>' : '<p class="muted small">IPO in the team Finance tab, up to 100% at today\'s valuation minus a 7% fee.</p>'}</div>`).join('') || '<p class="muted small">No teams you own yet. Buy one in Sports.</p>';
+  return panelShell('Offices', 'Every business and team needs an office with a full board room before it can go public. Hire all 5 seats, then keep 2 profitable weeks in a row.',
+    `<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
+};
 PANELS.bank = () => {
   ensureStores();
   return panelShell('Bank', 'Business loans. Borrow to build, repay every week from your cash.',
@@ -1377,7 +1403,7 @@ function moreSheet() {
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
-    ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
+    ['leaderboard', '🏆', 'Leaderboard'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
     ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
   openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
@@ -1484,7 +1510,10 @@ const A = {
   tradeOut: x => { UI.tradeOut = x; renderPanel(); },
   tradeIn: x => { const [tid, pid] = x.split('|'); UI.tradeTarget = tid; UI.tradeIn = pid; renderPanel(); },
   doSportTrade: x => { const cash = Math.floor(+($('tradeCash') ? $('tradeCash').value : 0)); act(() => tradeSportPlayer(x, UI.tradeOut, UI.tradeTarget, UI.tradeIn, cash), 'Trade done!'); UI.tradeOut = null; UI.tradeIn = null; },
-  sportIpo: x => act(() => sportIpo(x), 'Team is now public!'),
+  hireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => hireBoard(e, role), `${role} hired!`); },
+  fireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => fireBoard(e, role), `${role} seat cleared.`); },
+  ageWeek: () => { try { stepWeek(); save(); renderHUD(); if (UI.panel) renderPanel(); toast('Advanced one week.', 'good'); } catch (e) { toast('Could not advance a week.', 'bad'); } },
+  sportIpo: x => { const el = document.getElementById('ipoPctTeam'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => sportIpo(x, pct), 'Team is now public!'); },
   ipoBuy: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'buy', qty), 'Shares bought'); },
   ipoSell: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'sell', qty), 'Shares sold'); },
   storeOpen: x => { pushPanel(x); },
@@ -1527,7 +1556,7 @@ const A = {
   fleetSell: x => act(() => sellFleet(x), 'Fleet level sold'),
   borrow: () => act(() => borrow(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4))), 'Loan taken'),
   repay: () => act(() => repay(Math.min(S.loan, Math.max(0, S.cash))), 'Loan repaid'),
-  ipo: x => act(() => goPublic(x, 0.4), 'IPO complete! 40% sold to the public.'),
+  ipo: x => { const el = document.getElementById('ipoPct'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => goPublic(x, pct), 'IPO complete!'); },
   closeLoc: x => {
     const [a3, id] = x.split('|');
     act(() => { closeLoc(S.co[a3], id); return null; }, 'Location closed');

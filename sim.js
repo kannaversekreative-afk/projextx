@@ -513,11 +513,15 @@ function buyAddon(a3, id) {
 function goPublic(a3, pct) {
   const e = requireControl(a3); if (e) return e;
   const c = S.co[a3]; if (c.listed) return 'Already listed.';
-  const v = companyFairTotal(c); if (v < 25e6) return 'A company must be worth $25M to list.';
+  if ((typeof boardFull === 'function') && !boardFull(c)) return 'IPO needs a full board room: hire all 5 board seats in Offices first.';
+  if ((c.weekProfitStreak || 0) < 2) return `IPO needs 2 profitable weeks in a row. Current weekly streak: ${c.weekProfitStreak || 0}.`;
+  pct = clamp(pct != null ? pct : 1, 0.01, 1);
+  const v = companyFairTotal(c);
   const sold = Math.floor(c.shares * pct);
-  S.cash += sold * (v / c.shares) * 0.93; S.holdings[a3].qty -= sold; c.listed = true; c.price = v / c.shares;
+  const gross = Math.round(sold * (v / c.shares)), fee = Math.round(gross * 0.07), proceeds = gross - fee;
+  S.cash += proceeds; S.holdings[a3].qty -= sold; c.listed = true; c.price = v / c.shares;
   S.stats.ipos++; S.xp += 500;
-  news('Business', `${c.name} rings the opening bell! The IPO raised ${fmtMoney(sold * c.price * 0.93, true)}.`, a3);
+  news('Business', `${c.name} rings the opening bell! The IPO sold ${Math.round(pct * 100)}% for ${fmtMoney(proceeds, true)} after a 7% fee.`, a3);
   return null;
 }
 function maxLoan() { return Math.max(0, (holdingsValue() * 0.3 + propValue() * 0.6) - S.loan); }

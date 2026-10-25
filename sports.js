@@ -64,7 +64,7 @@ function makeSportTeam(league, city, mascot, color, usedNames) {
     name, mascot, color, logo: mascot[0], cityName,
     stadium: { name: cityName + ' Park', capacity: cap, level: 1 },
     owner: 'AI', value: 0, wins: 0, losses: 0, history: [], champions: 0,
-    players: [], finance: null, finHist: [], ipo: null, lastNet: 0, profitStreak: 0 };
+    players: [], finance: null, finHist: [], ipo: null, lastNet: 0, profitStreak: 0, board: [], weekNets: [], weekStreak: 0, rating5: 3.0 };
   for (let i = 0; i < 12; i++) team.players.push(makeSportPlayer(league, usedNames, 20, 34, 58, 88));
   team.value = 120000000 + Math.round(rand() * 200000000);
   return team;
@@ -91,6 +91,10 @@ function ensureSports() {
     if (!lg.draftClass) lg.draftClass = [];
     lg.teams.forEach(t => {
       if (!t.finHist) t.finHist = [];
+      if (!Array.isArray(t.board)) t.board = [];
+      if (!Array.isArray(t.weekNets)) t.weekNets = [];
+      if (!isFinite(t.weekStreak)) t.weekStreak = 0;
+      if (!isFinite(t.rating5)) t.rating5 = 3.0;
       if (!t.history) t.history = [];
       if (t.value == null || !isFinite(t.value)) t.value = 150000000;
       t.players.forEach(p => { if (!p.stats) p.stats = {}; if (!isFinite(p.salary)) p.salary = sportSalary(p.rating || 60); });
@@ -129,17 +133,53 @@ function sportFinance(team) {
   const winPct = (team.wins + team.losses) ? team.wins / (team.wins + team.losses) : 0.5;
   const city = W.cities[team.cityId], popM = city ? city.pop / 1e6 : 10;
   const market = clamp(0.6 + popM / 20, 0.6, 2.2);
-  const attendance = Math.round(team.stadium.capacity * clamp(0.35 + winPct * 0.45 + teamAvgStars(team) * 0.03, 0.3, 0.98));
+  const rb = team.rating5 ? clamp(0.85 + team.rating5 * 0.06, 0.85, 1.15) : 1;
+  const attendance = Math.round(Math.min(team.stadium.capacity * 0.98, team.stadium.capacity * clamp(0.35 + winPct * 0.45 + teamAvgStars(team) * 0.03, 0.3, 0.98) * rb));
   const ticketPrice = Math.round(28 * market);
   const tickets = attendance * homeGames * ticketPrice;
   const concessions = Math.round(tickets * 0.35);
   const broadcast = Math.round((18000000 + Math.min(60000000, popM * 900000)) * market / 1.4);
-  const sponsors = Math.round(9000000 + winPct * 22000000 + teamAvgStars(team) * 2500000);
+  const sponsors = Math.round((9000000 + winPct * 22000000 + teamAvgStars(team) * 2500000) * rb);
   const revenue = tickets + concessions + broadcast + sponsors;
   const payroll = team.players.reduce((a, p) => a + p.salary, 0);
   const admin = 12000000 + team.stadium.level * 1500000;
   const net = revenue - payroll - admin;
   return { revenue, tickets, concessions, broadcast, sponsors, payroll, admin, net, attendance, winPct, games };
+}
+
+function teamRating(t, fin) {
+  fin = fin || sportFinance(t);
+  const perf = clamp((fin.winPct || 0.5) * 5, 1, 5);
+  const like = clamp(teamAvgStars(t), 1, 5);
+  const fans = clamp(fin.attendance / Math.max(1, t.stadium.capacity) * 5, 1, 5);
+  const margin = fin.revenue > 0 ? fin.net / fin.revenue : 0;
+  const prof = clamp(3 + margin * 10, 1, 5);
+  const att = clamp(fin.attendance / 35000 * 5, 1, 5);
+  const rating = Math.round(clamp(0.25 * perf + 0.20 * like + 0.20 * fans + 0.20 * prof + 0.15 * att, 1, 5) * 10) / 10;
+  return { rating, perf, like, fans, prof, att, fin };
+}
+function teamValueFromRating(t, fin, rating) {
+  fin = fin || sportFinance(t); rating = rating != null ? rating : teamRating(t, fin).rating;
+  return Math.max(50000000, Math.round(fin.revenue * (1.5 + rating * 0.8) + t.stadium.capacity * 8000 + t.champions * 40000000));
+}
+// Weekly, not yearly: called from businessWeek. Updates rating and value,
+// tracks the weekly profit streak, and returns the owned teams' weekly net
+// so businessWeek can pay it in cash. It does NOT pay cash itself.
+function sportWeek() {
+  if (!S || !S.sports) return 0;
+  let total = 0;
+  S.sports.leagues.forEach(lg => lg.teams.forEach(t => {
+    const fin = sportFinance(t), r = teamRating(t, fin);
+    t.rating5 = r.rating; t.value = teamValueFromRating(t, fin, r.rating); t.finance = fin;
+    if (t.owner === 'you') {
+      const bc = (typeof boardWeeklyCost === 'function') ? boardWeeklyCost(t) : 0;
+      const weeklyNet = Math.round(fin.net / 52 - bc);
+      t.weekNets.push(weeklyNet); if (t.weekNets.length > 4) t.weekNets.shift();
+      let streak = 0; for (let i = t.weekNets.length - 1; i >= 0; i--) { if (t.weekNets[i] > 0) streak++; else break; }
+      t.weekStreak = streak; total += weeklyNet;
+    }
+  }));
+  return total;
 }
 function sportSeason() {
   // One full season per league, run at year end. Settles owned teams
@@ -163,11 +203,11 @@ function sportSeason() {
       t.finHist.unshift({ year, revenue: fin.revenue, payroll: fin.payroll, admin: fin.admin, net: fin.net, wins: t.wins, losses: t.losses });
       if (t.finHist.length > 5) t.finHist.length = 5;
       t.profitStreak = fin.net > 0 ? (t.profitStreak || 0) + 1 : 0;
-      t.value = Math.max(50000000, Math.round(fin.net * 10 + t.stadium.capacity * 8000 + t.champions * 40000000 + 60000000));
+      const rr = teamRating(t, fin); t.rating5 = rr.rating; t.value = teamValueFromRating(t, fin, rr.rating);
       const place = [...lg.teams].sort((a, b) => b.wins - a.wins).findIndex(x => x.id === t.id) + 1;
       t.history.unshift({ year, place, wins: t.wins, losses: t.losses, champion: false });
       if (t.history.length > 6) t.history.length = 6;
-      if (t.owner === 'you' && fin.net !== 0) S.cash += fin.net;
+      // Weekly cash is already paid in sportWeek. Do not pay the annual net again here.
     });
     const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
     const semi1 = sportPlaySeries(sorted[0], sorted[3], 2), semi2 = sportPlaySeries(sorted[1], sorted[2], 2);
@@ -262,16 +302,23 @@ function upgradeStadium(teamId) {
   return null;
 }
 function sportIpoEligible(t) {
-  return t.owner === 'you' && !t.ipo && t.value >= 200000000 && (t.profitStreak || 0) >= 2;
+  if (!t || t.owner !== 'you' || t.ipo) return false;
+  const bf = (typeof boardFull === 'function') ? boardFull(t) : true;
+  return bf && (t.weekStreak || 0) >= 2;
 }
-function sportIpo(teamId) {
+function sportIpo(teamId, pct) {
   const t = sportTeam(teamId); if (!t) return 'Team not found.';
-  if (!sportIpoEligible(t)) return 'Not IPO-ready yet: you must own it, it must be worth $200M+, and it needs 2 profitable seasons in a row.';
+  if (t.ipo) return 'This team is already public. Trade its shares in Finance.';
+  if (t.owner !== 'you') return 'You must own the team first.';
+  if ((typeof boardFull === 'function') && !boardFull(t)) return 'IPO needs a full board room: hire all 5 board seats in Offices first.';
+  if ((t.weekStreak || 0) < 2) return `IPO needs 2 profitable weeks in a row. Current weekly streak: ${t.weekStreak || 0}.`;
+  pct = clamp(pct != null ? pct : 1, 0.01, 1);
   const totalShares = 1000000, price = Math.max(1, Math.round(t.value / totalShares));
-  const proceeds = Math.round(totalShares * 0.30 * price);
+  const gross = Math.round(t.value * pct), fee = Math.round(gross * 0.07), proceeds = gross - fee;
   S.cash += proceeds;
-  t.ipo = { totalShares, price, publicShares: Math.round(totalShares * 0.30), yourShares: Math.round(totalShares * 0.70) };
-  news('Sports', `${t.name} went public at ${fmtMoney(price)} a share. You sold 30% for ${fmtMoney(proceeds, true)} and kept 70%.`, t.a3);
+  t.ipo = { totalShares, price, publicShares: Math.round(totalShares * pct), yourShares: Math.round(totalShares * (1 - pct)) };
+  if (pct >= 0.999) t.owner = 'public';
+  news('Sports', `${t.name} went public at ${fmtMoney(price)} a share. You sold ${Math.round(pct * 100)}% for ${fmtMoney(proceeds, true)} after a 7% fee.`, t.a3);
   return null;
 }
 function sportTradeShares(teamId, side, qty) {

@@ -312,14 +312,22 @@ function businessWeek() {
   let mineProfit = 0;
   for (const a3 in S.co) {
     const c = S.co[a3], w = companyWeek(c);
-    if (controlled(a3)) mineProfit += w.profit * stake(a3);
-    else aiWeek(c);
+    if (controlled(a3)) {
+      const bc = (typeof boardWeeklyCost === 'function') ? boardWeeklyCost(c) : 0;
+      const netP = w.profit - bc;
+      c.weekProfitStreak = netP > 0 ? (c.weekProfitStreak || 0) + 1 : 0;
+      if (!Array.isArray(c.weekNets)) c.weekNets = [];
+      c.weekNets.push(Math.round(netP)); if (c.weekNets.length > 4) c.weekNets.shift();
+      mineProfit += netP * stake(a3);
+    } else aiWeek(c);
   }
+  let teamProfit = 0;
+  if (typeof sportWeek === 'function') { try { teamProfit = sportWeek() || 0; } catch (e) {} }
   const rent = propsWeek();
   let interest = 0, overdraft = 0;
   if (S.loan > 0) interest = S.loan * 0.08 / 52;
   if (S.cash < 0) overdraft = -S.cash * 0.2 / 52;
-  const profit = mineProfit + rent - interest - overdraft;
+  const profit = mineProfit + rent + teamProfit - interest - overdraft;
   S.cash += profit;
   const own = mine(); let satW = 0, satN = 0;
   own.forEach(c => c.locs.forEach(l => { satW += l.sat * Math.max(1, l.cust); satN += Math.max(1, l.cust); }));
@@ -438,6 +446,7 @@ function ageDown() {
   try { const prev = JSON.parse(YEAR_SNAPS.pop()); S = prev; } catch (e) { return 'Could not go back a year.'; }
   return null;
 }
+function stepWeek() { for (let i = 0; i < 7 && !S.over; i++) stepDay(); }
 function stepYear() { const y0 = yearOf(S.day); while (!S.over && yearOf(S.day) === y0) stepDay(); }
 function setTax(kind, value) {
   const cs = country(S.home); if (!cs) return 'No home nation.';
