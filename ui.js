@@ -285,8 +285,18 @@ function panelShell(title, sub, body) {
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
 }
+// Re-render the open panel UNLESS the player is typing in it. An
+// unguarded re-render replaces the focused input mid-edit: the typed
+// value is lost and, if the player then clicks a button, the click can
+// land on a replaced node and never fire. The frame loop already guards
+// this way; async callbacks (price refresh, settle) must too — that
+// unguarded path is what made a later Crypto stake edit not stick live.
+function renderPanelUnlessTyping() {
+  if (typeof document !== 'undefined' && document.querySelector && document.querySelector('#panel input:focus')) return;
+  renderPanel();
+}
 function renderPanel() {
-  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); return; }
+  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); UI.lastPanelHTML = null; UI.lastPanelKey = null; return; }
   // Throttle stamp for the frame loop: loop() re-renders the open panel
   // at most every 1500ms. This stamp used to never be updated, so the
   // loop re-rendered every ~250ms — wiping typed inputs (Crypto stake
@@ -296,6 +306,23 @@ function renderPanel() {
   UI.lastPanel = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
   if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
+  // SCROLL FIX (2026-10-26): the frame loop re-rendered the open panel
+  // every 1.5s by replacing #panel's whole innerHTML. Two real symptoms:
+  // (a) scroll snapped back to top — the new .panel-body starts at 0;
+  // (b) a finger drag got STUCK — replacing the scrolled node mid-gesture
+  // cancels the browser's touch scroll, so the content never moves.
+  // Same bug class as the Crypto stake wipe and the Leave city click bug.
+  // Fix, in two layers: (1) if the panel, stack and generated HTML are
+  // all unchanged, do not touch the DOM at all — steady panels (Markets,
+  // Airport, Web, Messages, settings) now survive frame ticks untouched;
+  // (2) when the HTML did change (live prices, battle ticks, crypto
+  // refresh), restore the previous scroll position, clamped, so the
+  // position survives the rewrite. A genuinely different panel (or a
+  // deeper stack, e.g. Markets -> a stock) still starts at the top.
+  const bodyEl = (typeof document !== 'undefined' && document.querySelector) ? document.querySelector('#panel .panel-body') : null;
+  const prevTop = bodyEl ? bodyEl.scrollTop : 0;
+  const prevKey = UI.lastPanelKey;
+  const key = UI.panel + '|' + UI.stack.length + '|' + (cur ? (cur.a3 || '') : '');
   let html = '';
   try {
     if (UI.panel === 'stock' && cur) html = tradeView(cur.a3);
@@ -306,7 +333,13 @@ function renderPanel() {
     // nothing. Now the panel opens and says exactly what broke.
     html = '<div class="card in"><h3>That screen hit a problem</h3><p class="muted small">Please reload the game and try again. If it keeps happening, this is the error:</p><p class="muted small">' + esc(String(e && e.message || e)) + '</p><button class="btn3d orange wide" data-a="closePanel">CLOSE</button></div>';
   }
+  if (html === UI.lastPanelHTML && key === prevKey && document.querySelector('#panel.open')) return;
+  UI.lastPanelHTML = html; UI.lastPanelKey = key;
   $('panel').innerHTML = html; $('panel').classList.add('open');
+  if (key === prevKey) {
+    const nb = document.querySelector('#panel .panel-body');
+    if (nb && prevTop > 0) nb.scrollTop = Math.max(0, Math.min(prevTop, nb.scrollHeight - nb.clientHeight));
+  }
 }
 
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
@@ -792,14 +825,21 @@ async function boot() {
   addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   const saved = await loadSave();
-  if (saved) { S = saved; enterGame(true); }
+  if (saved) {
+    S = saved;
+    // A saved Random World reloads its generated landmass from its
+    // seed, so the map, countries and cities match the save exactly.
+    // Old shuffled saves (no seed) keep real Earth, as before.
+    if (S.mode === 'random' && S.randomSeed != null && typeof switchWorldToRandom === 'function') switchWorldToRandom(S.randomSeed);
+    enterGame(true);
+  }
   else showInherit();
 }
 function showInherit() {
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); UI.introMode = null;
   $('inherit').innerHTML = `<h1>WORL</h1>
     <div class="intro-modes">
-      <button class="intro-mode" data-a="introMode" data-x="offline"><b>Offline</b><span>Play on your own. World — the real world as it is today — or Random World, a shuffled world with random economies and companies.</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="offline"><b>Offline</b><span>Play on your own. World — the real world as it is today — or Random World, a fully generated world with random land, countries, economies and companies.</span></button>
       <button class="intro-mode" data-a="introMode" data-x="online"><b>Online</b><span>Same two worlds, but against real players. PvP comes later — it is not built yet.</span></button>
     </div>
     <button class="btn" data-a="introMode" data-x="minigames" style="margin-top:4px">🎮 Mini Games — no country needed</button>
@@ -813,7 +853,7 @@ function renderInheritStep() {
     step.innerHTML = `<div class="inherit-line">Offline</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">Play on your own, no other players.</p>
       <button class="btn3d orange wide" data-a="introMode" data-x="world">🌍 WORLD — the real world as it is today</button>
-      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — shuffled economies, random companies</button>`;
+      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — generated land, countries, economies, companies</button>`;
   } else if (UI.introMode === 'online') {
     step.innerHTML = `<div class="inherit-line">Online</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">The same two worlds, against real players. PvP is coming later — it is not built yet, and nothing here pretends otherwise: there are no AI rivals dressed up as online players.</p>
@@ -847,7 +887,7 @@ function renderInheritStep() {
       <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
       <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
       <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
-      <p>Random World: a shuffled world, not a generated one. Your starting treasury, debt and stability are random, every country's GDP is shuffled, and every company and stock gets a random fictional name. The map, countries and cities stay real Earth — a brand-new random landmass would need a whole new map. No rivals, no win goal, no situation cards: an endless sandbox, like World.</p>
+      <p>Random World: a fully generated world. The landmass, continents, countries, cities, populations, GDPs and every company and stock name are generated fresh each time you pick it — no real Earth at all. Your starting treasury, debt and stability are random on top of that. No rivals, no win goal, no situation cards: an endless sandbox, like World.</p>
       <div class="row"><button class="btn flex" data-a="introRandom">🎲 RANDOM COUNTRY</button><button class="btn3d orange flex" data-a="randomContinue">START RANDOM WORLD</button></div>`;
     const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
@@ -980,7 +1020,7 @@ function openPlacedCard(id) {
   UI.popup = { type: 'placed', id }; renderPopup();
 }
 function closePopup() { UI.popup = null; MapView.select(null); $('popup').innerHTML = ''; }
-function renderPopup() {
+function renderPopupInner() {
   if (!UI.popup) { $('popup').innerHTML = ''; return; }
   const p = UI.popup;
   if (p.type === 'city') {
@@ -1075,6 +1115,19 @@ function renderPopup() {
     }
   }
 }
+// Scroll-preserving wrapper for city/country popups. The frame loop used
+// to rewrite the popup every 250ms, which reset a scrolled popup to the
+// top just like the panel bug — same fix: restore the scroll position
+// after the rewrite, clamped to the new content height.
+function renderPopup() {
+  const el = (typeof document !== 'undefined' && document.querySelector) ? document.querySelector('#popup .popup') : null;
+  const st = el ? el.scrollTop : 0;
+  renderPopupInner();
+  if (st > 0) {
+    const nel = document.querySelector('#popup .popup');
+    if (nel) nel.scrollTop = Math.max(0, Math.min(st, nel.scrollHeight - nel.clientHeight));
+  }
+}
 function onPin(pin) {
   // Landmark tap (the Capitol in a capital city view): your own capital
   // opens the full capital design view — rename, motto, theme and
@@ -1150,7 +1203,11 @@ function loop(now) {
   // saves, and handles real-world daily cash grants above.
   if (!document.hidden) {
     if (!focused && now - UI.lastDraw > 250) {
-      UI.lastDraw = now; renderHUD(); if (UI.popup) renderPopup(); if (CityView.isOpen()) renderCityHUD();
+      UI.lastDraw = now; renderHUD(); if (CityView.isOpen()) renderCityHUD();
+      // Popup re-render throttled to the panel cadence: it used to run
+      // every 250ms, resetting a scrolled popup to the top just like
+      // the panel bug. The wrapper above also preserves scroll position.
+      if (UI.popup && now - (UI.lastPopup || 0) > 1500) { UI.lastPopup = now; renderPopup(); }
       if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus')) renderPanel();
     }
     if (S.over) { save(); gameOver(); }
@@ -1174,14 +1231,27 @@ function marketRows() {
   else if (UI.cat === 'Owned') list = list.filter(c => S.holdings[c.a3] && S.holdings[c.a3].qty !== 0);
   else if (UI.cat === 'IPOs') list = list.filter(c => !c.listed);
   else if (UI.cat === 'Oil') list = list.filter(c => c.sector === 'Energy');
-  else if (UI.cat !== 'All' && UI.cat !== 'Indices') list = list.filter(c => c.sector === UI.cat);
+  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') list = list.filter(c => c.sector === UI.cat);
   if (UI.starOnly) list = list.filter(c => S.watch.includes(c.a3));
   if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q) || cname(c.a3).toLowerCase().includes(q));
-  list.sort((a, b) => companyValue(b) - companyValue(a));
+  // Extra businesses as their own stocks. They carry stockKey/isExtra so
+  // rows, the trade panel and holdings can tell them from flagships,
+  // which are keyed by country a3. Stars stay flagship-only.
+  let extras = [];
+  if (S.extra) extras = Object.values(S.extra).map(b => { if (typeof ensureExtraStock === 'function') ensureExtraStock(b); return Object.assign({}, b, { stockKey: b.id, isExtra: true }); });
+  if (UI.cat === 'Extras') list = [];
+  else if (UI.cat === 'Watchlist' || UI.cat === 'IPOs') extras = [];
+  else if (UI.cat === 'Owned') extras = extras.filter(b => (S.holdingsX || {})[b.id] && S.holdingsX[b.id].qty !== 0);
+  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') extras = extras.filter(b => b.sector === UI.cat);
+  if (UI.starOnly) extras = [];
+  if (q) extras = extras.filter(b => b.name.toLowerCase().includes(q) || b.sym.toLowerCase().includes(q) || cname(b.a3).toLowerCase().includes(q));
+  list = list.concat(extras);
+  const cap = c => c.isExtra ? c.price * c.shares : companyValue(c);
+  list.sort((a, b) => cap(b) - cap(a));
   return list;
 }
 PANELS.markets = () => {
-  const cats = ['All', 'Watchlist', 'Owned', ...SECTOR_LIST, 'IPOs', 'Indices', 'Oil'];
+  const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...SECTOR_LIST, 'IPOs', 'Indices', 'Oil'];
   if (UI.cat === 'Indices') {
     const idxRows = SECTOR_LIST.map(sec => {
       const cs = Object.values(S.co).filter(c => c.sector === sec && c.listed);
@@ -1198,8 +1268,8 @@ PANELS.markets = () => {
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
     <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
     <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
-      const held = S.holdings[c.a3], ch = chgVs(c), starred = S.watch.includes(c.a3);
-      return `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span><span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span></button>`;
+      const held = c.isExtra ? (S.holdingsX || {})[c.id] : S.holdings[c.a3], ch = chgVs(c), starred = S.watch.includes(c.a3), key = c.stockKey || c.a3;
+      return `<button class="srow" data-a="stock" data-x="${key}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span>${c.isExtra ? '<span class="tagp">EXTRA</span>' : `<span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span>`}</button>`;
     }).join('') || '<div class="card in empty">Nothing here yet. Try another category, or star a stock to build your Watchlist.</div>'}</div>
     ${UI.cat === 'IPOs' ? '<p class="muted small">IPOs here means private companies you control that can go public. A company needs a full board room and 2 profitable weeks in a row to list.</p>' : ''}`);
 };
@@ -1232,6 +1302,27 @@ function tradeView(a3) {
     <div class="row wrap">${[0.2, 0.4, 0.6].map(p => `<button class="btn" data-a="takeover" data-x="${a3}|${p}">+${Math.round(p * 100)}% · ${fmtMoney(takeoverCost(c, p), true)} · ${Math.round(takeoverOdds(c, p) * 100)}% chance</button>`).join('')}</div>
     <button class="btn wide" data-a="webCo" data-x="${a3}">🌐 Visit company website</button>`);
 }
+// Extra-business stock trade panel. Extras trade long only (buy/sell),
+// have no shorts, research or takeovers, and their chart is one weekly
+// close per week (they reprice in leaderWeek, not daily).
+function tradeViewExtra(id) {
+  const b = S.extra && S.extra[id]; if (!b) return panelShell('Stock', '', '<p class="muted">Business not found.</p>');
+  if (typeof ensureExtraStock === 'function') ensureExtraStock(b);
+  const held = (S.holdingsX || {})[id] || { qty: 0, cost: 0 };
+  const ch = chgVs(b), val = held.qty * b.price;
+  const pnl = held.qty !== 0 ? (b.price - held.cost) * held.qty : 0;
+  const closes = (b.h.d || []).slice(-130);
+  return panelShell(`${b.sym} · ${b.name}`, `${esc(b.sector)} · ${cname(b.a3)} · Extra business stock — buy and sell only, no shorts or takeovers`,
+    `<div class="trade-head"><div><div class="big">${fmtMoney(b.price)}</div><div class="${upCls(ch)}">${fmtPct(ch)} this week · Economic value ${fmtMoney(b.value, true)}</div></div></div>
+    ${closes.length ? lineChart(closes, { h: 160 }) : '<p class="muted small">No weekly closes yet. This stock reprices each week in the leader economy.</p>'}
+    <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(b.price * b.shares, true)}</b></div><div><span>Shares</span><b>${b.shares.toLocaleString()}</b></div></div>
+    ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
+    <div class="kv"><span>This week's profit</span><b>${fmtMoney((b.week && b.week.profit) || 0, true)}</b></div><div class="kv"><span>Rating</span><b>${(b.rating || 0).toFixed(1)} / 5</b></div>
+    <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${id}">MAX</button></div>
+    <div class="row"><button class="btn3d sell flex" data-a="doTradeExtra" data-x="${id}|sell">SELL</button><button class="btn3d buy flex" data-a="doTradeExtra" data-x="${id}|buy">BUY</button></div>
+    <p class="muted small">Extra stocks move once a week with their business profit and sector volatility, and only trade while markets are open.</p>`);
+}
+PANELS.extraStock = () => tradeViewExtra(UI.stack && UI.stack[0] ? UI.stack[0].id : null);
 PANELS.portfolio = () => {
   const nw = netWorth(), d = S.nh.d, w = S.nh.w, m = S.nh.m;
   let series = d.map(x => x[1]);
@@ -1250,9 +1341,13 @@ PANELS.portfolio = () => {
     <div class="stats3 box"><div><span>You</span><b class="${upCls(myReturn())}">${fmtPct(myReturn())}</b></div><div><span>Market</span><b class="${upCls(marketReturn())}">${fmtPct(marketReturn())}</b></div><div><span>Beat market</span><b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></div></div>
     <h4>Day calendar</h4><div class="cal">${cal.join('') || '<p class="muted small">Play a few days to fill the calendar.</p>'}</div>
     <h4>Holdings</h4><div class="list">${held.map(([a3, h]) => {
-      const c = S.co[a3];
+      const c = S.co[a3]; if (!c) return '';
       return `<button class="srow" data-a="stock" data-x="${a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)}</small></span><span class="sprice"><b>${h.qty.toLocaleString()} shares</b><small>${fmtMoney(h.qty * c.price, true)}</small></span></button>`;
     }).join('') || '<p class="muted small">No open positions. Buy a stock in Markets.</p>'}</div>
+    <h4>Extra stock holdings</h4><div class="list">${Object.entries(S.holdingsX || {}).filter(([, h]) => h.qty !== 0).map(([id, h]) => {
+      const b = S.extra && S.extra[id]; if (!b) return '';
+      return `<button class="srow" data-a="stock" data-x="${id}"><span class="avatar" style="background:${b.color}">${esc(b.name[0])}</span><span class="sname"><b>${b.sym}</b><small>${esc(b.name)} · ${esc(cname(b.a3))}</small></span><span class="sprice"><b>${h.qty.toLocaleString()} shares</b><small>${fmtMoney(h.qty * b.price, true)}</small></span></button>`;
+    }).join('') || '<p class="muted small">No extra stock positions. Extra businesses are listed in Markets under Extras.</p>'}</div>
     <h4>This week</h4><div class="kv"><span>Profit</span><b class="${upCls(S.week.profit)}">${fmtMoney(S.week.profit, true)}</b></div><div class="kv"><span>Companies</span><b>${fmtMoney(S.week.companies || 0, true)}</b></div><div class="kv"><span>Rent</span><b>${fmtMoney(S.week.rent || 0, true)}</b></div>
     <h4>Buildings</h4><div class="list">${S.props.map(p => {
       const city = W.cities[p.city];
@@ -1439,6 +1534,8 @@ PANELS.nation = () => {
       const run = cs.proj.find(p => p.id === d.id && p.until > S.day);
       return `<div class="kv"><span>${d.icon} ${d.name} · ${d.desc}</span>${run ? '<span class="tagp green">ACTIVE</span>' : `<button class="btn" data-a="project" data-x="${d.id}">${fmtMoney(projectCost(d), true)}</button>`}</div>`;
     }).join('')}
+    <h4>Trade partners</h4><p class="muted small">Who your country actually trades with, and how much per week. Trade tax is 4% of this volume. A war with a partner zeroes that link; occupation cuts it to 30%.</p>
+    ${(() => { const tp = (cs.lastWeek && cs.lastWeek.tradePartners) || []; if (!tp.length) return '<p class="muted small">No trade links yet — they form after the first week of the leader economy.</p>'; const tot = (cs.lastWeek && cs.lastWeek.tradeVol) || 0; return `<div class="kv"><span>Total trade volume</span><b>${fmtMoney(tot, true)} / week · Tax ${fmtMoney((cs.lastWeek && cs.lastWeek.tradeTax) || 0, true)} / week</b></div>` + tp.map(t => `<div class="kv"><span>${W.byA3[t.p] ? W.byA3[t.p].flag : ''} ${esc(cname(t.p))}</span><b>${fmtMoney(t.vol, true)} / week</b></div>`).join(''); })()}
     <h4>Neighbours</h4>${nbs}
     <button class="btn wide" data-a="panel" data-x="military">OPEN MILITARY</button>`);
 };
@@ -1460,7 +1557,7 @@ PANELS.leader = () => {
     <div class="kv"><span>— Military upkeep</span><b>${fmtMoney(lw.milUpkeep || 0, true)}</b></div>
     <div class="kv"><span>— Debt interest</span><b>${fmtMoney(lw.interest || 0, true)}</b></div>
     <div class="kv"><span>Net / week</span><b class="${upCls(lw.net || 0)}">${fmtMoney(lw.net || 0, true)}</b></div>
-    <p class="muted small">Bilateral trade (who trades with whom) is not in this build yet — trade tax above is the government part, business revenues already include trade. Extra businesses below are real economic businesses, not yet separate stocks in Markets — that is next.</p>
+    <p class="muted small">Trade tax above is the government part of bilateral trade — who trades with whom is listed in Nation / Tax under Trade partners. Extra businesses below are also separate stocks in Markets (Extras category), tradable buy and sell.</p>
     <h4>Your country's businesses (${biz.length})</h4>
     ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || ICONS.company} ${esc(bc.name)} · ${esc(bc.sector)}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}${bc.week && bc.week.profit ? ' · ' + fmtMoney(bc.week.profit, true) + '/week' : ''}</b></div>`).join('')}
     <div class="row"><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="military">MILITARY</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button></div>`);
@@ -1833,7 +1930,12 @@ PANELS.airport = () => {
     `<button class="btn" data-a="airportBack2">← COUNTRIES</button><div class="list">${rows}</div>`);
 };
 PANELS.mycity = () => {
-  const m = ensureMyCity(), theme = MYCITY_THEMES.find(x => x.id === m.theme) || MYCITY_THEMES[0];
+  const m = ensureMyCity();
+  // Gate: the city is absent until built for $1M. Show only the build
+  // screen — no decorating, buying, renaming or theming before that.
+  if (m.built !== true) return panelShell('Your City', `In ${esc(cname(S.home))} · not built yet`,
+    `<div class="card in"><h4>Your city isn't here yet</h4><p class="muted small">Your own city does not appear until you build it. Building it costs ${fmtMoney(MYCITY_BUILD_COST, true)} in-game cash. After that, this is where you place and buy buildings, roads and decor — mansions, whatever you want. Government functions stay in the capital, not here.</p><p><b>Your cash: ${fmtMoney(S.cash, true)}</b></p><button class="btn3d orange wide" data-a="myCityBuild">BUILD YOUR CITY · ${fmtMoney(MYCITY_BUILD_COST, true)}</button></div>`);
+  const theme = MYCITY_THEMES.find(x => x.id === m.theme) || MYCITY_THEMES[0];
   const mult = myCityMult();
   const row = (list, kind) => list.map(item => {
     const owned = kind === 'house' ? m.houses.includes(item.id) : kind === 'car' ? m.cars.includes(item.id) : m.land.includes(item.id);
@@ -1864,8 +1966,8 @@ PANELS.crypto = () => {
   // re-render these trigger does not loop back into another fetch.
   if (!UI.cryptoAutoAt || Date.now() - UI.cryptoAutoAt > 15000) {
     UI.cryptoAutoAt = Date.now();
-    cryptoSettleDue().then(() => { if (UI.panel === 'crypto') renderPanel(); }).catch(() => {});
-    cryptoRefreshPrice().then(() => { if (UI.panel === 'crypto') renderPanel(); }).catch(() => {});
+    cryptoSettleDue().then(() => { if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {});
+    cryptoRefreshPrice().then(() => { if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {});
   }
   return cryptoPanelHTML();
 };
@@ -1921,11 +2023,11 @@ PANELS.markets = () => {
     ${mineList.length ? `<label class="muted small">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="btn3d orange wide" data-a="issueShares" data-x="${mineList[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
   }
   if (mkt === 'ma') {
-    const rows = marketRows().filter(c => c.listed).slice(0, 30);
+    const rows = marketRows().filter(c => c.listed && !c.isExtra).slice(0, 30);
     return panelShell('Stock Market', 'Mergers and acquisitions. Offer to buy a whole company.', tabs + `<div class="list">${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="card in"><div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${c.sym} · Market cap ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="btn" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}</div>`);
   }
   const cats = ['All', ...SECTOR_LIST.slice(0, 12)];
-  const rows = marketRows().slice(0, 60);
+  const rows = marketRows().filter(c => !c.isExtra).slice(0, 60);
   return panelShell('Stock Market', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`, tabs +
     `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
@@ -1933,7 +2035,7 @@ PANELS.markets = () => {
 };
 PANELS.mode = () => {
   if (S.mode === 'random') {
-    return panelShell('Random World', 'Offline · Endless sandbox, shuffled.', '<p class="muted small">Random World shuffles the world: your starting treasury, debt and stability are random, every country\'s GDP is shuffled, and every company and stock gets a random fictional name. The map, countries and cities stay real Earth — this is a shuffled world, not a generated landmass. No rivals, no win goal, no situation cards. Online Random World PvP comes later.</p>');
+    return panelShell('Random World', 'Offline · Endless sandbox, generated.', '<p class="muted small">Random World is generated: random landmass, countries, cities, populations, GDPs and company/stock names, fresh each time you pick it. Your starting treasury, debt and stability are random on top of that. No rivals, no win goal, no situation cards. Online Random World PvP comes later.</p>');
   }
   if (S.mode === 'worl' && typeof worlRivals === 'function') {
     const w = ensureWorl(); const rows = worlRivals();
@@ -2043,6 +2145,7 @@ const A = {
   newGame: async () => {
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
     S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
+    if (typeof switchWorldToReal === 'function') switchWorldToReal();
     document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; $('tut').innerHTML = ''; showInherit();
   },
   pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
@@ -2053,12 +2156,20 @@ const A = {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
   },
-  introMode: x => { UI.introMode = x; renderInheritStep(); },
+  introMode: x => {
+    UI.introMode = x;
+    // Entering Random World generates its landmass now, so the picker
+    // lists generated countries; leaving it restores real Earth, so a
+    // later World game can never inherit a generated map.
+    if (x === 'random' && typeof switchWorldToRandom === 'function') { UI.randomSeed = Math.floor(Math.random() * 1e9); switchWorldToRandom(UI.randomSeed); }
+    else if ((x === 'world' || x === 'offline') && typeof switchWorldToReal === 'function') switchWorldToReal();
+    renderInheritStep();
+  },
   introRandom: () => { const sel = document.getElementById('inheritCountry'); if (!sel) return; const list = W.playable; sel.value = list[Math.floor(Math.random() * list.length)].a3; sel.dispatchEvent(new Event('change')); },
   randomContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
-    S = newGame({ mode: 'random', home: a3, leader: true, name: 'Leader', countryName }); if (typeof applyRandomStart === 'function') applyRandomStart(); save(); enterGame(false);
+    S = newGame({ mode: 'random', home: a3, leader: true, name: 'Leader', countryName }); S.randomSeed = (UI.randomSeed != null ? UI.randomSeed : (W.randomSeed != null ? W.randomSeed : null)); if (typeof applyRandomStart === 'function') applyRandomStart(); save(); enterGame(false);
   },
   worlContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
@@ -2139,7 +2250,7 @@ const A = {
   casinoBuild: () => { const el = $('casinoCity'); if (!el) return toast('Pick a city first.', 'bad'); const err = casinoBuild(+el.value); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino opened.', 'good'); },
   casinoSell: x => { const err = casinoSell(x); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino sold.', 'good'); },
   cryptoRefresh: () => { UI.cryptoAutoAt = 0; renderPanel(); },
-  cryptoSettle: () => { cryptoSettleDue().then(r => { if (r.unavailable) toast('Price unavailable — bets stay open.', 'bad'); else if (r.settled) toast(`Settled ${r.settled}: ${r.won || 0} won, ${r.lost || 0} lost.`, 'good'); save(); if (UI.panel === 'crypto') renderPanel(); }).catch(() => {}); },
+  cryptoSettle: () => { cryptoSettleDue().then(r => { if (r.unavailable) toast('Price unavailable — bets stay open.', 'bad'); else if (r.settled) toast(`Settled ${r.settled}: ${r.won || 0} won, ${r.lost || 0} lost.`, 'good'); save(); if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {}); },
   cryptoTarget: x => { const cr = ensureCrypto(); if (cr.lastPrice) { UI.cryptoTargetVal = String(Math.round(cr.lastPrice * (1 + (+x) / 100))); UI.cryptoTargetEdited = true; renderPanel(); } else toast('Fetch a price first.', 'bad'); },
   cryptoPlace: x => {
     // Prefer controlled UI state over the live DOM inputs: if a
@@ -2168,20 +2279,29 @@ const A = {
   tradeRange: x => { UI.tradeRange = x; renderPanel(); },
   stock: x => {
     closePopup(); if (CityView.isOpen()) leaveCity();
-    UI.panel = 'stock'; UI.stack = [{ a3: x }]; renderPanel(); renderHUD();
+    if (S.extra && S.extra[x]) { UI.panel = 'extraStock'; UI.stack = [{ id: x }]; }
+    else { UI.panel = 'stock'; UI.stack = [{ a3: x }]; }
+    renderPanel(); renderHUD();
   },
   flyCity: x => { closePanel(); MapView.flyToCity(+x); onCityTap(+x); },
   flyCountry: x => { closePanel(); MapView.flyToCountry(x); },
   qty: x => { const q = $('qty'); if (q) q.value = Math.max(1, (+q.value || 0) + +x); },
   qtyMax: x => {
-    const c = S.co[x], q = $('qty'); if (!c || !q) return;
-    q.value = Math.max(1, Math.floor(S.cash / c.price));
+    const q = $('qty'); if (!q) return;
+    const c = S.co[x]; if (c) { q.value = Math.max(1, Math.floor(S.cash / c.price)); return; }
+    const b = S.extra && S.extra[x]; if (b) q.value = Math.max(1, Math.floor(S.cash / b.price));
   },
   doTrade: x => {
     const [a3, side] = x.split('|'); const n = +($('qty') ? $('qty').value : 0);
     const err = trade(a3, side, n);
     if (err) return toast(err, 'bad');
     closeModal(); const lt = S.lastTrade && S.lastTrade.a3 === a3 ? ` · Realised ${fmtMoney(S.lastTrade.pnl, true)}` : ''; toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${S.co[a3].sym}${lt}`, 'good'); tutCheck(); save(); refreshAll();
+  },
+  doTradeExtra: x => {
+    const [id, side] = x.split('|'); const n = +($('qty') ? $('qty').value : 0);
+    const err = tradeExtra(id, side, n);
+    if (err) return toast(err, 'bad');
+    const b = S.extra[id]; toast(`${side[0].toUpperCase() + side.slice(1)} ${n.toLocaleString()} ${b.sym}`, 'good'); save(); refreshAll();
   },
   research: x => act(() => research(x), 'Research done'),
   takeover: x => {
@@ -2242,12 +2362,13 @@ const A = {
   airportBack: () => { UI.airport = { cont: null, a3: null }; renderPanel(); },
   airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
   airportFly: x => { act(() => airportFly(+x), null); },
+  myCityBuild: () => { act(() => myCityBuild(), 'Your city is built — now decorate it.'); },
   myCityBuy: x => { const [kind, id] = x.split('|'); act(() => myCityBuy(kind, id), 'Bought for your city'); },
   myCityDecor: x => { UI.myCityDecor = x; renderPanel(); },
   myCityCell: x => { const [cx, cy] = x.split('|').map(Number); const m = ensureMyCity(); const placed = ensureMyCityGrid(m).some(g => g.x === cx && g.y === cy); if (placed) act(() => myCityRemove(cx, cy), 'Sold back for 80%'); else act(() => myCityPlace(UI.myCityDecor || 'house', cx, cy), 'Placed in your city'); },
-  myCityTheme: x => { ensureMyCity().theme = x; renderPanel(); },
-  myCityRename: () => { const v = document.getElementById('myCityName'); if (v && v.value.trim()) { ensureMyCity().name = v.value.trim(); toast('City renamed', 'good'); renderPanel(); } },
-  myCityMotto: () => { const v = document.getElementById('myCityMotto'); if (v) { ensureMyCity().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
+  myCityTheme: x => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); ensureMyCity().theme = x; renderPanel(); },
+  myCityRename: () => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); const v = document.getElementById('myCityName'); if (v && v.value.trim()) { ensureMyCity().name = v.value.trim(); toast('City renamed', 'good'); renderPanel(); } },
+  myCityMotto: () => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); const v = document.getElementById('myCityMotto'); if (v) { ensureMyCity().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };
@@ -2414,8 +2535,8 @@ function onInput(e) {
 function marketsListHTML() {
   const rows = marketRows();
   return rows.slice(0, 120).map(c => {
-    const ch = chgVs(c), starred = S.watch.includes(c.a3);
-    return `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span><span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span></button>`;
+    const ch = chgVs(c), starred = S.watch.includes(c.a3), key = c.stockKey || c.a3;
+    return `<button class="srow" data-a="stock" data-x="${key}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span>${c.isExtra ? '<span class="tagp">EXTRA</span>' : `<span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span>`}</button>`;
   }).join('') || '<div class="card in empty">Nothing here yet.</div>';
 }
 function onChange(e) {

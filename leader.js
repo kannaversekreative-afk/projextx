@@ -405,12 +405,14 @@ function inheritDifficulty(k) {
   return 'Struggling';
 }
 
-// ---------- extra businesses (economic units, not full shop companies) ----------
+// ---------- extra businesses: real businesses AND separate stocks ----------
 // Flagship companies (S.co) stay full companies. Extras are real economic
-// businesses: they earn, pay tax, employ people, and affect the country.
-// They are NOT separate stocks in Markets yet — that is the next step, and
-// it is stated as a limit, not hidden. Their value/profit/tax are real and
-// flow into the leader economy below.
+// businesses: they earn, pay tax, employ people, and affect the country —
+// AND each one is now its own listed stock in Markets (its own price,
+// shares, chart and holdings), tradable long only (buy/sell, no shorts,
+// no takeovers — those stay flagship-only). Their holdings live in
+// S.holdingsX keyed by extra id, so they can never collide with a
+// flagship holding keyed by country.
 function makeExtraBusiness(k, sector, usedNames, usedSyms, idx) {
   const info = LEADER_SECTOR_BY_NAME[sector] || { growth: 0.03, vol: 0.02, icon: '🏢', c: '#374151' };
   let brand, name, sym;
@@ -419,10 +421,47 @@ function makeExtraBusiness(k, sector, usedNames, usedSyms, idx) {
   if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand); name = brand + pick(SUFFIX[sector] || [' Co.']); sym = tickerFor(brand, usedSyms); }
   const gdpDollars = k.gdp0 * 1e6;
   const value = Math.max(1e6, gdpDollars * 0.008 / 3 * (0.7 + rand() * 0.6));
+  const p0 = +(8 + rand() * 190).toFixed(2);
   return { id: k.a3 + '-' + idx, a3: k.a3, sector, name, sym,
     icon: info.icon, color: info.c, value, revenue: value * 0.12, profit: value * 0.012,
     employees: Math.max(10, Math.round(value / Math.max(5000, gdpDollars / Math.max(1, k.pop0)) / 8)),
-    tax: 0, week: { profit: 0, tax: 0, rev: 0 }, rating: 3.4 + rand() * 0.5 };
+    tax: 0, week: { profit: 0, tax: 0, rev: 0 }, rating: 3.4 + rand() * 0.5,
+    listed: true, price: p0, p0, shares: Math.max(1e5, Math.round(value / p0)), vol: info.vol || 0.02,
+    h: { d: [], w: [], m: [], v: [] }, dayVol: 0, tradedToday: 0 };
+}
+// Migration for saves made before extras became stocks: give an old
+// extra its price, shares and chart from its economic value.
+function ensureExtraStock(b) {
+  if (!b) return b;
+  if (b.listed == null) b.listed = true;
+  if (!isFinite(b.price) || b.price <= 0) { b.p0 = +(8 + Math.random() * 190).toFixed(2); b.price = b.p0; }
+  if (!isFinite(b.p0) || b.p0 <= 0) b.p0 = b.price;
+  if (!isFinite(b.shares) || b.shares <= 0) b.shares = Math.max(1e5, Math.round(Math.max(1e6, b.value || 1e6) / b.price));
+  if (!isFinite(b.vol) || b.vol <= 0) b.vol = 0.02;
+  if (!b.h || !Array.isArray(b.h.d)) b.h = { d: [], w: [], m: [], v: [] };
+  return b;
+}
+// Trade an extra stock, long only. Returns an error string, or null.
+function tradeExtra(id, side, qty) {
+  const b = S.extra && S.extra[id]; if (!b) return 'Business not found.';
+  ensureExtraStock(b);
+  qty = Math.floor(+qty); if (!(qty > 0)) return 'Enter how many shares.';
+  if (typeof marketOpen === 'function' && !marketOpen()) return 'Markets are closed on weekends.';
+  if (!S.holdingsX) S.holdingsX = {};
+  const pos = S.holdingsX[id] || { qty: 0, cost: 0 };
+  if (side === 'buy') {
+    if (qty * b.price > S.cash) return 'Not enough cash.';
+    if (pos.qty + qty > b.shares) return 'You can’t buy more shares than exist.';
+    pos.cost = (pos.cost * pos.qty + qty * b.price) / (pos.qty + qty); pos.qty += qty; S.cash -= qty * b.price;
+  } else if (side === 'sell') {
+    if (pos.qty < qty) return 'You don’t own that many shares.';
+    pos.qty -= qty; S.cash += qty * b.price;
+  } else return 'Extra stocks trade buy and sell only.';
+  if (pos.qty === 0) delete S.holdingsX[id]; else S.holdingsX[id] = pos;
+  b.tradedToday = (b.tradedToday || 0) + qty;
+  if (typeof impactFor === 'function') { try { const imp = impactFor(b, qty * b.price); b.price = Math.max(0.5, b.price * Math.exp((side === 'buy' ? 1 : -1) * imp)); } catch (e) {} }
+  if (typeof S !== 'undefined' && S.stats) S.stats.trades = (S.stats.trades || 0) + 1;
+  return null;
 }
 function businessesInCountry(a3) {
   const out = [];
@@ -441,8 +480,56 @@ function businessesInCountry(a3) {
 // Home treasury is S.cash, so player spending (military, projects,
 // diplomacy) already deducted from S.cash is counted once: we sync
 // treasury from S.cash at the start of the home week, then add the net.
+// ---------- bilateral trade ----------
+// Each country trades with its neighbours (up to 5, biggest first) plus
+// the 2 biggest economies it does not neighbour. A link's weekly volume
+// is that pair's share of each side's total trade, averaged, so a
+// country's total trade stays near its old aggregate (weekly GDP x 20%)
+// while now being attributable to named partners. War between a pair
+// zeroes their link; occupation of either side cuts it to 30%.
+function buildTradeLinks() {
+  const links = {};
+  const playable = (W.playable || []).filter(a => S.countries[a]);
+  const byGdp = [...playable].sort((a, b) => (S.countries[b].gdp || 0) - (S.countries[a].gdp || 0));
+  const partnersOf = (a3) => {
+    const k = W.byA3[a3]; if (!k) return [];
+    const nbs = (k.nb || []).filter(n => S.countries[n] && W.byA3[n] && W.byA3[n].playable)
+      .sort((x, y) => (S.countries[y].gdp || 0) - (S.countries[x].gdp || 0)).slice(0, 5);
+    const top = byGdp.filter(b => b !== a3 && !nbs.includes(b)).slice(0, 2);
+    return nbs.map(p => ({ p, w: 1.0 })).concat(top.map(p => ({ p, w: 0.6 })));
+  };
+  const atWar = (a, b) => (S.wars || []).some(w => (w.a === a && w.b === b) || (w.a === b && w.b === a));
+  const alloc = {};
+  for (const a3 of playable) {
+    const cs = S.countries[a3], total = (cs.gdp * 1e6) / 52 * 0.2, ps = partnersOf(a3);
+    let wsum = 0; const wts = ps.map(({ p, w }) => {
+      const rel = (typeof getRel === 'function') ? getRel(a3, p) : 0;
+      const rf = Math.max(0.2, Math.min(1.2, 0.2 + (rel + 100) / 200));
+      const wv = w * rf; wsum += wv; return { p, wv };
+    });
+    alloc[a3] = {};
+    for (const { p, wv } of wts) alloc[a3][p] = wsum > 0 ? total * wv / wsum : 0;
+  }
+  for (const a3 of playable) {
+    for (const p in alloc[a3]) {
+      const key = a3 < p ? a3 + '|' + p : p + '|' + a3;
+      if (links[key]) continue;
+      // Each side keeps its own allocation (volA for the sorted key's
+      // first country, volB for the second), so a country's summed links
+      // equal its own trade total exactly. The displayed pair volume is
+      // the average of the two sides' flows.
+      const ka = key.split('|')[0], kb = key.split('|')[1];
+      let volA = alloc[ka][kb] || 0, volB = alloc[kb][ka] || 0;
+      if (atWar(a3, p)) { volA = 0; volB = 0; }
+      else if ((S.countries[a3].occ && S.countries[a3].occ !== a3) || (S.countries[p].occ && S.countries[p].occ !== p)) { volA *= 0.3; volB *= 0.3; }
+      links[key] = { a: key.split('|')[0], b: key.split('|')[1], vol: Math.round((volA + volB) / 2), volA: Math.round(volA), volB: Math.round(volB) };
+    }
+  }
+  return links;
+}
 function leaderWeek() {
   if (!S || !S.leader) return;
+  S.tradeLinks = buildTradeLinks();
   let homeRev = 0, homeSpend = 0, homeTrade = 0;
   for (const a3 in S.countries) {
     const cs = S.countries[a3], k = W.byA3[a3]; if (!k) continue;
@@ -454,8 +541,11 @@ function leaderWeek() {
     let corpTax = 0;
     const flag = S.co[a3]; if (flag && flag.week) corpTax += flag.week.tax || 0;
     // Extras: simple weekly simulation, straight: profit -> tax -> treasury.
+    // Their stock price moves with profit and sector volatility, and one
+    // weekly close is pushed into their chart each week.
     if (S.extra) Object.values(S.extra).forEach(b => {
       if (b.a3 !== a3) return;
+      ensureExtraStock(b);
       const info = LEADER_SECTOR_BY_NAME[b.sector] || { growth: 0.03, vol: 0.02 };
       // Weekly profit = value * annual return / 52, with sector growth and noise.
       b.profit = b.value * (0.06 + info.growth) / 52 * (0.7 + rand() * 0.6);
@@ -463,17 +553,22 @@ function leaderWeek() {
       b.tax = Math.max(0, b.profit) * cs.tax;
       b.week = { profit: Math.round(b.profit), tax: Math.round(b.tax), rev: Math.round(b.revenue) };
       b.value = Math.max(1e5, b.value + b.profit * 0.5);
+      b.price = Math.max(0.5, b.price * Math.exp(gauss() * (b.vol || 0.02) + (b.profit / Math.max(1, b.value)) * 0.5));
+      if (typeof pushHist === 'function') pushHist(b.h, b.price, S.day, b.tradedToday || 0);
+      b.tradedToday = 0;
       corpTax += b.tax;
     });
     const weeklyGdp = gdpDollars / 52;
     const incomeTax = weeklyGdp * 0.5 * (cs.incTax || 0.20);
     const vat = weeklyGdp * 0.6 * (cs.vat || 0.05);
-    const tradeVol = weeklyGdp * 0.2;
+    // Bilateral trade: this country's trade tax now comes from its named
+    // trade links (see buildTradeLinks), not an aggregate. Trade balance
+    // is NOT invented here: export and import values already flow through
+    // business revenues; the government part of trade is the tax below.
+    let tradeVol = 0; const myLinks = [];
+    for (const key in S.tradeLinks) { const L = S.tradeLinks[key]; if (L.a === a3) { tradeVol += L.volA; myLinks.push({ p: L.b, vol: L.volA }); } else if (L.b === a3) { tradeVol += L.volB; myLinks.push({ p: L.a, vol: L.volB }); } }
+    myLinks.sort((x, y) => y.vol - x.vol);
     const tradeTax = tradeVol * 0.04;
-    // Trade balance is NOT invented here: at this aggregated scale, export
-    // and import values already flow through business revenues. The
-    // government part of trade is the tax above. Bilateral trade
-    // (who trades with whom) is the next step, not shipped yet.
     const revenue = corpTax + incomeTax + vat + tradeTax;
     const payPeople = weeklyGdp * 0.08;
     const services = weeklyGdp * 0.06;
@@ -484,7 +579,7 @@ function leaderWeek() {
     const spending = payPeople + services + milUpkeep + interest;
     const net = revenue - spending;
     cs.treasury += net;
-    cs.lastWeek = { revenue: Math.round(revenue), corpTax: Math.round(corpTax), incomeTax: Math.round(incomeTax), vat: Math.round(vat), tradeTax: Math.round(tradeTax), payPeople: Math.round(payPeople), services: Math.round(services), milUpkeep: Math.round(milUpkeep), interest: Math.round(interest), spending: Math.round(spending), net: Math.round(net), debt: Math.round(cs.debt), treasury: Math.round(cs.treasury) };
+    cs.lastWeek = { revenue: Math.round(revenue), corpTax: Math.round(corpTax), incomeTax: Math.round(incomeTax), vat: Math.round(vat), tradeTax: Math.round(tradeTax), tradeVol: Math.round(tradeVol), tradePartners: myLinks.slice(0, 8), payPeople: Math.round(payPeople), services: Math.round(services), milUpkeep: Math.round(milUpkeep), interest: Math.round(interest), spending: Math.round(spending), net: Math.round(net), debt: Math.round(cs.debt), treasury: Math.round(cs.treasury) };
     if (cs.treasury < 0) { const shortfall = -cs.treasury; cs.debt += shortfall; cs.treasury = spending * 0.5; cs.debt += spending * 0.5; cs.stab = clamp(cs.stab - 0.1, 0, 100); }
     else if (cs.treasury > gdpDollars * 0.1) cs.stab = clamp(cs.stab + 0.05, 0, 100);
     if (a3 === S.home) { S.cash = cs.treasury; homeRev = revenue; homeSpend = spending; }

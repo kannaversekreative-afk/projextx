@@ -452,7 +452,7 @@ const MapView = (() => {
     labelRects = []; labelTargets = [];
     // Your city: a circle with a star in it, in your home country, just
     // beside the capital. Tapping it opens Your City.
-    if (typeof myCityPos === 'function' && layerOn('star')) {
+    if (typeof myCityPos === 'function' && (typeof myCityBuilt !== 'function' || myCityBuilt()) && layerOn('star')) {
       try {
         const mc = myCityPos();
         if (mc) {
@@ -524,7 +524,7 @@ const MapView = (() => {
       // placed businesses and the star city — and vehicles only win
       // a tap that is not on any country button. A vehicle in open
       // sea or sky still opens its card exactly as before.
-      if (typeof myCityPos === 'function' && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
+      if (typeof myCityPos === 'function' && (typeof myCityBuilt !== 'function' || myCityBuilt()) && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
         try {
           const mc = myCityPos();
           if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }

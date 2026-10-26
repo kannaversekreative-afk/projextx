@@ -48,15 +48,29 @@ function myCityWealth() {
 }
 function myCityMult() { const w = myCityWealth(); return w * w; }
 function myCityPrice(base) { return Math.round(base * myCityMult() / 1000) * 1000; }
+var MYCITY_BUILD_COST = 1000000; // flat $1M in-game cash, per Nicholas
 function ensureMyCity() {
-  if (!S.myCity) S.myCity = { name: '', motto: '', theme: 'classic', houses: [], cars: [], land: [], bank: 0, firm: 0 };
+  // Gate: your city does not exist until you build it for $1M. A fresh
+  // record starts unbuilt; a record from before the gate (no built
+  // field) is grandfathered as built, so existing cities are not taken
+  // away from players who already had one.
+  if (!S.myCity) S.myCity = { name: '', motto: '', theme: 'classic', houses: [], cars: [], land: [], bank: 0, firm: 0, built: false };
+  else if (S.myCity.built == null) S.myCity.built = true;
   const m = S.myCity;
   if (!m.houses) m.houses = []; if (!m.cars) m.cars = []; if (!m.land) m.land = [];
   if (m.bank == null) m.bank = 0; if (m.firm == null) m.firm = 0;
   if (!m.name) m.name = 'Your City';
   return m;
 }
-function myCityExists() { return !!(S && S.myCity); }
+function myCityBuilt() { return !!(S && S.myCity && ensureMyCity().built === true); }
+function myCityExists() { return myCityBuilt(); }
+function myCityBuild() {
+  const m = ensureMyCity();
+  if (m.built === true) return 'Your city is already built.';
+  if (S.cash < MYCITY_BUILD_COST) return `Costs ${fmtMoney(MYCITY_BUILD_COST, true)} — you have ${fmtMoney(S.cash, true)}.`;
+  S.cash -= MYCITY_BUILD_COST; m.built = true;
+  return null;
+}
 // Map position of the star city: just beside the home capital, in map
 // units, so it sits inside the home country on every zoom.
 function myCityPos() {
@@ -76,6 +90,7 @@ function myCityValue() {
 }
 function myCityBuy(kind, id) {
   const m = ensureMyCity();
+  if (m.built !== true) return 'Build your city first — $1,000,000.';
   if (kind === 'bank' || kind === 'firm') {
     const base = kind === 'bank' ? 500000000 : 1000000000;
     const level = m[kind] + 1, cost = myCityPrice(base) * level;
@@ -131,7 +146,8 @@ function myCityGridValue(m) {
   return v;
 }
 function myCityPlace(itemId, x, y) {
-  const m = ensureMyCity(); ensureMyCityGrid(m);
+  const m = ensureMyCity(); if (m.built !== true) return 'Build your city first — $1,000,000.';
+  ensureMyCityGrid(m);
   const item = myCityDecorItem(itemId); if (!item) return 'Not placeable.';
   if (x < 0 || x >= MYCITY_GRID_W || y < 0 || y >= MYCITY_GRID_H) return 'Outside your city grid.';
   if (m.grid.some(g => g.x === x && g.y === y)) return 'That square is already built on.';
@@ -141,7 +157,8 @@ function myCityPlace(itemId, x, y) {
   return null;
 }
 function myCityRemove(x, y) {
-  const m = ensureMyCity(); ensureMyCityGrid(m);
+  const m = ensureMyCity(); if (m.built !== true) return 'Build your city first — $1,000,000.';
+  ensureMyCityGrid(m);
   const i = m.grid.findIndex(g => g.x === x && g.y === y);
   if (i < 0) return 'Nothing there.';
   const item = myCityDecorItem(m.grid[i].id);
@@ -152,8 +169,8 @@ function myCityRemove(x, y) {
 // trading firm pays a cut of your trading. Small vs the price —
 // this city is for owning, not for farming cash.
 function myCityWeek() {
-  if (!S || !S.myCity) return;
-  const m = S.myCity;
+  if (!S) return;
+  const m = ensureMyCity(); if (m.built !== true) return;
   if (m.bank) S.cash += myCityPrice(500000000) * m.bank * 0.001;
   if (m.firm) S.cash += myCityPrice(1000000000) * m.firm * 0.0015;
 }

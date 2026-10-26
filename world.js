@@ -14,11 +14,16 @@ const projX = lon => (lon + 180) / 360 * MAP_W;
 const projY = lat => (MY_TOP - millerY(Math.max(LAT_BOT - 5, Math.min(LAT_TOP + 3, lat)))) / (MY_TOP - MY_BOT) * MAP_H;
 const flagEmoji = a2 => a2 && a2.length === 2 ? String.fromCodePoint(...[...a2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '\u{1F3F3}️';
 
-function buildWorld() {
+function buildWorld(data) {
+  // data defaults to the real Earth data. A generated Random World
+  // passes its own synthetic data in the same shape (see
+  // random-world.js), so the whole engine — map, cities, sea routing,
+  // facilities — runs on the generated landmass unchanged.
+  const src = data || WORLD_DATA;
   const W = { countries: [], byA3: {}, cities: [], layouts: {}, lotCache: {} };
-  const wd = WORLD_DATA.water, raw = atob(wd.b64), fine = new Uint8Array(wd.w * wd.h);
+  const wd = src.water, raw = atob(wd.b64), fine = new Uint8Array(wd.w * wd.h);
   for (let i = 0; i < fine.length; i++) fine[i] = (raw.charCodeAt(i >> 3) >> (i & 7)) & 1;
-  WORLD_DATA.countries.forEach(d => {
+  src.countries.forEach(d => {
     const path = new Path2D();
     let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, coast = false;
     d.rings.forEach(r => {
@@ -38,7 +43,7 @@ function buildWorld() {
     if (!W.byA3[k.a3] || (k.playable && !W.byA3[k.a3].playable)) W.byA3[k.a3] = k;
     W.countries.push(k);
   });
-  WORLD_DATA.cities.forEach(d => {
+  src.cities.forEach(d => {
     const k = W.byA3[d.c];
     const c = { id: W.cities.length, name: d.n, code: d.code, a3: d.c, lat: d.lat, lon: d.lon, x: projX(d.lon), y: projY(d.lat), pop: Math.max(5000, d.pop), port: !!d.port };
     c.size = Math.max(0.3, Math.min(1.3, (Math.log10(c.pop) - 4.3) / 2.7));
@@ -186,6 +191,9 @@ function coastCell(a3, waterCell, cap) {
   return cap ? nearestLandCell(cap.lon, cap.lat) : null;
 }
 let FAC_CACHE = {};
+// Switching between real Earth and a generated Random World must not
+// reuse facilities/roads cached for the other world's geography.
+function clearFacilityCaches() { FAC_CACHE = {}; ROAD_CACHE = {}; }
 function facilitiesFor(a3) {
   if (typeof W === 'undefined' || !W || !W.byA3[a3]) return null;
   const k = W.byA3[a3], cap = W.cities[k.capital]; if (!cap) return null;

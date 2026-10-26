@@ -370,7 +370,7 @@ function fairValue(c) { return companyFairTotal(c) / c.shares; }
 function companyValue(c) { return c.listed ? c.price * c.shares : companyFairTotal(c); }
 
 // ---------- money ----------
-function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } return v; }
+function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const id in (S.holdingsX || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsX[id].qty * b.price; } return v; }
 function shortValue() { let v = 0; for (const a3 in S.holdings) if (S.holdings[a3].qty < 0) v -= S.holdings[a3].qty * S.co[a3].price; return v; }
 function propValue() { return S.props.reduce((a, p) => a + p.value, 0); }
 function netWorth() { return S.cash + holdingsValue() + propValue() - S.loan; }
