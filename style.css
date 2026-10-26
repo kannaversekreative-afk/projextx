@@ -374,7 +374,8 @@ body.in-city #hud { display: none; }
 .mbox.dep .xbtn { background: rgba(255,255,255,0.12); color: #fff; }
 .mbox.dep .dep-welcome { color: rgba(255,255,255,0.85); margin: 10px 0 2px; font-size: 15px; line-height: 1.45; }
 .mbox.dep .dep-title { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: rgba(255,255,255,0.28); margin: 8px 0 2px; }
-.mbox.dep .dep-map { width: 100%; display: block; }
+.mbox.dep .dep-map { width: 100%; display: block; cursor: pointer; }
+.mbox.dep .dep-maphint { color: rgba(255,255,255,0.6); font-size: 12px; margin: 4px 0 0; }
 .mbox.dep .dep-grplabel { color: #fff; font-size: 18px; margin: 2px 0 12px; }
 .mbox.dep .dep-tabs { flex-wrap: wrap; margin-bottom: 12px; }
 .mbox.dep .dep-tab { background: transparent; color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }

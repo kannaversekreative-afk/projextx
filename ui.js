@@ -2206,6 +2206,7 @@ function openDeparturesModal() {
   <p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>
   <div class="dep-title">✈ DEPARTURES</div>
   <canvas id="depmap" class="dep-map"></canvas>
+  <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
   <div class="dep-grplabel">${sel}</div>
   <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
@@ -2214,8 +2215,9 @@ function openDeparturesModal() {
   drawDepMap(sel, from);
 }
 // Dotted world map for the departures board: dim dots for every land cell
-// from the game's own map grid, bright dots for the selected region's
-// cities, gold dot for the airport the player is flying out of.
+// from the game's own map grid, gold dot for the airport the player is
+// flying out of. No bright city dots — the map stays clean. Tapping a
+// continent switches the departures list to that continent's cities.
 function drawDepMap(sel, from) {
   const cv = document.getElementById('depmap');
   if (!cv || typeof W === 'undefined' || !W.water) return;
@@ -2229,13 +2231,23 @@ function drawDepMap(sel, from) {
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     ctx.beginPath(); ctx.arc(x * dx + dx / 2, y * dy + dy / 2, Math.max(1, dx * 0.32), 0, 7); ctx.fill();
   }
-  W.cities.forEach(c => {
-    const k = W.byA3[c.a3]; if (!k || depContGroup(k.cont) !== sel) return;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.beginPath(); ctx.arc((c.lon + 180) / 360 * w, (90 - c.lat) / 180 * h, Math.max(1.6, dx * 0.5), 0, 7); ctx.fill();
-  });
   ctx.fillStyle = '#ffd166';
   ctx.beginPath(); ctx.arc((from.lon + 180) / 360 * w, (90 - from.lat) / 180 * h, Math.max(3, dx * 0.9), 0, 7); ctx.fill();
+  cv.onclick = ev => {
+    const r = cv.getBoundingClientRect();
+    const lon = ((ev.clientX - r.left) / r.width) * 360 - 180;
+    const lat = 90 - ((ev.clientY - r.top) / r.height) * 180;
+    let best = null, bestD = 1e9;
+    W.cities.forEach(c => {
+      const dLon = (c.lon - lon) * Math.cos(lat * Math.PI / 180), dLat = c.lat - lat;
+      const d = dLon * dLon + dLat * dLat;
+      if (d < bestD) { bestD = d; best = c; }
+    });
+    if (!best) return;
+    const k = W.byA3[best.a3]; if (!k) return;
+    const grp = depContGroup(k.cont);
+    if (grp !== UI.depCont) { UI.depCont = grp; openDeparturesModal(); }
+  };
 }
 
 // ---------- actions ----------
