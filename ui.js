@@ -89,6 +89,7 @@ function migrateSave(s) {
   if (s.pendingSituation === undefined) s.pendingSituation = null;
   if (s.pendingVictory === undefined) s.pendingVictory = null;
   if (s.countryName === undefined) s.countryName = null;
+  if (s.co && typeof ensureSite === 'function') Object.values(s.co).forEach(c => { try { ensureSite(c); } catch (e) {} });
   for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05; if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54; }
   if (s.idx && !isFinite(s.idx.v)) { const fin = (s.idx.h && s.idx.h.w || []).filter(v => isFinite(v)); s.idx.v = fin.length ? fin[fin.length - 1] : 1000; if (s.idx.h) for (const k in s.idx.h) s.idx.h[k] = (s.idx.h[k] || []).filter(v => isFinite(v)); }
   for (const a3 in s.co) {
@@ -763,6 +764,7 @@ function enterGame(returning) {
   S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
   const da = S.leader ? 0 : autoCreditDaily(), ca = S.leader ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
+  if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
   renderHUD(); MapView.home();
   if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
@@ -1059,7 +1061,7 @@ PANELS.company = () => {
       <h5>Website, stock &amp; tax</h5>
       <div class="kv"><span>Website</span><b>${WEB_TIERS[c.web.tier].name} · ${oe.visitors.toLocaleString()} visitors/week · ${fmtMoney(oe.profit, true)}/week</b></div>
       <div class="kv"><span>Tax in ${esc(cname(c.a3))}</span><b>${Math.round(country(c.a3).tax * 100)}% corporate — change it in Nation</b></div>
-      <div class="row"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button></div>
+      <div class="row"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="siteMaker" data-x="${c.a3}">CUSTOMIZE SITE</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button></div>
     </div>`;
   }).join('');
   return panelShell('My Companies', `${mineList.length} companies under your control · Tap a company to open it, tap again to close it`, body);
@@ -1080,6 +1082,7 @@ function webSiteHTML(c) {
     <div class="web-hero" style="background:${c.color}"><b>${esc(c.name)}</b><span>${SECTORS[c.sector].tag}</span></div>
     <p>${SECTORS[c.sector].products.join(' · ')}</p>
     <div class="stats3 box"><div><span>Rating</span><b>${c.rating.toFixed(1)}★</b></div><div><span>Locations</span><b>${c.locs.length}</b></div><div><span>Website</span><b>${WEB_TIERS[c.web.tier].name}</b></div></div>
+    <div class="kv"><span>Website rating</span><b>${(typeof siteRating === 'function' ? siteRating(c) : 0).toFixed(1)}★ · customers rate the site itself</b></div>${controlled(c.a3) ? `<button class="btn wide" data-a="siteMaker" data-x="${c.a3}">✏️ CUSTOMIZE WEBSITE</button>` : ''}
     <button class="btn wide" data-a="stock" data-x="${c.a3}">VIEW ${c.sym} STOCK</button>${admin}</div>`;
 }
 PANELS.web = () => {
@@ -1362,6 +1365,40 @@ PANELS.stores = () => {
     <p class="muted small">Stores earn every in-game week: customers pay, the store pays rent, wages, ingredients and campaigns, and the net lands in your cash.</p>`);
 };
 
+
+PANELS.capital = () => {
+  if (!S.leader) return panelShell('Capital', 'Capital building is for leader games.', '<p class="muted small">Start a World, Worl Mode or Domination game to build your capital.</p>');
+  const cap = ensureCapital(); const theme = CAPITAL_THEMES.find(x => x.id === cap.theme) || CAPITAL_THEMES[0];
+  const prestige = capitalPrestige();
+  const distRows = CAPITAL_DISTRICTS.map(d => {
+    const L = cap.districts[d.id] || 0; const cost = capitalCost(d.id);
+    return `<div class="kv"><span>${d.icon} ${d.name} · Lv ${L} / 5<br><small class="muted">${esc(d.desc)}<br>${esc(d.bonus)}</small></span>${L >= 5 ? '<span class="tagp green">MAX</span>' : `<button class="btn" data-a="capUp" data-x="${d.id}">${fmtMoney(cost, true)}</button>`}</div>`;
+  }).join('');
+  return panelShell('Capital', `${esc(cap.name)} · ${prestige.toFixed(1)}★ prestige`,
+    `<div class="card" style="background:${theme.bg}"><div style="font-size:28px;letter-spacing:4px">${capitalSkyline()}</div><p><b>${esc(cap.name)}</b>${cap.motto ? ` — <i>${esc(cap.motto)}</i>` : ''}</p><p class="muted small">Theme: ${theme.name} · ${theme.desc}</p></div>
+    <h4>Rename your capital</h4><p class="muted small">Free. This is your capital now, not just the one on the map.</p>
+    <div class="row"><input id="capName" class="search" value="${esc(cap.name)}" placeholder="Capital name"><button class="btn" data-a="capRename">RENAME</button></div>
+    <h4>Motto</h4><div class="row"><input id="capMotto" class="search" value="${esc(cap.motto || '')}" placeholder="e.g. The city that builds the future"><button class="btn" data-a="capMotto">SAVE</button></div>
+    <h4>Theme</h4><div class="row wrap">${CAPITAL_THEMES.map(th => `<button class="btn ${th.id === cap.theme ? 'on' : ''}" data-a="capTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
+    <h4>Districts — build your capital, level by level</h4><p class="muted small">Costs scale with your GDP, so every country feels the same pressure. Government starts at level 1, the rest at 0. Prestige is the average district level.</p>
+    <div class="list">${distRows}</div>
+    <div class="kv"><span>Prestige</span><b>${prestige.toFixed(1)}★ / 5</b></div>
+    <p class="muted small">Bonuses land every week: stability from Government and Green, cash from Commerce and Transport, population from Culture, war power from Defence. At 4.5★ prestige or more, a world-capital bonus pays weekly too.</p>`);
+};
+PANELS.site = () => {
+  const c = S.co[UI.siteA3]; if (!c) return panelShell('Website maker', 'No company selected.', '');
+  const site = ensureSite(c); const rating = siteRating(c);
+  const previewColor = { Blue: '#2f7cf6', Green: '#12a150', Orange: '#e0812b', Purple: '#7c4dff', Dark: '#111827', Cream: '#d4a017' }[site.pending ? site.pending.colour : site.current.colour] || '#2f7cf6';
+  const cur = site.pending || site.current;
+  const dimRows = SITE_DIMS.map(d => `<h5>${d.name}</h5><div class="row wrap">${d.options.map(o => `<button class="btn ${cur[d.id] === o ? 'on' : ''}" data-a="siteDim" data-x="${c.a3}|${d.id}|${o}">${o}</button>`).join('')}</div>`).join('');
+  const fb = site.feedback.map(f => `<div class="kv"><span>${f.good ? '👍' : '👎'} ${esc(f.text)}</span><small>${f.dim ? esc(f.dim) : ''}</small></div>`).join('') || '<p class="muted small">No feedback yet. Play a week and customers will speak.</p>';
+  return panelShell('Website maker', `${esc(c.name)} · ${rating.toFixed(1)}★ website`,
+    `<div class="website card"><div class="web-hero" style="background:${previewColor}"><b>${esc(c.name)}</b><span>${esc(cur.hero)} · ${esc(cur.layout)} · ${esc(cur.font)} font</span></div><p>Preview: ${esc(cur.section)} below the hero, checkout: ${esc(cur.checkout)}.</p><div class="kv"><span>Website rating</span><b>${rating.toFixed(1)}★</b></div></div>
+    ${site.pending ? '<p class="muted small"><b>Changes pending.</b> They go live next week, then customers react. Changing again before then just replaces the pending change.</p>' : '<p class="muted small">Changes are free and go live next week. Customers then give feedback, and the rating moves. One hidden combination gives exactly 5.0 stars — feedback hints at what is wrong, never the answer.</p>'}
+    ${dimRows}
+    <h4>Customer feedback this week</h4><div class="list">${fb}</div>
+    <p class="muted small">How it works: rating = 1 + 4 x (right choices / 6). At 5.0 stars online sales pay x1.3, at 1.0 star x0.82. Praise means stop touching that choice. A complaint means that choice is still wrong — try a different one next week.</p>`);
+};
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
@@ -1442,7 +1479,7 @@ PANELS.help = () => {
 function moreSheet() {
   const items = [
     ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
-    ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
+    ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
     ['leaderboard', '🏆', 'Leaderboard'], ['mode', '🎲', 'Mode'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
@@ -1588,6 +1625,12 @@ const A = {
   buildStoreDo: x => { const lot = UI.buildLot; if (!lot) return toast('Pick a FOR LEASE pin first', 'bad'); const err = buildStore(lot.cityId, lot.lotT, x); if (err) return toast(err, 'bad'); closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Store opened! Results arrive every week.', 'good'); save(); refreshAll(); },
   openStadium: x => { closePopup(); if (CityView.isOpen()) leaveCity(); ensureSports(); S.sports.tab = sportTeam(x).league; openPanel('sports'); UI.stack = [x]; renderPanel(); },
   webCo: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
+  siteMaker: x => { UI.siteA3 = x; openPanel('site'); },
+  siteDim: x => { const [a3, dim, val] = x.split('|'); act(() => setSitePending(a3, dim, val), 'Change queued for next week'); renderPanel(); },
+  capUp: x => act(() => upgradeCapital(x), 'District upgraded'),
+  capTheme: x => { ensureCapital().theme = x; renderPanel(); },
+  capRename: () => { const v = document.getElementById('capName'); if (v && v.value.trim()) { ensureCapital().name = v.value.trim(); applyCapitalName(); toast('Capital renamed', 'good'); renderPanel(); } },
+  capMotto: () => { const v = document.getElementById('capMotto'); if (v) { ensureCapital().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };

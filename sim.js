@@ -230,7 +230,7 @@ function bizMult(a3, cityId) {
 // Revenue grows with the country's economy since the game began.
 function econ(c) { const cs = country(c.a3); return cs.gdp / W.byA3[c.a3].gdp0 * W.byA3[c.a3].pop0 / cs.pop; }
 function adsF(c) { let e = 0; WEB_ADS.forEach(a => { if (c.web.ads[a.id]) e += a.effect; }); return 1 + e; }
-function webF(c) { return 1 + WEB_TIERS[c.web.tier].boost + (c.web.addons.seo ? 0.04 : 0) + (c.web.addons.loyalty ? 0.08 : 0); }
+function webF(c) { return (1 + WEB_TIERS[c.web.tier].boost + (c.web.addons.seo ? 0.04 : 0) + (c.web.addons.loyalty ? 0.08 : 0)) * (typeof siteRatingFactor === 'function' ? siteRatingFactor(c) : 1); }
 // One location for one week. Shared by the simulation and the lease forecast.
 function locEconomics(c, loc, nLocs) {
   const k = W.byA3[c.a3], w = k.wealth, L = SECTORS[c.sector].loc, s = c.set;
@@ -277,7 +277,7 @@ function fleetEconomics(c) {
 function marketSize(c) { return Math.sqrt(W.byA3[c.a3].gdp0) * 40; }
 function onlineEconomics(c) {
   const T = WEB_TIERS[c.web.tier]; if (!c.web.tier || c.web.down > S.day) return { rev: 0, cost: 0, profit: 0, visitors: 0 };
-  const rev = marketSize(c) * Math.pow(econ(c), 0.8) * T.online * (c.web.addons.seo ? 1.08 : 1) * adsF(c) * (0.6 + (c.rating || 3.5) * 0.1) * bizMult(c.a3) * (SECTORS[c.sector].fleet ? 0.6 : 1);
+  const rev = marketSize(c) * Math.pow(econ(c), 0.8) * T.online * (c.web.addons.seo ? 1.08 : 1) * adsF(c) * (0.6 + (c.rating || 3.5) * 0.1) * bizMult(c.a3) * (SECTORS[c.sector].fleet ? 0.6 : 1) * (typeof siteRatingFactor === 'function' ? siteRatingFactor(c) : 1);
   return { rev, cost: rev * 0.68, profit: rev * 0.32, visitors: Math.round(rev / Math.max(5, SECTORS[c.sector].loc.ticket || 40) * 9) };
 }
 function adsCost(c) { const w = Math.max(0.25, Math.pow(W.byA3[c.a3].wealth, 0.7)); return WEB_ADS.reduce((a, ad) => a + (c.web.ads[ad.id] ? ad.cost * w : 0), 0); }

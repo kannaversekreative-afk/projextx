@@ -17,6 +17,7 @@ function shockSector(sector, pct) { for (const a3 in S.co) if (S.co[a3].sector =
 function milPower(a3) {
   const c = country(a3); let p = c.mil;
   for (const b in MILITARY) p *= 1 + c.milLv[b] * MILITARY[b].power;
+  if (a3 === S.home && typeof S !== 'undefined' && S.capital && S.capital.districts) p *= 1 + (S.capital.districts.def || 0) * 0.05;
   return p * (0.6 + c.stab / 250);
 }
 function milCost(branch) {
@@ -336,6 +337,8 @@ function businessWeek() {
   if (satN > 1) S.rating = +(satW / satN).toFixed(2);
   S.week = { profit, companies: mineProfit, rent, interest, overdraft };
   if (S.leader && typeof leaderWeek === 'function') leaderWeek();
+  if (S.leader && typeof capitalWeek === 'function') { try { capitalWeek(); } catch (e) {} }
+  if (typeof websiteWeek === 'function') { try { websiteWeek(); } catch (e) {} }
   if (typeof storesWeek === 'function') { try { storesWeek(); } catch (e) {} }
   if (typeof loansWeek === 'function') { try { loansWeek(); } catch (e) {} }
   S.stats.bestWeek = Math.max(S.stats.bestWeek, profit);
