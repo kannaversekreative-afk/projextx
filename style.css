@@ -352,6 +352,11 @@ body.in-city #hud { display: none; }
 .menu-txt b { font-size: 17px; color: var(--ink); }
 .menu-txt span { font-size: 13px; color: var(--muted); }
 .menu-chev { font-size: 22px; color: #9aa7b8; }
+/* Place-a-business banner: sits above the map, does not block taps
+   anywhere else. */
+.place-banner { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); padding: 12px 16px; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); z-index: 6; }
+.place-banner b { white-space: nowrap; }
+.place-banner span { color: var(--muted); font-size: 13px; }
 .mbox.dep .muted { color: #94a3b8; }
 .mbox.dep .btn { background: #1e293b; color: #fff; border-color: #334155; }
 .mbox.dep .btn.primary { background: #2f7cf6; border-color: #2f7cf6; }

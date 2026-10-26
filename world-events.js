@@ -327,15 +327,16 @@ function businessWeek() {
   let teamProfit = 0;
   if (typeof sportWeek === 'function') { try { teamProfit = sportWeek() || 0; } catch (e) {} }
   const rent = propsWeek();
+  const placedProfit = (typeof placedWeek === 'function') ? placedWeek() : 0;
   let interest = 0, overdraft = 0;
   if (S.loan > 0) interest = S.loan * 0.08 / 52;
   if (S.cash < 0) overdraft = -S.cash * 0.2 / 52;
-  const profit = mineProfit + rent + teamProfit - interest - overdraft;
+  const profit = mineProfit + rent + teamProfit + placedProfit - interest - overdraft;
   S.cash += profit;
   const own = mine(); let satW = 0, satN = 0;
   own.forEach(c => c.locs.forEach(l => { satW += l.sat * Math.max(1, l.cust); satN += Math.max(1, l.cust); }));
   if (satN > 1) S.rating = +(satW / satN).toFixed(2);
-  S.week = { profit, companies: mineProfit, rent, interest, overdraft };
+  S.week = { profit, companies: mineProfit, rent, placed: placedProfit, interest, overdraft };
   if (S.leader && typeof leaderWeek === 'function') leaderWeek();
   if (S.leader && typeof capitalWeek === 'function') { try { capitalWeek(); } catch (e) {} }
   if (typeof websiteWeek === 'function') { try { websiteWeek(); } catch (e) {} }

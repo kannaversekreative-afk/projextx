@@ -397,57 +397,6 @@ const MapView = (() => {
     // Facilities network: ports only — no base/shield icons, per the
     // user's instruction. Ports are joined by small white lines (with a
     // faint blue edge so the white shows on white land and blue sea).
-    // Shown for your home country always, and for every country once
-    // you zoom in — at world zoom 196 networks would just be clutter.
-    if (st && !pickMode && layerOn('ports')) {
-      const showFac = v.s > 1.0;
-      W.playable.forEach(k => {
-        if (k.a3 !== st.home && !showFac) return;
-        const cap0 = W.cities[k.capital]; if (!cap0) return;
-        const [capSx, capSy] = toScreen(cap0.x, cap0.y);
-        if (capSx < -200 || capSy < -200 || capSx > vw + 200 || capSy > vh + 200) return;
-        const f = facilitiesFor(k.a3); if (!f) return;
-        const nodes = [];
-        if (f.portXY) nodes.push({ xy: f.portXY, kind: 'port' });
-        if (f.milPortXY) nodes.push({ xy: f.milPortXY, kind: 'milPort' });
-        const scr = nodes.map(n => { const [sx, sy] = toScreen(n.xy[0], n.xy[1]); return { ...n, sx, sy }; }).filter(n => n.sx > -30 && n.sy > -30 && n.sx < vw + 30 && n.sy < vh + 30);
-        if (!scr.length) return;
-        const [cx, cy] = toScreen(f.cap.x, f.cap.y);
-        // ONE chain, no double, no triangle:
-        // capital -> civilian port -> military port.
-        // No second road from the capital, no port-to-port loop back to
-        // the capital, and no road drawn twice. Each road is a single
-        // thin white stroke, with endpoints exactly on the capital dot
-        // and on the port icon, so nothing ends disconnected.
-        const roadPts = (fromCell, toCell, startPt, endPt) => {
-          if (fromCell == null || toCell == null) return [startPt, endPt];
-          const pts = roadPath(k.a3, fromCell, toCell);
-          if (!pts || pts.length < 2) return [startPt, endPt];
-          const scr = pts.map(p => toScreen(p[0], p[1]));
-          // Replace the grid endpoints with the exact icon/dot points.
-          scr[0] = startPt; scr[scr.length - 1] = endPt;
-          return scr;
-        };
-        const links = [];
-        const portN = scr.find(n => n.kind === 'port'), milN = scr.find(n => n.kind === 'milPort');
-        if (portN) links.push(roadPts(f.capLandCell, f.portLandCell, [cx, cy], [portN.sx, portN.sy]));
-        if (portN && milN) {
-          if (f.milPortCell === f.portCell) links.push([[portN.sx, portN.sy], [milN.sx, milN.sy]]);
-          else links.push(roadPts(f.portLandCell, f.milPortLandCell, [portN.sx, portN.sy], [milN.sx, milN.sy]));
-        }
-        links.forEach(pts => {
-          c.save(); c.shadowColor = 'rgba(47,124,246,0.55)'; c.shadowBlur = 3;
-          c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 1.6; c.lineJoin = 'round'; c.lineCap = 'round';
-          c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); c.restore();
-        });
-        scr.forEach(n => {
-          const bg = n.kind === 'port' ? '#2f7cf6' : n.kind === 'milPort' ? '#b9362f' : '#1f5fd0';
-          c.fillStyle = bg; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(n.sx, n.sy, 13, 0, 7); c.fill(); c.stroke();
-          c.fillStyle = '#ffffff'; c.font = '13px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
-          c.fillText('⚓', n.sx, n.sy + 1);
-        });
-      });
-    }
     const r = Math.max(6, Math.min(14, 4 + v.s * 3));
     const mineSet = new Set(); for (const a3 in st.holdings) if (controlled(a3)) mineSet.add(W.byA3[a3].capital);
     W.cities.forEach(ct => {
@@ -471,6 +420,18 @@ const MapView = (() => {
       c.strokeStyle = isMine || isSel ? '#2f7cf6' : '#ffffff';
       c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 1.5; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
     });
+    // Placed businesses: a circle on the map, wherever the player
+    // put it. Tapping it opens that business.
+    if (S && Array.isArray(S.placed) && !pickMode) {
+      S.placed.forEach(b => {
+        const [sx, sy] = toScreen(b.x, b.y);
+        if (sx < -20 || sy < -20 || sx > vw + 20 || sy > vh + 20) return;
+        c.fillStyle = '#ffffff'; c.strokeStyle = '#2f7cf6'; c.lineWidth = 2.5;
+        c.beginPath(); c.arc(sx, sy, 13, 0, 7); c.fill(); c.stroke();
+        c.fillStyle = '#1f2937'; c.font = '16px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(b.icon || '🏢', sx, sy + 1);
+      });
+    }
     labelRects = [];
     // Your city: a circle with a star in it, in your home country, just
     // beside the capital. Tapping it opens Your City.
@@ -530,6 +491,11 @@ const MapView = (() => {
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
   function tap(sx, sy) {
     if (!pickMode) {
+      // Placing a business: any map tap places it, wherever it lands.
+      if (typeof UI !== 'undefined' && UI.placing) {
+        const [mx, my] = toMap(sx, sy);
+        handlers.place && handlers.place(mx, my); return;
+      }
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
       if (typeof myCityPos === 'function' && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
@@ -538,7 +504,14 @@ const MapView = (() => {
           if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }
         } catch (e) {}
       }
-      let best = null, bd = 18;
+      // Placed businesses first: their circles are bigger than flag
+      // dots, so a tap on one must not fall through to a city.
+      if (S && Array.isArray(S.placed)) {
+        let pb = null, bd = 26;
+        S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
+        if (pb) { handlers.placed && handlers.placed(pb.id); return; }
+      }
+      let best = null, bd = 28;
       W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
       if (best != null) { handlers.city && handlers.city(best); return; }
     }

@@ -5,7 +5,7 @@
 'use strict';
 
 let W = null, S = null;
-const UI = { panel: null, stack: [], modal: null, q: '', cat: 'All', starOnly: false,
+const UI = { panel: null, stack: [], modal: null, placing: false, q: '', cat: 'All', starOnly: false,
   range: '1Y', tradeRange: '1Y', web: { view: 'search', q: '', a3: null }, pick: null,
   mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0, expandedCompany: null, companyInit: false };
 const $ = id => document.getElementById(id);
@@ -77,6 +77,7 @@ function migrateSave(s) {
   if (!s.sports) s.sports = null;
   if (s.co) Object.values(s.co).forEach(c => { if (!Array.isArray(c.board)) c.board = []; if (!isFinite(c.weekProfitStreak)) c.weekProfitStreak = 0; if (!Array.isArray(c.weekNets)) c.weekNets = []; });
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
+  if (!Array.isArray(s.placed)) s.placed = [];
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
   if (s.extra == null) s.extra = {};
@@ -265,7 +266,8 @@ function renderHUD() {
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
-  <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">☰</button>`;
+  <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">☰</button>
+  ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
@@ -660,6 +662,7 @@ async function boot() {
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('mycity', () => openPanel('mycity'));
+  MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
   CityView.init($('cityview'), onPin);
@@ -815,6 +818,39 @@ function onCountryTap(a3) {
   // stock. It opens the country itself, with its businesses listed.
   UI.popup = { type: 'country', a3 }; renderPopup(); tutCheck();
 }
+// Place-a-business: the player taps anywhere on the map and a real
+// business circle appears there. Registered to the nearest country
+// (for value and weekly income), but drawn exactly where tapped.
+// First one is free, so it can be tested straight away.
+function placeBusiness(mx, my) {
+  if (!S || !UI.placing) return;
+  try {
+    let nearest = null, bd = 1e18;
+    W.cities.forEach(ct => { const d = Math.hypot(ct.x - mx, ct.y - my); if (d < bd) { bd = d; nearest = ct; } });
+    if (!nearest) { UI.placing = false; renderHUD(); return; }
+    const k = W.byA3[nearest.a3];
+    if (!Array.isArray(S.placed)) S.placed = [];
+    const free = S.placed.length === 0, cost = free ? 0 : 5000000;
+    if (S.cash < cost) { toast('Not enough cash for another business.', 'bad'); return; }
+    const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k) : null;
+    const sector = pool && pool.length ? pick(pool) : LEADER_SECTORS[Math.floor(rand() * LEADER_SECTORS.length)].n;
+    const info = LEADER_SECTOR_BY_NAME[sector] || { icon: '🏢', c: '#374151' };
+    let brand; const used = new Set(S.placed.map(b => b.name));
+    do { brand = pick(BRAND_A) + pick(BRAND_B); } while (used.has(brand));
+    const name = brand + pick(SUFFIX[sector] || [' Co.']);
+    const value = Math.max(1000000, Math.round(k.gdp0 * 1e6 * 0.008 / 3 * (0.7 + rand() * 0.6) / 1000) * 1000);
+    S.cash -= cost;
+    const b = { id: uid(), name, sector, icon: info.icon, color: info.c, a3: k.a3, x: mx, y: my, value, income: value * 0.001, rating: 3.4 + rand() * 0.5 };
+    S.placed.push(b);
+    UI.placing = false; renderHUD(); save();
+    UI.popup = { type: 'placed', id: b.id }; renderPopup();
+    toast(free ? `Business placed — first one free. ${fmtMoney(b.income)}/week.` : `Business placed in ${cname(k.a3)} — ${fmtMoney(b.income)}/week.`, 'good');
+  } catch (e) { UI.placing = false; renderHUD(); toast('Could not place that business.', 'bad'); }
+}
+function openPlacedCard(id) {
+  if (!S) return;
+  UI.popup = { type: 'placed', id }; renderPopup();
+}
 function closePopup() { UI.popup = null; MapView.select(null); $('popup').innerHTML = ''; }
 function renderPopup() {
   if (!UI.popup) { $('popup').innerHTML = ''; return; }
@@ -824,7 +860,7 @@ function renderPopup() {
     const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
     const myProps = S.props.filter(x => x.city === c.id).length;
     $('popup').innerHTML = `<div class="popup card">
-      <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)} · Capital, military & port in one</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
       <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
       <h5>Businesses here</h5>
@@ -844,6 +880,14 @@ function renderPopup() {
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
       ${p.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${p.a3}">INVADE</button></div>` : ''}
     </div>`;
+  } else if (p.type === 'placed') {
+    const b = (S.placed || []).find(x => x.id === p.id);
+    if (!b) { $('popup').innerHTML = ''; return; }
+    const k = W.byA3[b.a3];
+    $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>${b.icon} ${esc(b.name)}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <p class="muted small">${esc(b.sector)} · ${k ? k.flag + ' ' + esc(cname(b.a3)) : ''} · Your business, placed by you</p>
+      <div class="stats3 box"><div><span>Value</span><b>${fmtMoney(b.value, true)}</b></div><div><span>Income / week</span><b>${fmtMoney(b.income)}</b></div><div><span>Rating</span><b>${b.rating.toFixed(1)}★</b></div></div>
+      <p class="muted small">Pays its weekly income straight to your cash every week.</p></div>`;
   } else if (p.type === 'pin') {
     const lot = p.lot, city = CityView.city, co = S.co[city.a3];
     if (p.pin.type === 'stadium') {
@@ -1560,6 +1604,7 @@ function openMenuPopup() {
   const g = (title, defs) => group(title, defs.map(([x, d]) => [...find(x), d]));
   openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
   <div class="menu-pop-body">
+  <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">🏢</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites'], ['shop', 'Packs and boosts']])}
   ${g('World', [['news', "What's happening in the world"], ['inbox', 'Your messages'], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city']])}
@@ -1581,11 +1626,10 @@ function openDateModal() {
 }
 // ---------- map layers sheet ----------
 function openLayersModal() {
-  if (!S.mapLayers) S.mapLayers = { vehicles: true, ports: true, labels: true, star: true };
+  if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, star: true };
   const L = S.mapLayers;
   const rows = [
     ['vehicles', '🚗', 'Vehicles', 'Cars, planes and boats moving on the map'],
-    ['ports', '⚓', 'Ports and roads', 'Civilian and military ports, and the roads to them'],
     ['labels', '🏷️', 'City labels', 'Names on the map'],
     ['star', '⭐', 'Your City star', 'The star marker for your personal city'],
   ];
@@ -1680,12 +1724,19 @@ const A = {
   locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
   more: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
   drawer: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
+  createBusiness: () => {
+    closeModal(); closePanel();
+    if (CityView.isOpen()) leaveCity();
+    UI.placing = true; renderHUD();
+    toast(!S.placed || !S.placed.length ? 'Where do you want it? Tap anywhere on the map — first business free.' : 'Where do you want it? Tap anywhere on the map.', 'good');
+  },
+  cancelPlace: () => { UI.placing = false; renderHUD(); toast('Placement cancelled.'); },
   dateModal: () => openDateModal(),
   dateYes: () => { closeModal(); A.ageWeek(); },
   dateNo: () => closeModal(),
   ageYear: () => { closeModal(); A.ageUp(); },
   layers: () => openLayersModal(),
-  layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, ports: true, labels: true, star: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
+  layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, star: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),
   depCont: x => { UI.depCont = x; openDeparturesModal(); },
   depFly: x => { closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },

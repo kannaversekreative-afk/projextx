@@ -40,7 +40,7 @@ function newGame(opt) {
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
-    holdings: {}, props: [], lotState: {},
+    holdings: {}, props: [], lotState: {}, placed: [],
     regime: regimeOf('calm'), nextRate: 30 + Math.floor(rand() * 40), oil: 1, trade: 1,
     wars: [], live: [], news: [], mail: [], papers: [], cityHit: {}, boosts: {}, pandemic: 0, facilities: {}, lastWarDay: null,
     maxDays: NORMAL_DAYS, yearsBought: 0, yearReport: null, homeTaxPrev: null,
@@ -601,6 +601,14 @@ function propsWeek() {
     p.cond = Math.max(0.2, p.cond - 0.0015);
     total += p.income;
   });
+  return total;
+}
+// Placed businesses: player-owned, pay their weekly income straight
+// to cash, like a property. Value is set at placement.
+function placedWeek() {
+  if (!Array.isArray(S.placed)) return 0;
+  let total = 0;
+  S.placed.forEach(b => { b.income = b.value * 0.001; total += b.income; });
   return total;
 }
 
