@@ -6,7 +6,7 @@
 
 let W = null, S = null;
 const UI = { panel: null, stack: [], modal: null, placing: false, q: '', cat: 'All', starOnly: false,
-  range: '1Y', tradeRange: '1Y', web: { view: 'search', q: '', a3: null }, pick: null,
+  range: '1Y', tradeRange: '1Y', web: { view: 'home', q: '', a3: null }, pick: null,
   mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0, expandedCompany: null, companyInit: false };
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -229,7 +229,7 @@ function panelShell(title, sub, body) {
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
 }
 function renderPanel() {
-  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); return; }
+  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); $('panel').classList.remove('web-dark'); return; }
   const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
   if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
   let html = '';
@@ -243,6 +243,7 @@ function renderPanel() {
     html = '<div class="card in"><h3>That screen hit a problem</h3><p class="muted small">Please reload the game and try again. If it keeps happening, this is the error:</p><p class="muted small">' + esc(String(e && e.message || e)) + '</p><button class="btn3d orange wide" data-a="closePanel">CLOSE</button></div>';
   }
   $('panel').innerHTML = html; $('panel').classList.add('open');
+  $('panel').classList.toggle('web-dark', UI.panel === 'web' && (UI.web.view === 'home' || !UI.web.view));
 }
 
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
@@ -866,9 +867,11 @@ function placeBusiness(mx, my) {
     const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k) : null;
     const sector = pool && pool.length ? pick(pool) : LEADER_SECTORS[Math.floor(rand() * LEADER_SECTORS.length)].n;
     const info = LEADER_SECTOR_BY_NAME[sector] || { icon: '🏢', c: '#374151' };
-    let brand; const used = new Set(S.placed.map(b => b.name));
-    do { brand = pick(BRAND_A) + pick(BRAND_B); } while (used.has(brand));
-    const name = brand + pick(SUFFIX[sector] || [' Co.']);
+    let brand, name;
+    const used = new Set(S.placed.map(b => b.name));
+    // Shuffled world only: separate random pool (see random-names.js).
+    if (typeof genRandomCompany === 'function' && isRandomWorld()) { const g = genRandomCompany(sector, used, new Set()); if (g) { brand = g.brand; name = g.name; } }
+    if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (used.has(brand)); name = brand + pick(SUFFIX[sector] || [' Co.']); }
     const value = Math.max(1000000, Math.round(k.gdp0 * 1e6 * 0.008 / 3 * (0.7 + rand() * 0.6) / 1000) * 1000);
     S.cash -= cost;
     const b = { id: uid(), name, sector, icon: info.icon, color: info.c, a3: k.a3, x: mx, y: my, value, income: value * 0.001, rating: 3.4 + rand() * 0.5 };
@@ -1189,8 +1192,27 @@ function webSiteHTML(c) {
     <div class="kv"><span>Website rating</span><b>${(typeof siteRating === 'function' ? siteRating(c) : 0).toFixed(1)}★ · customers rate the site itself</b></div>${controlled(c.a3) ? `<button class="btn wide" data-a="siteMaker" data-x="${c.a3}">✏️ CUSTOMIZE WEBSITE</button>` : ''}
     <button class="btn wide" data-a="stock" data-x="${c.a3}">VIEW ${c.sym} STOCK</button>${admin}</div>`;
 }
+// Web home: a dark grid hub (dark background, white boxes/text/borders
+// only) that routes to Worl's own Web functions. Nothing from any other
+// game's labels is used here — every box opens a real Worl screen.
+function webHomeHTML() {
+  const unread = (S.mail || []).filter(m => !m.read).length;
+  const mineCount = (typeof mine === 'function') ? mine().length : 0;
+  const box = (ic, t, d, a, x, badge) => `<button class="webbox" data-a="${a}"${x != null ? ` data-x="${x}"` : ''}><span class="webbox-ic">${ic}</span><span class="webbox-txt"><b>${t}</b><span>${d}</span></span>${badge != null ? `<span class="webbadge">${badge}</span>` : ''}</button>`;
+  return `<div class="webhome"><button class="webleave" data-a="closePanel">← LEAVE WEB</button>
+    <div class="webgrid">
+      ${box('🔍', 'Seek search', 'Every company has a site here', 'webView', 'search')}
+      ${box('📰', 'World Times', 'News from around the world', 'webView', 'news')}
+      ${box('✉️', 'Mail', 'Messages, offers and alerts', 'webView', 'mail', unread || null)}
+      ${box('🏠', 'My website', 'Your home company\u2019s site and admin', 'webView', 'mine', mineCount || null)}
+      ${box('✏️', 'Customize website', 'Tune your site toward 5.0 stars', 'siteMaker', S.home)}
+      ${box('🚪', 'Leave Web', 'Back to the world map', 'closePanel')}
+    </div>
+    <p class="webhome-note">Your web hub. Search, news, mail and your company sites — all in-game, no real browser.</p></div>`;
+}
 PANELS.web = () => {
   const w = UI.web;
+  if (w.view === 'home' || !w.view) return panelShell('Web', 'Your web hub', webHomeHTML());
   let body = '', url = 'seek://search';
   if (w.view === 'site' && w.a3) {
     url = 'www.' + S.co[w.a3].name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '.com';
@@ -1613,6 +1635,7 @@ PANELS.mycity = () => {
     <p class="muted small">Bank and trading firm pay a small weekly income. The houses, land and cars are for owning — the top house in a top country costs trillions, and that is the point.</p>`);
 };
 PANELS.mars = () => marsPanelHTML();
+PANELS.casino = () => casinoPanelHTML();
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
@@ -1700,7 +1723,7 @@ const MENU_ITEMS = [
   ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
   ['hq', '🏭', 'HQ'], ['mars', '🚀', 'Mars'],
   ['goals', '🎯', 'Daily goals'],
-  ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['bank', '🏦', 'Bank'],
+  ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['casino', '🎰', 'Casino'], ['bank', '🏦', 'Bank'],
   ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
 ];
 function moreSheet() {
@@ -1723,7 +1746,7 @@ function openMenuPopup() {
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
   ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
-  ${g('Play', [['sports', 'Teams and leagues'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  ${g('Play', [['sports', 'Teams and leagues'], ['casino', 'Play at the casino and run your own'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
@@ -1813,7 +1836,7 @@ const A = {
   },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
-  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; openPanel(x); },
+  panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; if (x === 'web') UI.web = { view: 'home', q: '', a3: null }; openPanel(x); },
   closePanel: () => closePanel(),
   panelBack: () => { UI.stack.pop(); renderPanel(); },
   closePopup: () => closePopup(),
@@ -1860,6 +1883,16 @@ const A = {
   marsTravel: () => { closePanel(); closeModal(); CityView.openMars(); document.body.classList.add('in-city'); renderCityHUD(); toast('Welcome to Mars.', 'good'); },
   marsBuyMine: x => { const err = marsBuySite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine bought. Income arrives every week.', 'good'); save(); refreshAll(); },
   marsSellMine: x => { const err = marsSellSite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine sold.', 'good'); save(); refreshAll(); },
+  casinoTab: x => { UI.casinoTab = x; renderPanel(); },
+  casinoBet: x => { const err = casinoSetBet(x); if (err) return toast(err, 'bad'); renderPanel(); },
+  casinoSlots: () => { const err = casinoSlots(); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoBJDeal: () => { const err = casinoBJDeal(); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoBJHit: () => { const err = casinoBJHit(); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoBJStand: () => { const err = casinoBJStand(); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoRoulette: x => { const err = casinoRoulette(x); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoRouletteNumber: () => { const n = $('rouletteNum') ? $('rouletteNum').value : ''; const err = casinoRoulette('number', n); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
+  casinoBuild: () => { const el = $('casinoCity'); if (!el) return toast('Pick a city first.', 'bad'); const err = casinoBuild(+el.value); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino opened.', 'good'); },
+  casinoSell: x => { const err = casinoSell(x); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino sold.', 'good'); },
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
   star: (x, el, e) => {
@@ -1956,7 +1989,7 @@ const A = {
     renderPanel();
   },
   webBack: () => { UI.web = { view: 'search', q: UI.web.q, a3: null }; renderPanel(); },
-  webHome: () => { UI.web = { view: 'search', q: '', a3: null }; renderPanel(); },
+  webHome: () => { UI.web = { view: 'home', q: '', a3: null }; renderPanel(); },
   webTier: x => act(() => buyWebTier(x), 'Website upgraded'),
   webAd: x => { const [a3, id] = x.split('|'); act(() => toggleAd(a3, id)); },
   webAddon: x => { const [a3, id] = x.split('|'); act(() => buyAddon(a3, id), 'Add-on bought'); },

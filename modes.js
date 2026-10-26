@@ -46,6 +46,9 @@ function ensureWorl() {
   return S.worl;
 }
 function applyWorlStart() {
+  // Shuffled world: flag it so all business/stock naming uses the
+  // separate random pool (see random-names.js), not the real World's.
+  if (typeof S !== 'undefined' && S) S.randomWorld = true;
   const w = ensureWorl();
   const cs = country(S.home);
   // Random start, not the standard 5% / 54% / ~70 stability.

@@ -413,11 +413,13 @@ function inheritDifficulty(k) {
 // flow into the leader economy below.
 function makeExtraBusiness(k, sector, usedNames, usedSyms, idx) {
   const info = LEADER_SECTOR_BY_NAME[sector] || { growth: 0.03, vol: 0.02, icon: '🏢', c: '#374151' };
-  let brand; do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand);
-  const name = brand + pick(SUFFIX[sector] || [' Co.']);
+  let brand, name, sym;
+  // Shuffled world only: separate random pool (see random-names.js).
+  if (typeof genRandomCompany === 'function' && isRandomWorld()) { const g = genRandomCompany(sector, usedNames, usedSyms); if (g) { brand = g.brand; name = g.name; sym = g.sym; } }
+  if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand); name = brand + pick(SUFFIX[sector] || [' Co.']); sym = tickerFor(brand, usedSyms); }
   const gdpDollars = k.gdp0 * 1e6;
   const value = Math.max(1e6, gdpDollars * 0.008 / 3 * (0.7 + rand() * 0.6));
-  return { id: k.a3 + '-' + idx, a3: k.a3, sector, name, sym: tickerFor(brand, usedSyms),
+  return { id: k.a3 + '-' + idx, a3: k.a3, sector, name, sym,
     icon: info.icon, color: info.c, value, revenue: value * 0.12, profit: value * 0.012,
     employees: Math.max(10, Math.round(value / Math.max(5000, gdpDollars / Math.max(1, k.pop0)) / 8)),
     tax: 0, week: { profit: 0, tax: 0, rev: 0 }, rating: 3.4 + rand() * 0.5 };

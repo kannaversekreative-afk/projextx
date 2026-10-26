@@ -36,7 +36,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 // ---------- new game ----------
 function newGame(opt) {
   const s = {
-    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
+    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
@@ -153,10 +153,14 @@ function tickerFor(name, used) {
 }
 function makeCompany(k, sector, usedNames, usedSyms) {
   const info = SECTORS[sector];
-  let brand; do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand);
-  const name = brand + pick(SUFFIX[sector]);
+  let brand, name, sym;
+  // Shuffled world only: names/tickers from the separate random pool, so
+  // a random run never reuses the real World's naming pool. Real World
+  // and tycoon games keep the base generator below, unchanged.
+  if (typeof genRandomCompany === 'function' && isRandomWorld()) { const g = genRandomCompany(sector, usedNames, usedSyms); if (g) { brand = g.brand; name = g.name; sym = g.sym; } }
+  if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand); name = brand + pick(SUFFIX[sector]); sym = tickerFor(brand, usedSyms); }
   const g = Math.log10(Math.max(30, k.gdp0));
-  const c = { a3: k.a3, sector, name, sym: tickerFor(brand, usedSyms), city: k.capital, color: LOGO_COLORS[Math.floor(rand() * LOGO_COLORS.length)],
+  const c = { a3: k.a3, sector, name, sym, city: k.capital, color: LOGO_COLORS[Math.floor(rand() * LOGO_COLORS.length)],
     price: 1, p0: 1, shares: 1, listed: true, ai: true, pe: info.pe * (0.85 + rand() * 0.3), vol: info.vol * (0.85 + rand() * 0.4) * (k.wealth < 0.6 ? 1.2 : 1),
     beta: info.beta * (0.8 + rand() * 0.4), mood: gauss() * 0.3, moodT: gauss() * 0.4, tmp: 0, shock: 0, pattern: null,
     set: { price: 1, quality: 3, wage: 1 }, locs: [], fleet: 0, web: { tier: clamp(Math.round(k.wealth * 1.4 + rand() * 1.2 - 0.4), 0, 4), ads: {}, addons: {} },

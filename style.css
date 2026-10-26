@@ -146,6 +146,22 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .urlbar { display: flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 14px; padding: 8px 12px; }
 .urlbar .url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
 .web-hero { border-radius: 16px; padding: 18px; color: #fff; display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+/* Web home grid: dark background, white boxes/text/borders only. */
+#panel.web-dark { background: #111827; }
+#panel.web-dark .panel-head { background: #111827; }
+#panel.web-dark .panel-head h3 { color: #fff; }
+#panel.web-dark .panel-head .muted { color: #d1d5db; }
+#panel.web-dark .panel-body { background: #111827; }
+.webhome { display: flex; flex-direction: column; gap: 14px; }
+.webleave { align-self: flex-start; color: #fff; font-weight: 900; font-size: 14px; padding: 8px 12px; border: 1.5px solid #fff; border-radius: 999px; background: transparent; }
+.webgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.webbox { display: flex; align-items: flex-start; gap: 10px; text-align: left; color: #fff; background: #1f2937; border: 1.5px solid #fff; border-radius: 16px; padding: 14px 12px; min-width: 0; }
+.webbox-ic { font-size: 26px; flex: none; line-height: 1; }
+.webbox-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.webbox-txt b { font-size: 16px; font-weight: 900; }
+.webbox-txt span { font-size: 13px; color: #d1d5db; }
+.webbadge { margin-left: auto; flex: none; background: #fff; color: #111827; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 900; }
+.webhome-note { color: #d1d5db; font-size: 13px; margin: 0; }
 .web-hero b { font-size: 22px; } .web-hero span { opacity: 0.9; font-size: 14px; }
 .sponsored { border-color: var(--gold) !important; }
 
@@ -428,3 +444,9 @@ body.landscape-phone .company-card { max-width: calc(100% - 130px); }
 .intro-step { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(480px, 90vw); }
 .intro-step .inherit-line { font-size: 22px; font-weight: 900; color: #fff; }
 @media (prefers-color-scheme: dark) { html, body { background: #eaf2ff; color: var(--ink); } .card, #panel, .bottombar, .company-card, .popup, .citybar, .tut, .mbox { background: #fff !important; color: var(--ink) !important; } input, select, textarea { background: #fff !important; color: var(--ink) !important; } }
+/* Web home stays dark even on dark-mode devices (overrides the forced-white rule above). */
+@media (prefers-color-scheme: dark) {
+  #panel.web-dark, #panel.web-dark .panel-head, #panel.web-dark .panel-body { background: #111827 !important; }
+  #panel.web-dark .panel-head h3 { color: #fff !important; }
+  #panel.web-dark .panel-head .muted { color: #d1d5db !important; }
+}
