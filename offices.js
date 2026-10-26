@@ -12,8 +12,10 @@
 // more and make you more, and they want more money and more stock.
 // Offer state lives in UI.hire (not in the DOM), so a panel rerender
 // from a stepper click never loses the offer in progress.
-// CPU countries are NOT touched here: they just sit there for now.
-// Core game first, CPU competition later.
+// CPU companies get structure here, not competition: every CPU
+// flagship carries an office and a full board (see cpuOfficeAndBoard
+// below). CPU competition/expansion is still later — nothing here
+// changes what CPU companies DO, only what they HAVE.
 var BOARD_ROLES = [
   { role: 'COO', salary: 180000 }, { role: 'CFO', salary: 200000 },
   { role: 'CPO', salary: 175000 }, { role: 'CMO', salary: 170000 },
@@ -59,6 +61,26 @@ function boardLevel(m) {
   return avg >= 81 ? 5 : avg >= 61 ? 4 : avg >= 41 ? 3 : avg >= 21 ? 2 : 1;
 }
 function boardFull(e) { const b = ensureBoard(e); return BOARD_ROLES.every(r => b.some(x => x.role === r.role)); }
+// CPU structure: a CPU flagship gets the same skeleton as your
+// companies — an office and a full board — but everything starts at
+// the lowest level: a basic (level 1) office and five level-1
+// executives (average rating 20 or less, the Lv 1 band). Staff and
+// stock already exist for flagships (locations start at 1 staff, all
+// flagships are listed with real shares and prices), so this fills
+// the two missing pieces. No salaries are charged and no board boost
+// is applied for CPU boards yet: businessWeek only charges/applies
+// boards for companies you control, so this changes no behavior —
+// it is structure and readiness for CPU expansion later.
+function cpuOfficeAndBoard(c) {
+  if (!c) return;
+  if (!c.office) c.office = { day: 0, cost: 0, level: 1 };
+  const b = ensureBoard(c);
+  BOARD_ROLES.forEach(r => {
+    if (b.some(x => x.role === r.role)) return;
+    const v = 5 + Math.floor(Math.random() * 16); // 5..20 → Lv 1
+    b.push({ role: r.role, name: boardName(), salary: r.salary, lead: v, exp: v, loy: v, level: 1, cpu: true });
+  });
+}
 function boardWeeklyCost(e) { return ensureBoard(e).reduce((a, x) => a + (x.salary || 0) / 52, 0); }
 // Benefit rate: each member adds skillAvg/100 * 2% of the base
 // (company weekly revenue, or team weekly net). Higher level = higher

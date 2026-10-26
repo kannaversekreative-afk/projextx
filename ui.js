@@ -146,7 +146,7 @@ function migrateSave(s) {
   if (!Array.isArray(s.stores)) s.stores = [];
   if (!Array.isArray(s.loans)) s.loans = [];
   if (!s.sports) s.sports = null;
-  if (s.co) Object.values(s.co).forEach(c => { if (!Array.isArray(c.board)) c.board = []; if (!isFinite(c.weekProfitStreak)) c.weekProfitStreak = 0; if (!Array.isArray(c.weekNets)) c.weekNets = []; });
+  if (s.co) Object.values(s.co).forEach(c => { if (!Array.isArray(c.board)) c.board = []; if (!isFinite(c.weekProfitStreak)) c.weekProfitStreak = 0; if (!Array.isArray(c.weekNets)) c.weekNets = []; if (typeof cpuOfficeAndBoard === 'function') { const h = s.holdings && s.holdings[c.a3]; const owned = h && h.qty > 0 && h.qty >= (c.shares || 0) / 2; if (!owned) { try { cpuOfficeAndBoard(c); } catch (e) {} } } });
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
   if (!Array.isArray(s.placed)) s.placed = [];
   if (!s.mars) s.mars = { unlocked: {}, mines: {}, sites: {}, unlockOrder: [], pool: null };
@@ -1097,7 +1097,7 @@ function renderPopupInner() {
       <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
       <h5>Businesses</h5>
-      ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || ICONS.company} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
+      ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || ICONS.company} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}${bc.locs && bc.office ? ` · Office Lv ${bc.office.level || 1} · Board ${(typeof ensureBoard === 'function' ? ensureBoard(bc).length : 0)}/5 · Staff ${bc.locs.reduce((a, l) => a + (l.staff || 0), 0)}` : ''}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
       ${p.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${p.a3}">INVADE</button></div>` : ''}
     </div>`;

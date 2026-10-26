@@ -124,6 +124,13 @@ function newGame(opt) {
     path.forEach((p, i) => { const v = +p.toFixed(2); c.h.d.push(v); c.h.v.push(Math.round(c.shares * 0.003 * (0.5 + rand()))); if (i % 5 === 4) c.h.w.push(v); if (i % 21 === 20) c.h.m.push(v); });
     c.price = path[path.length - 1];
   }
+  // Every CPU flagship gets its office and board at the lowest
+  // level. The tycoon home flagship is yours, not CPU, so it is
+  // skipped — you buy its office and hire its board yourself.
+  if (typeof cpuOfficeAndBoard === 'function') for (const a3 in s.co) {
+    if (!opt.leader && a3 === opt.home) continue;
+    try { cpuOfficeAndBoard(s.co[a3]); } catch (e) {}
+  }
   if (opt.leader) {
     // Current-day start: treasury is 5% of real GDP, debt is 54% of GDP.
     // Struggling countries start struggling — that is the challenge.
