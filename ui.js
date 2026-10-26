@@ -2124,7 +2124,6 @@ const MENU_ITEMS = [
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
-  ['minigames', ICONS.minigames, 'Mini Games'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
@@ -2147,7 +2146,7 @@ function openMenuPopup() {
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
   ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
-  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['minigames', 'Battle grid, no country needed'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
