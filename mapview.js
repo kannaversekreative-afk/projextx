@@ -263,10 +263,14 @@ const MapView = (() => {
 
   // ---------- dots, labels, overlays ----------
   let labelRects = [];
-  function pill(c, x, y, text, style) {
+  // Name pills on the map are the tappable buttons (flag circles are
+  // gone): each drawn pill records which city it opens.
+  let labelTargets = [];
+  function pill(c, x, y, text, style, target) {
     c.font = style.font; const w = c.measureText(text).width + style.px * 2, h = style.h, rx = x - w / 2;
     for (const r of labelRects) if (rx < r[2] && rx + w > r[0] && y < r[3] && y + h > r[1]) return false;
     labelRects.push([rx - 3, y - 3, rx + w + 3, y + h + 3]);
+    if (target != null) labelTargets.push([rx - 3, y - 3, rx + w + 3, y + h + 3, target]);
     c.fillStyle = style.bg; c.strokeStyle = style.border; c.lineWidth = 1.5;
     c.beginPath(); c.roundRect(rx, y, w, h, h / 2); c.fill(); if (style.border) c.stroke();
     c.fillStyle = style.fg; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText(text, x, y + h / 2 + 0.5);
@@ -404,21 +408,9 @@ const MapView = (() => {
       const isMine = mineSet.has(ct.id), isSel = sel === ct.id, held = st.holdings[ct.a3] && !isMine;
       const rr = isSel ? r * 1.7 : isMine ? r * 1.35 : r;
       if (isSel) { c.fillStyle = 'rgba(47,124,246,0.25)'; c.beginPath(); c.arc(sx, sy, rr * 2.2, 0, 7); c.fill(); }
-      // Each country's circle IS its flag: a circular flag badge,
-      // clipped to the circle, with a blue ring when it's yours or
-      // selected and a white ring otherwise.
-      const fl = W.byA3[ct.a3].flag || '🏳️';
-      c.save();
-      c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.clip();
-      c.fillStyle = '#ffffff'; c.fillRect(sx - rr, sy - rr, rr * 2, rr * 2);
-      // Dead-centre: emoji glyphs sit high in their em box, so nudge
-      // down a touch and size the flag to fill the circle, not float
-      // small inside it.
-      c.font = `${Math.round(rr * 2.2)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(fl, sx, sy + Math.round(rr * 0.08));
-      c.restore();
-      c.strokeStyle = isMine || isSel ? '#2f7cf6' : '#ffffff';
-      c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 1.5; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
+      // No flag circles on the map any more: the country name pill
+      // below is the button. Nothing is drawn here at the capital
+      // point except the selected-city halo above.
     });
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
@@ -432,7 +424,7 @@ const MapView = (() => {
         c.fillText(b.icon || '🏢', sx, sy + 1);
       });
     }
-    labelRects = [];
+    labelRects = []; labelTargets = [];
     // Your city: a circle with a star in it, in your home country, just
     // beside the capital. Tapping it opens Your City.
     if (typeof myCityPos === 'function' && layerOn('star')) {
@@ -450,17 +442,21 @@ const MapView = (() => {
         }
       } catch (e) {}
     }
-    W.cities.forEach(ct => { const [sx, sy] = toScreen(ct.x, ct.y); labelRects.push([sx - r, sy - r, sx + r, sy + r]); });
+    // Country name pills ARE the map buttons: each pill sits centred
+    // on its capital and tapping it opens that capital city (the old
+    // flag-dot behaviour). Full names are wider than the old a3 codes,
+    // so the label cap is raised — the pill overlap check still skips
+    // any name that would collide with one already drawn.
     const order = W.cities.map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
-    const maxLabels = Math.round(14 + v.s * v.s * 40);
+    const maxLabels = Math.round(14 + v.s * v.s * 80);
     let n = 0;
     if (!layerOn('labels')) n = maxLabels + 1;
     for (const [id, p] of order) {
       if (n >= maxLabels && p < 1e11) break;
       const ct = W.cities[id], [sx, sy] = toScreen(ct.x, ct.y);
       if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
-      const isSel = id === sel, text = isSel || v.s > 2.2 ? `${ct.a3} · ${W.byA3[ct.a3].name}` : ct.a3;
-      if (pill(c, sx, sy + r + 6, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL)) n++;
+      const isSel = id === sel, text = W.byA3[ct.a3].name;
+      if (pill(c, sx, sy - 13, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL, id)) n++;
     }
   }
   function drawPickLabels(c) {
@@ -504,12 +500,17 @@ const MapView = (() => {
           if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }
         } catch (e) {}
       }
-      // Placed businesses first: their circles are bigger than flag
-      // dots, so a tap on one must not fall through to a city.
+      // Placed businesses first: their circles are bigger than the
+      // capital points, so a tap on one must not fall through to a city.
       if (S && Array.isArray(S.placed)) {
         let pb = null, bd = 26;
         S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
+      }
+      // Country name pills are the buttons: a tap inside a pill (with
+      // a generous 8px margin) opens that capital city.
+      for (const t of labelTargets) {
+        if (sx >= t[0] - 8 && sx <= t[2] + 8 && sy >= t[1] - 8 && sy <= t[3] + 8) { handlers.city && handlers.city(t[4]); return; }
       }
       let best = null, bd = 28;
       W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
