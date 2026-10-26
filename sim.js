@@ -71,7 +71,7 @@ function newGame(opt) {
     // extra sectors come from the realism pool, never a random global sector.
     // Count is random (2 vs 3), sectors are realism-picked.
     W.playable.forEach(k => {
-      const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k) : SECTOR_LIST.slice();
+      const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k, 2026) : SECTOR_LIST.slice();
       const must = (typeof mustHaveForCountry === 'function') ? mustHaveForCountry(k.a3) : [];
       // MUST-HAVE FIRST, guaranteed, not random: e.g. Russia ALWAYS gets
       // Oil Extraction + Natural Gas, Taiwan ALWAYS gets Semiconductors.
@@ -93,7 +93,8 @@ function newGame(opt) {
     });
   } else {
     // Tycoon (legacy, old saves / old mode): one company per country.
-    const deck = []; SECTOR_LIST.forEach(sec => { for (let i = 0; i < Math.ceil(W.playable.length / SECTOR_LIST.length); i++) deck.push(sec); });
+    const deckSrc = SECTOR_LIST.filter(sec => { const s = (typeof LEADER_SECTOR_BY_NAME !== 'undefined' && LEADER_SECTOR_BY_NAME[sec]) || null; return !s || ((!s.from || s.from <= 2026) && (!s.to || s.to >= 2026)); });
+    const deck = []; deckSrc.forEach(sec => { for (let i = 0; i < Math.ceil(W.playable.length / deckSrc.length); i++) deck.push(sec); });
     for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
     W.playable.forEach((k, i) => {
       const sector = deck[i], c = makeCompany(k, sector, usedNames, usedSyms);

@@ -1,10 +1,10 @@
-// Country Leader game — 78 sectors, 2–3 businesses per country, leader economy.
+// Country Leader game — 97 sectors, 2–3 businesses per country, leader economy.
 // Loaded after world-events.js, before mapview.js. All top-level functions
 // are globals, so sim.js / world-events.js / ui.js can call them at runtime.
 // Original companies, people and sector names are fictional.
 'use strict';
 
-// ---------- 78 sectors ----------
+// ---------- 97 sectors ----------
 // Each entry: name, group, icon, colour, and market parameters. Full
 // SECTORS entries (loc, fleet, tag, products) are generated below from
 // the group template, so companyWeek / locEconomics / fleetEconomics keep
@@ -22,10 +22,10 @@ const LEADER_SECTORS = [
   { n: 'Bakery & Confectionery', g: 'food', icon: '🍞', c: '#d4a017', growth: 0.03, vol: 0.016, beta: 0.8, div: 0.035 },
   { n: 'Animal Feed', g: 'food', icon: '🌽', c: '#a67c00', growth: 0.02, vol: 0.016, beta: 0.8, div: 0.03 },
   // B. Energy & resources (10)
-  { n: 'Oil Extraction', g: 'energy', icon: '🛢️', c: '#111827', growth: 0.02, vol: 0.028, beta: 1.1, div: 0.05 },
-  { n: 'Oil Refining & Fuels', g: 'energy', icon: '⛽', c: '#e0812b', growth: 0.025, vol: 0.022, beta: 0.9, div: 0.045 },
+  { n: 'Oil Extraction', g: 'energy', icon: '🛢️', c: '#111827', growth: 0.02, vol: 0.028, beta: 1.1, div: 0.05, to: 2080 },
+  { n: 'Oil Refining & Fuels', g: 'energy', icon: '⛽', c: '#e0812b', growth: 0.025, vol: 0.022, beta: 0.9, div: 0.045, to: 2080 },
   { n: 'Natural Gas', g: 'energy', icon: '🔥', c: '#0ea5b7', growth: 0.025, vol: 0.024, beta: 1.0, div: 0.045 },
-  { n: 'Coal & Peat', g: 'energy', icon: '⚫', c: '#374151', growth: 0.0, vol: 0.022, beta: 0.9, div: 0.04 },
+  { n: 'Coal & Peat', g: 'energy', icon: '⚫', c: '#374151', growth: 0.0, vol: 0.022, beta: 0.9, div: 0.04, to: 2050 },
   { n: 'Mining – Metals', g: 'energy', icon: '⛏️', c: '#6b7280', growth: 0.02, vol: 0.024, beta: 1.0, div: 0.035 },
   { n: 'Mining – Non-metals', g: 'energy', icon: '🪨', c: '#9ca3af', growth: 0.02, vol: 0.02, beta: 0.9, div: 0.035 },
   { n: 'Electricity Generation', g: 'energy', icon: '⚡', c: '#f5b301', growth: 0.03, vol: 0.016, beta: 0.7, div: 0.045 },
@@ -95,11 +95,34 @@ const LEADER_SECTORS = [
   { n: 'Marketing & Advertising', g: 'finance', icon: '📣', c: '#ff6b2c', growth: 0.04, vol: 0.02, beta: 1.0, div: 0.025 },
   { n: 'Space & Satellites', g: 'tech', icon: '🛰️', c: '#111827', growth: 0.06, vol: 0.026, beta: 1.2, div: 0.01 },
   { n: 'Cybersecurity', g: 'tech', icon: '🔒', c: '#e5484d', growth: 0.08, vol: 0.024, beta: 1.2, div: 0.01 },
+  // J. Future & frontier (19) — the tech-driven economy arrives over
+  // time (from = first year) instead of existing at game start in 2026.
+  // Rockets & Launch and Additive Manufacturing exist in 2026; the rest
+  // arrive 2028–2050. See sectorEraWeek for arrivals, formation, decay.
+  { n: 'Rockets & Launch Services', g: 'tech', icon: '🚀', c: '#0ea5b7', growth: 0.09, vol: 0.05, beta: 1.4, div: 0, from: 2026 },
+  { n: 'Additive Manufacturing', g: 'mfg', icon: '🖨️', c: '#6b7280', growth: 0.07, vol: 0.03, beta: 1.2, div: 0.01, from: 2026 },
+  { n: 'AI Agents', g: 'tech', icon: '🤖', c: '#7c4dff', growth: 0.13, vol: 0.05, beta: 1.4, div: 0, from: 2028 },
+  { n: 'Drone Delivery', g: 'transport', icon: '🚁', c: '#2f7cf6', growth: 0.09, vol: 0.04, beta: 1.3, div: 0, from: 2028 },
+  { n: 'Vertical Farming', g: 'food', icon: '🌿', c: '#12a150', growth: 0.07, vol: 0.03, beta: 1.1, div: 0.01, from: 2028 },
+  { n: 'Immersive Worlds', g: 'tech', icon: '🥽', c: '#ff6b2c', growth: 0.09, vol: 0.05, beta: 1.4, div: 0, from: 2028 },
+  { n: 'Humanoid Robotics', g: 'tech', icon: '🦾', c: '#e5484d', growth: 0.11, vol: 0.05, beta: 1.4, div: 0, from: 2030 },
+  { n: 'Autonomous Vehicles', g: 'tech', icon: '🚘', c: '#111827', growth: 0.08, vol: 0.04, beta: 1.3, div: 0.01, from: 2030 },
+  { n: 'Cellular Agriculture', g: 'food', icon: '🧫', c: '#e0812b', growth: 0.08, vol: 0.04, beta: 1.2, div: 0, from: 2030 },
+  { n: 'Carbon Capture', g: 'energy', icon: '🌬️', c: '#0ea5b7', growth: 0.08, vol: 0.035, beta: 1.1, div: 0.01, from: 2030 },
+  { n: 'Quantum Computing', g: 'tech', icon: '⚛️', c: '#7c4dff', growth: 0.12, vol: 0.06, beta: 1.5, div: 0, from: 2032 },
+  { n: 'Synthetic Biology', g: 'tech', icon: '🧬', c: '#12a150', growth: 0.11, vol: 0.05, beta: 1.4, div: 0, from: 2032 },
+  { n: 'Space Mining', g: 'tech', icon: '☄️', c: '#374151', growth: 0.12, vol: 0.07, beta: 1.6, div: 0, from: 2035 },
+  { n: 'Orbital Manufacturing', g: 'tech', icon: '🛰️', c: '#2f7cf6', growth: 0.10, vol: 0.06, beta: 1.5, div: 0, from: 2035 },
+  { n: 'Nanotechnology', g: 'tech', icon: '🔬', c: '#6b7280', growth: 0.10, vol: 0.05, beta: 1.4, div: 0, from: 2035 },
+  { n: 'Brain–Computer Interfaces', g: 'tech', icon: '🧠', c: '#ff6b2c', growth: 0.12, vol: 0.06, beta: 1.5, div: 0, from: 2038 },
+  { n: 'Lunar Infrastructure', g: 'tech', icon: '🌙', c: '#9ca3af', growth: 0.11, vol: 0.06, beta: 1.5, div: 0, from: 2040 },
+  { n: 'Fusion Energy', g: 'energy', icon: '☀️', c: '#f5b301', growth: 0.10, vol: 0.05, beta: 1.3, div: 0.01, from: 2040 },
+  { n: 'Mars Services', g: 'tech', icon: '🔴', c: '#e5484d', growth: 0.14, vol: 0.08, beta: 1.7, div: 0, from: 2050 },
 ];
 const LEADER_SECTOR_BY_NAME = {};
 LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
 
-// Expand SECTORS (old 5) with the 78, so companyWeek / locEconomics /
+// Expand SECTORS (old 5) with the 97, so companyWeek / locEconomics /
 // fleetEconomics work for any leader sector. Loc/fleet templates are by
 // group: transport sectors get a fleet, others get a location template.
 (function expandSectors() {
@@ -122,7 +145,8 @@ LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
     'Restaurants & Bars': [16, 0.30], 'Healthcare Services': [70, 0.12],
     'Education – Schools': [30, 0.08], 'Education – Higher': [30, 0.08],
     'Entertainment – Film & Music': [14, 0.28], 'Entertainment – Gaming & Sports': [28, 0.16],
-    'Tourism Services': [95, 0.08], 'Personal Services': [35, 0.20], 'Real Estate – Residential': [400, 0.01] };
+    'Tourism Services': [95, 0.08], 'Personal Services': [35, 0.20], 'Real Estate – Residential': [400, 0.01],
+    'Cellular Agriculture': [35, 0.10], 'Vertical Farming': [20, 0.25] };
   const locFor = (g, n) => {
     if (g === 'food' || g === 'service') {
       const t = TRAFFIC_TICKET[n] || [40, 0.08];
@@ -168,7 +192,7 @@ const LEADER_SPECIAL = {
   BRA: ['Crop Farming', 'Livestock Farming', 'Mining – Metals'],
   ARG: ['Crop Farming', 'Livestock Farming', 'Food Processing'],
   UKR: ['Crop Farming', 'Steel Production', 'Food Processing'],
-  IND: ['Textiles', 'Software & AI', 'Pharmaceuticals'],
+  IND: ['Textiles', 'Software & AI', 'Pharmaceuticals', 'Coal & Peat'],
   BGD: ['Textiles', 'Apparel & Footwear', 'Crop Farming'],
   VNM: ['Textiles', 'Consumer Electronics', 'Crop Farming'],
   MEX: ['Vehicles – Cars & Trucks', 'Consumer Electronics', 'Tourism Services'],
@@ -192,9 +216,9 @@ const LEADER_SPECIAL = {
   ZAF: ['Mining – Metals', 'Crop Farming'],
   THA: ['Tourism Services', 'Food Processing'],
   MYS: ['Consumer Electronics', 'Semiconductors'],
-  IDN: ['Mining – Metals', 'Crop Farming'],
+  IDN: ['Mining – Metals', 'Crop Farming', 'Coal & Peat'],
   PHL: ['Consumer Electronics', 'Tourism Services'],
-  POL: ['Vehicles – Cars & Trucks', 'Food Processing'],
+  POL: ['Vehicles – Cars & Trucks', 'Food Processing', 'Coal & Peat'],
   TUR: ['Textiles', 'Tourism Services'],
   EGY: ['Natural Gas', 'Tourism Services'],
   COL: ['Oil Extraction', 'Crop Farming'],
@@ -206,7 +230,7 @@ const LEADER_SPECIAL = {
   BRN: ['Oil Extraction', 'Natural Gas'],
 };
 const LEADER_MUST = {
-  RUS: ['Oil Extraction', 'Natural Gas'],
+  RUS: ['Oil Extraction', 'Natural Gas', 'Coal & Peat'],
   SAU: ['Oil Extraction', 'Natural Gas'],
   QAT: ['Natural Gas', 'Oil Extraction'],
   NOR: ['Oil Extraction', 'Natural Gas'],
@@ -221,16 +245,16 @@ const LEADER_MUST = {
   KAZ: ['Oil Extraction', 'Mining – Metals'],
   NGA: ['Oil Extraction'],
   CAN: ['Oil Extraction', 'Mining – Metals'],
-  AUS: ['Mining – Metals'],
+  AUS: ['Mining – Metals', 'Coal & Peat'],
   CHL: ['Mining – Metals'],
-  ZAF: ['Mining – Metals'],
+  ZAF: ['Mining – Metals', 'Coal & Peat'],
   BRA: ['Crop Farming'],
   TWN: ['Semiconductors'],
   KOR: ['Semiconductors', 'Vehicles – Cars & Trucks'],
   JPN: ['Vehicles – Cars & Trucks', 'Machinery – Industrial'],
-  DEU: ['Vehicles – Cars & Trucks', 'Machinery – Industrial'],
-  CHN: ['Consumer Electronics', 'Textiles'],
-  USA: ['Software & AI', 'Semiconductors'],
+  DEU: ['Vehicles – Cars & Trucks', 'Machinery – Industrial', 'Coal & Peat'],
+  CHN: ['Consumer Electronics', 'Textiles', 'Coal & Peat'],
+  USA: ['Software & AI', 'Semiconductors', 'Coal & Peat'],
   GBR: ['Finance – Banking'],
   CHE: ['Finance – Banking', 'Pharmaceuticals'],
   SGP: ['Semiconductors', 'Finance – Banking'],
@@ -404,7 +428,15 @@ const LEADER_MUST = {
   ARM: ['Mining – Metals'],
 };
 function mustHaveForCountry(a3) { return (LEADER_MUST[a3] || []).filter(n => LEADER_SECTOR_BY_NAME[n]); }
-function sectorPoolForCountry(k) {
+// Game year: day 0 = Jan 1, 2026.
+function gameYear() { const d = (typeof S !== 'undefined' && S && isFinite(S.day)) ? S.day : 0; return 2026 + Math.floor(d / 365); }
+// Sector pool for a country in a given year. year defaults to the current
+// game year; new games pass 2026 explicitly (a stale S from a previous
+// save must never leak its year into a fresh world). Future sectors join
+// rich countries at arrival, mid countries 12 years later; dead sectors
+// (past their to year) drop out.
+function sectorPoolForCountry(k, year) {
+  const yr = (year != null) ? year : gameYear();
   const pool = [];
   mustHaveForCountry(k.a3).forEach(n => pool.push(n));
   pool.push('Retail – Grocery', 'Construction – Residential', 'Food Processing');
@@ -417,8 +449,29 @@ function sectorPoolForCountry(k) {
   else pool.push('Crop Farming', 'Textiles', 'Apparel & Footwear');
   if (k.wealth > 1.2) pool.push('Data Centers & Cloud', 'Pharmaceuticals');
   if (k.wealth < 0.6) pool.push('Livestock Farming', 'Mining – Non-metals');
-  // Dedupe, keep order, only sectors that exist.
-  const out = []; pool.forEach(n => { if (LEADER_SECTOR_BY_NAME[n] && !out.includes(n)) out.push(n); });
+  // Era-gated future sectors: rich countries at arrival, mid countries later.
+  const futureFor = (name, from) => { if (yr >= from && gdpPc > 30000) pool.push(name); else if (yr >= from + 12 && gdpPc > 10000) pool.push(name); };
+  futureFor('Rockets & Launch Services', 2026);
+  futureFor('Additive Manufacturing', 2026);
+  futureFor('AI Agents', 2028);
+  futureFor('Drone Delivery', 2028);
+  futureFor('Vertical Farming', 2028);
+  futureFor('Immersive Worlds', 2028);
+  futureFor('Humanoid Robotics', 2030);
+  futureFor('Autonomous Vehicles', 2030);
+  futureFor('Cellular Agriculture', 2030);
+  futureFor('Carbon Capture', 2030);
+  futureFor('Quantum Computing', 2032);
+  futureFor('Synthetic Biology', 2032);
+  futureFor('Space Mining', 2035);
+  futureFor('Orbital Manufacturing', 2035);
+  futureFor('Nanotechnology', 2035);
+  futureFor('Brain–Computer Interfaces', 2038);
+  futureFor('Lunar Infrastructure', 2040);
+  futureFor('Fusion Energy', 2040);
+  futureFor('Mars Services', 2050);
+  // Dedupe, keep order, only sectors that exist and are alive in yr.
+  const out = []; pool.forEach(n => { const s = LEADER_SECTOR_BY_NAME[n]; if (s && !out.includes(n) && !(s.to && yr > s.to)) out.push(n); });
   return out;
 }
 function inheritDifficulty(k) {
@@ -551,8 +604,60 @@ function buildTradeLinks() {
   }
   return links;
 }
+// ---------- sector eras: businesses are born and die with their sector ----------
+// Sectors carry optional from (first year) and to (last year new
+// businesses form). Each week: announce newly arrived sectors once,
+// form new businesses in sectors that arrived this year (one yearly
+// pass, 50% per eligible country — no per-business news spam), decay
+// businesses in dead sectors (-10%/yr), and close CPU businesses a
+// decade past their sector's end (2%/week). Player majority-owned
+// businesses are NEVER auto-closed; they decay but stay yours.
+function sectorEraWeek() {
+  if (!S || !S.leader || !S.extra) return;
+  const yr = gameYear();
+  S.sectorArrived = S.sectorArrived || {};
+  // First run (old saves included): silently mark everything already
+  // arrived, so a catch-up burst of arrival news never fires at once.
+  if (S.sectorEraYear == null) {
+    S.sectorEraYear = yr;
+    LEADER_SECTORS.forEach(s => { if (s.from && s.from > 2026 && yr >= s.from) S.sectorArrived[s.n] = yr; });
+  }
+  LEADER_SECTORS.forEach(s => {
+    if (s.from && s.from > 2026 && yr >= s.from && !S.sectorArrived[s.n]) {
+      S.sectorArrived[s.n] = yr;
+      if (typeof news === 'function') news('Economy', s.n + ' has arrived — new businesses are forming in it around the world.');
+    }
+  });
+  // Formation: once, on the first week of a new year, in sectors that
+  // arrived that year, only in countries whose pool includes them.
+  if (yr !== S.sectorEraYear) {
+    S.sectorEraYear = yr;
+    const arrived = LEADER_SECTORS.filter(s => s.from === yr).map(s => s.n);
+    if (arrived.length) W.playable.forEach(k => {
+      const pool = sectorPoolForCountry(k, yr);
+      const fit = arrived.filter(n => pool.includes(n));
+      if (!fit.length || rand() >= 0.5) return;
+      const usedNames = new Set(Object.values(S.extra).map(b => b.name));
+      const usedSyms = new Set(Object.values(S.extra).map(b => b.sym));
+      const ex = makeExtraBusiness(k, pick(fit), usedNames, usedSyms, 'f' + ((S.extraSeq = (S.extraSeq || 1000) + 1)));
+      S.extra[ex.id] = ex;
+    });
+  }
+  // Decay + closure for dead sectors.
+  Object.values(S.extra).forEach(b => {
+    const s = LEADER_SECTOR_BY_NAME[b.sector]; if (!s || !s.to || yr <= s.to) return;
+    b.value = Math.max(1e5, b.value * (1 - 0.10 / 52));
+    if (yr > s.to + 10) {
+      const held = (S.holdingsX && S.holdingsX[b.id] && S.holdingsX[b.id].qty) || 0;
+      if (held > (b.shares || 0) / 2) return;
+      if (rand() < 0.02) { delete S.extra[b.id]; if (S.holdingsX) delete S.holdingsX[b.id]; if (typeof news === 'function') news('Economy', b.name + ' has closed as ' + b.sector + ' fades away.'); }
+    }
+  });
+}
+
 function leaderWeek() {
   if (!S || !S.leader) return;
+  sectorEraWeek();
   S.tradeLinks = buildTradeLinks();
   let homeRev = 0, homeSpend = 0, homeTrade = 0;
   for (const a3 in S.countries) {
