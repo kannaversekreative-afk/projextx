@@ -3,8 +3,10 @@
 // YOU are the CEO: that seat is never hired. The board is 5 hired
 // executives: COO, CFO, CPO, CMO, CTO. Hire all 5 and the board
 // room is full.
-// Each executive hires a manager in their own domain. The CFO hires
-// nobody: IPO, loans and forecasts are advice, not a department.
+// Each executive hires a manager in their own domain: the CFO hires
+// store managers, the CPO a product manager, the CMO a marketing
+// manager, the CTO a technology manager. The CFO also advises on
+// IPO, loans and forecasts.
 // Hiring is NOT just a bill. For an empty seat you find candidates,
 // each with their own Leadership / Expertise / Loyalty, current salary
 // and ask. You offer a salary, or salary plus a stock grant (stock
@@ -22,8 +24,8 @@ var BOARD_ROLES = [
 // What each executive does, and who they hire. Shown in the Offices
 // panel under every seat.
 var EXEC_ROLE_INFO = {
-  COO: { domain: 'Operations — properties, rent, tenants, pricing', hires: 'Hires and fires store managers' },
-  CFO: { domain: 'Finance — IPO, loans, forecasts. Your advisor and guide', hires: 'Hires nobody' },
+  COO: { domain: 'Operations — properties, rent, tenants, pricing', hires: 'Fires and promotes store managers on performance' },
+  CFO: { domain: 'Finance — IPO, loans, forecasts. Your advisor and guide', hires: 'Hires store managers' },
   CPO: { domain: 'Product — product development', hires: 'Hires product managers' },
   CMO: { domain: 'Marketing — campaigns and brand awareness', hires: 'Hires a marketing manager, who hires marketing staff' },
   CTO: { domain: 'Technology — innovation and automation', hires: 'Hires a technology manager' },
@@ -139,9 +141,9 @@ function fireBoard(e, role) {
 }
 
 // ---------- Executive managers ----------
-// Each executive hires a manager in their own domain: CPO hires a
-// product manager, CMO a marketing manager, CTO a technology
-// manager. The CFO hires nobody. A manager's level can never exceed
+// Each executive hires a manager in their own domain: CFO hires
+// store managers, CPO a product manager, CMO a marketing manager,
+// CTO a technology manager. A manager's level can never exceed
 // the level of the executive who hired them, so a Lv 1 executive can
 // only hire Lv 1 managers — and that manager can only hire Lv 1
 // staff. Manager candidates are a choice of 3, hired at a set salary
