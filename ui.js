@@ -2005,14 +2005,46 @@ PANELS.crypto = () => {
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
-    return BOARD_ROLES.map(r => {
+    const ceoRow = `<div class="kv"><span>CEO · You</span><b>Owner — this seat is yours, not hired</b></div>`;
+    const rows = BOARD_ROLES.map(r => {
+      const info = (typeof EXEC_ROLE_INFO !== 'undefined' && EXEC_ROLE_INFO[r.role]) || {};
+      const infoLine = `<p class="muted small">${info.domain || ''} · ${info.hires || ''}</p>`;
       const m = b.find(x => x.role === r.role);
       if (m) {
         const grant = m.grant ? ` · Grant: ${m.grant.shares.toLocaleString()} ${m.grant.type === 'option' ? 'stock options' : 'RSUs'}${m.grant.strike != null ? ` @ ${fmtMoney(m.grant.strike)}` : ''} (4yr vest, 1yr cliff)` : '';
-        return `<div class="kv"><span>${r.role} · ${esc(m.name)} · Lv ${m.level || 1} · L${m.lead} E${m.exp} Y${m.loy}</span><b>${fmtMoney(m.salary)}/yr <button class="btn small" data-a="fireBoard" data-x="${kind}|${id}|${r.role}">FIRE</button></b></div><p class="muted small">${grant}</p>`;
+        const star = m.star ? ' ⭐ developable' : '';
+        let advisor = '';
+        if (r.role === 'CFO' && kind === 'co') {
+          const fc = (typeof cfoForecast === 'function') ? cfoForecast(e) : null;
+          const ipoOk = (typeof boardFull === 'function' && boardFull(e) && (e.weekProfitStreak || 0) >= 2);
+          advisor = `<p class="muted small">CFO advice — IPO: ${e.listed ? 'already public' : (ipoOk ? 'ready' : 'needs a full board and 2 profitable weeks')} · Business loans: ${(S.loans || []).length} · Forecast next quarter: ${fc == null ? 'not enough data yet' : fmtMoney(fc, true)}</p>`;
+        }
+        return `<div class="kv"><span>${r.role} · ${esc(m.name)} · Lv ${m.level || 1} · L${m.lead} E${m.exp} Y${m.loy}${star}</span><b>${fmtMoney(m.salary)}/yr <button class="btn small" data-a="fireBoard" data-x="${kind}|${id}|${r.role}">FIRE</button></b></div>${infoLine}<p class="muted small">${grant}</p>${advisor}`;
       }
-      return `<div class="kv"><span>${r.role} · empty</span><b><button class="btn" data-a="findCand" data-x="${kind}|${id}|${r.role}">FIND CANDIDATES</button></b></div>`;
+      return `<div class="kv"><span>${r.role} · empty</span><b><button class="btn" data-a="findCand" data-x="${kind}|${id}|${r.role}">FIND CANDIDATES</button></b></div>${infoLine}`;
     }).join('');
+    return ceoRow + rows;
+  };
+  // Managers hired by your executives, on company cards only. The
+  // CFO hires nobody, so there is no CFO row here.
+  const mgrSection = (c) => {
+    const mgrs = (typeof ensureExecManagers === 'function') ? ensureExecManagers(c) : {};
+    const row = (kind, label, execRole, mgr) => {
+      if (mgr) {
+        let extra = '';
+        if (kind === 'marketing') extra = ` · Staff ${mgr.employees || 0} <button class="btn small" data-a="hireMktEmp" data-x="${c.a3}">HIRE STAFF</button>`;
+        if (kind === 'tech') extra = ` · Tech ${mgr.tech || 0}/99${(mgr.milestones || []).length ? ` · ${(mgr.milestones || []).join(', ')}` : ''}`;
+        return `<div class="kv"><span>${label} · ${esc(mgr.name)} · Lv ${mgr.level} · Skill ${mgr.skill}${mgr.star ? ' ⭐ developable' : ''}${extra}</span><b>${fmtMoney(mgr.salary)}/yr <button class="btn small" data-a="fireExecMgr" data-x="${c.a3}|${kind}">FIRE</button></b></div>`;
+      }
+      return `<div class="kv"><span>${label} · empty</span><b><button class="btn" data-a="hireExecMgr" data-x="${c.a3}|${kind}">HIRE (${execRole} hires)</button></b></div>`;
+    };
+    let candList = '';
+    if (UI.mgrHire && UI.mgrHire.id === c.a3) {
+      const kind = UI.mgrHire.kind;
+      const cands = (typeof execManagerCandidates === 'function') ? execManagerCandidates(c, kind) : [];
+      candList = `<div class="card in"><h4>Hire ${kind} manager — ${esc(c.name)}</h4><p class="muted small">Pick one. A manager's level never exceeds their executive's level. ⭐ means developable: they improve over time, up to a personal cap below 99.</p>${cands.map(x => `<div class="kv"><span>${esc(x.name)} · Lv ${x.level} · Skill ${x.skill}${x.star ? ' ⭐ developable' : ''}</span><b>${fmtMoney(x.salary)}/yr <button class="btn small" data-a="hireExecMgrDo" data-x="${c.a3}|${kind}|${x.id}">HIRE</button></b></div>`).join('')}<button class="btn" data-a="mgrHireCancel">CANCEL</button></div>`;
+    }
+    return `<div class="card in"><h4>Managers — hired by your executives</h4><p class="muted small">The CFO hires nobody: IPO, loans and forecasts are advice. Every other executive hires a manager in their own domain.</p>${row('product', 'Product manager', 'CPO', mgrs.product)}${row('marketing', 'Marketing manager', 'CMO', mgrs.marketing)}${row('tech', 'Technology manager', 'CTO', mgrs.tech)}${candList}</div>`;
   };
   const hireSection = () => {
     const h = UI.hire; if (!h) return '';
@@ -2023,7 +2055,7 @@ PANELS.offices = () => {
     if (!h.candId) {
       const bar = v => `<div style="background:#e2e8f0;border-radius:6px;height:10px"><div style="width:${v}%;background:#22c55e;height:10px;border-radius:6px"></div></div>`;
       return `<div class="card in"><h4>Hire ${h.role} — ${esc(e.name)}</h4><p class="muted small">Find someone, offer a salary or salary + stock, and they accept or deny. Higher level does more and wants more.</p>
-      ${cands.map(c => `<div class="card in"><b>${esc(c.name)} · Lv ${c.level}</b><div class="muted small">${esc(c.title)}</div>
+      ${cands.map(c => `<div class="card in"><b>${esc(c.name)} · Lv ${c.level}${c.star ? ' ⭐ developable' : ''}</b><div class="muted small">${esc(c.title)}</div>
         <div class="kv"><span>Leadership</span><b>${c.lead}</b></div>${bar(c.lead)}
         <div class="kv"><span>Expertise</span><b>${c.exp}</b></div>${bar(c.exp)}
         <div class="kv"><span>Loyalty</span><b>${c.loy}</b></div>${bar(c.loy)}
@@ -2036,7 +2068,7 @@ PANELS.offices = () => {
     if (!c) { UI.hire.candId = null; return hireSection(); }
     const isTeam = h.kind === 'team';
     const gv = isTeam ? 0 : boardGrantValue(e, h.grant, h.shares);
-    return `<div class="card in"><h4>Offer to ${esc(c.name)} — ${h.role}</h4><p class="muted small">Lv ${c.level} · L${c.lead} E${c.exp} Y${c.loy} · Their ask: ${fmtMoney(c.ask)}/yr. They accept at their ask, or at 85% of ask with a grant covering the gap. Below that, they decline and move on.</p>
+    return `<div class="card in"><h4>Offer to ${esc(c.name)} — ${h.role}</h4><p class="muted small">Lv ${c.level}${c.star ? ' ⭐ developable' : ''} · L${c.lead} E${c.exp} Y${c.loy} · Their ask: ${fmtMoney(c.ask)}/yr. They accept at their ask, or at 85% of ask with a grant covering the gap. Below that, they decline and move on.</p>
       <div class="kv"><span>Offer salary</span><span><button class="btn small" data-a="hireStep" data-x="-10000">−</button> <b>${fmtMoney(h.salary)}/yr</b> <button class="btn small" data-a="hireStep" data-x="10000">+</button></span></div>
       ${isTeam ? '<p class="muted small">Teams pay salary only — no stock grants.</p>' : `<div class="kv"><span>Grant</span><span><button class="btn small ${h.grant === 'none' ? 'on' : ''}" data-a="hireGrant" data-x="none">None</button> <button class="btn small ${h.grant === 'option' ? 'on' : ''}" data-a="hireGrant" data-x="option">Stock option</button> <button class="btn small ${h.grant === 'rsu' ? 'on' : ''}" data-a="hireGrant" data-x="rsu">RSU</button></span></div>
       ${h.grant !== 'none' ? `<div class="kv"><span>Grant shares</span><span><button class="btn small" data-a="hireShares" data-x="-100">−</button> <b>${h.shares.toLocaleString()}</b> <button class="btn small" data-a="hireShares" data-x="100">+</button></span></div><div class="kv"><span>Grant value now</span><b>${fmtMoney(gv, true)}</b></div><p class="muted small">Grants vest over 4 years with a 1-year cliff.</p>` : ''}`}
@@ -2048,12 +2080,13 @@ PANELS.offices = () => {
   const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
+    ${mgrSection(c)}
     ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}</div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
   const teamCards = teams.map(t => `<div class="card in"><b>${esc(t.name)}</b><div class="muted small">${esc(t.cityName)} · Value ${fmtMoney(t.value, true)} · Rating ${(t.rating5 || 3).toFixed(1)} / 5</div>
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
     ${boardRow(t, 'team', t.id)}
     ${t.ipo ? '<p class="muted small">Already public.</p>' : '<p class="muted small">IPO in the team Finance tab, up to 100% at today\'s valuation minus a 7% fee.</p>'}</div>`).join('') || '<p class="muted small">No teams you own yet. Buy one in Sports.</p>';
-  return panelShell('Offices', 'Hiring is not just a bill. Find a candidate, make an offer, and they accept or deny. Higher level members boost revenue more — and cost more.',
+  return panelShell('Offices', 'You are the CEO. Hire 5 executives — COO, CFO, CPO, CMO, CTO — and each hires a manager in their own domain. The CFO hires nobody: IPO, loans and forecasts are advice. Higher level members boost revenue more — and cost more.',
     `${hireSection()}<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
 };
 PANELS.bank = () => {
@@ -2495,6 +2528,11 @@ const A = {
     save(); renderPanel();
   },
   fireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => fireBoard(e, role), `${role} seat cleared.`); },
+  hireExecMgr: x => { const [id, kind] = x.split('|'); const e = S.co[id]; if (!e) return; if (typeof execManagerCandidates === 'function') execManagerCandidates(e, kind); UI.mgrHire = { id, kind }; renderPanel(); },
+  hireExecMgrDo: x => { const [id, kind, candId] = x.split('|'); const e = S.co[id]; if (!e) return; const err = (typeof hireExecManager === 'function') ? hireExecManager(e, kind, candId) : 'unavailable'; UI.mgrHire = null; if (err) toast(err, 'bad'); else toast('Manager hired', 'good'); renderPanel(); },
+  fireExecMgr: x => act(() => { const [id, kind] = x.split('|'); const e = S.co[id]; return (typeof fireExecManager === 'function') ? fireExecManager(e, kind) : 'unavailable'; }, 'Manager fired'),
+  hireMktEmp: x => act(() => { const e = S.co[x]; return (typeof hireMarketingEmployee === 'function') ? hireMarketingEmployee(e) : 'unavailable'; }, 'Marketing staff hired'),
+  mgrHireCancel: () => { UI.mgrHire = null; renderPanel(); },
   ageWeek: () => { try { stepWeek(); save(); renderHUD(); if (UI.panel) renderPanel(); toast('Advanced one week.', 'good'); } catch (e) { toast('Could not advance a week.', 'bad'); } },
   sportIpo: x => { const el = document.getElementById('ipoPctTeam'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => sportIpo(x, pct), 'Team is now public!'); },
   ipoBuy: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'buy', qty), 'Shares bought'); },

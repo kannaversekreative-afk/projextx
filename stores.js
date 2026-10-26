@@ -132,6 +132,9 @@ function ensureStores() {
     if (!st.icon) st.icon = (STORE_TYPES[st.type] || STORE_TYPES.coffee).icon;
     if (!st.manager) st.manager = makeManager(1);
     if (!st.manager.level) st.manager.level = 1;
+    if (st.manager.star == null) { st.manager.star = rand() < 0.35; st.manager.starCap = 85 + Math.floor(rand() * 14); }
+    if (!isFinite(st.loseStreak)) st.loseStreak = 0;
+    if (!isFinite(st.winStreak)) st.winStreak = 0;
     st.products.forEach(p => { if (!isFinite(p.sold)) p.sold = 0; if (!isFinite(p.prevSold)) p.prevSold = 0; if (!p.lvl) p.lvl = 1; });
   });
   return S.stores;
@@ -142,10 +145,13 @@ function ensureStores() {
 function makeManager(level) {
   const lv = clamp(level || 1, 1, 5), r = (a, b) => Math.round(a + rand() * (b - a));
   const base = 40 + lv * 6;
+  // ~35% of managers show a star: they can be developed over time,
+  // up to a personal cap below 99 — never a guarantee.
   return { name: pick(MGR_FIRST) + ' ' + pick(MGR_LAST), level: lv,
     people: r(base, Math.min(98, base + 35)), product: r(base, Math.min(98, base + 35)),
     marketing: r(base, Math.min(98, base + 35)), ethics: r(50, 98),
-    salary: 45000 + lv * 15000 + Math.floor(rand() * 8) * 5000, since: yearOf(S.day) };
+    salary: 45000 + lv * 15000 + Math.floor(rand() * 8) * 5000, since: yearOf(S.day),
+    star: rand() < 0.35, starCap: 85 + Math.floor(rand() * 14) };
 }
 function storeAddress(cityId, lotT) {
   const city = W.cities[cityId];
@@ -168,7 +174,7 @@ function buildStore(cityId, lot, type) {
     products: def.products.map(p => ({ name: p.name, price: p.price, cost: p.cost, capture: p.capture, sold: 0, prevSold: 0, lvl: 1 })),
     campaigns: [], reviews: { overall: 4.0, price: 4.0, product: 4.0, service: 4.0, atmosphere: 4.0, count: 12 },
     delegation: { staffing: true, products: false, marketing: false, troubles: true },
-    weeks: [], totalRev: 0, totalIncome: 0, weeksOpen: 0 };
+    weeks: [], totalRev: 0, totalIncome: 0, weeksOpen: 0, loseStreak: 0, winStreak: 0 };
   S.stores.push(st);
   if (typeof setLot === 'function') setLot(cityId, lotObj.t, 'taken');
   gainXP(150, 'store');
@@ -251,6 +257,32 @@ function storesWeek() {
     st.reviews.count += Math.round(revenue / 400);
     const incomeR = Math.round(income);
     if (incomeR > 0) gainXP(5, 'profit');
+    // Star managers grow a little each week, up to their cap.
+    if (m.star) {
+      const cap = m.starCap || 98;
+      ['people', 'product', 'marketing', 'ethics'].forEach(k => { if (m[k] < cap && rand() < 0.5) m[k]++; });
+    }
+    // The COO runs staffing when it is delegated. Firing is on STORE
+    // profit (this week's income), never on what you spent elsewhere:
+    // 2 losing months fires the manager, 2 profitable months promotes
+    // them. A month here is 4 weeks.
+    if (incomeR > 0) { st.winStreak = (st.winStreak || 0) + 1; st.loseStreak = 0; }
+    else if (incomeR < 0) { st.loseStreak = (st.loseStreak || 0) + 1; st.winStreak = 0; }
+    else { st.winStreak = 0; st.loseStreak = 0; }
+    if (st.delegation.staffing) {
+      const cityA3 = W.cities[st.cityId] ? W.cities[st.cityId].a3 : S.home;
+      if ((st.loseStreak || 0) >= 8) {
+        const old = m.name, lv = m.level || 1;
+        st.manager = makeManager(lv);
+        st.loseStreak = 0; st.winStreak = 0;
+        if (typeof news === 'function') news('Business', `The COO fired ${old} at ${st.name} after 2 losing months and hired ${st.manager.name}.`, cityA3);
+      } else if ((st.winStreak || 0) >= 8) {
+        m.salary = Math.min(250000, Math.round(m.salary * 1.10));
+        ['people', 'product', 'marketing', 'ethics'].forEach(k => { m[k] = Math.min(98, m[k] + 2); });
+        st.winStreak = 0;
+        if (typeof news === 'function') news('Business', `The COO promoted ${m.name} at ${st.name} after 2 profitable months (+10% salary).`, cityA3);
+      }
+    }
     st.weeks.unshift({ rev: Math.round(revenue), income: incomeR });
     if (st.weeks.length > 8) st.weeks.length = 8;
     st.totalRev += revenue; st.totalIncome += incomeR; st.weeksOpen++;
