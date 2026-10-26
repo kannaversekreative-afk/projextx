@@ -548,7 +548,6 @@ function businessWeek() {
   if (S.leader && typeof leaderWeek === 'function') leaderWeek();
   if (S.leader && typeof capitalWeek === 'function') { try { capitalWeek(); } catch (e) {} }
   if (typeof websiteWeek === 'function') { try { websiteWeek(); } catch (e) {} }
-  if (typeof myCityWeek === 'function') { try { myCityWeek(); } catch (e) {} }
   if (typeof ensureEarnings === 'function') { try { const e = ensureEarnings(); if (S.day >= e.next) earningsQuarter(); } catch (err) {} }
   if (typeof storesWeek === 'function') { try { storesWeek(); } catch (e) {} }
   if (typeof loansWeek === 'function') { try { loansWeek(); } catch (e) {} }

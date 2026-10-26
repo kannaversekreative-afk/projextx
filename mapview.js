@@ -437,6 +437,19 @@ const MapView = (() => {
       // below is the button. Nothing is drawn here at the capital
       // point except the selected-city halo above.
     });
+    // Major cities: white dots with a dark outline, like the
+    // screenshot — every major city, not just the capital. Tapping
+    // one opens that city (the tap loop below already finds the
+    // nearest city). Capitals keep their country name pill instead.
+    if (layerOn('cities')) {
+      W.cities.forEach(ct => {
+        if (ct.isCapital || !ct.isMajor) return;
+        const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
+    }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
@@ -450,29 +463,12 @@ const MapView = (() => {
       });
     }
     labelRects = []; labelTargets = [];
-    // Your city: a circle with a star in it, in your home country, just
-    // beside the capital. Tapping it opens Your City.
-    if (typeof myCityPos === 'function' && (typeof myCityBuilt !== 'function' || myCityBuilt()) && layerOn('star')) {
-      try {
-        const mc = myCityPos();
-        if (mc) {
-          const [sx, sy] = toScreen(mc.x, mc.y);
-          if (sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30) {
-            const rr = Math.max(10, r * 2.2);
-            c.fillStyle = '#ffffff'; c.strokeStyle = '#2f7cf6'; c.lineWidth = 2.5;
-            c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-            c.fillStyle = '#1d6fe0'; c.font = `bold ${Math.round(rr * 1.3)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
-            c.fillText('★', sx, sy + 1);
-          }
-        }
-      } catch (e) {}
-    }
     // Country name pills ARE the map buttons: each pill sits centred
     // on its capital and tapping it opens that capital city (the old
     // flag-dot behaviour). Full names are wider than the old a3 codes,
     // so the label cap is raised — the pill overlap check still skips
     // any name that would collide with one already drawn.
-    const order = W.cities.map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
+    const order = W.cities.filter(ct => ct.isCapital).map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
     const maxLabels = Math.round(14 + v.s * v.s * 80);
     let n = 0;
     if (!layerOn('labels')) n = maxLabels + 1;
@@ -521,15 +517,9 @@ const MapView = (() => {
       // checked FIRST with a 34px radius, so a plane or ship flying
       // near France stole taps meant for France itself. Countries
       // come first now — name pills, then capital points, then
-      // placed businesses and the star city — and vehicles only win
+      // placed businesses — and vehicles only win
       // a tap that is not on any country button. A vehicle in open
       // sea or sky still opens its card exactly as before.
-      if (typeof myCityPos === 'function' && (typeof myCityBuilt !== 'function' || myCityBuilt()) && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
-        try {
-          const mc = myCityPos();
-          if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }
-        } catch (e) {}
-      }
       // Placed businesses first: their circles are bigger than the
       // capital points, so a tap on one must not fall through to a city.
       if (S && Array.isArray(S.placed)) {

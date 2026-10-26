@@ -60,6 +60,30 @@ function buildWorld(data) {
     W.cities.push(c); twn.capital = c.id;
   }
   if (twn) twn.playable = true;
+  // Major cities, not towns: for the real world only (a generated
+  // Random World already brings its own extra cities, and its a3 codes
+  // do not match real ones, so this is a no-op there). Capitals are
+  // NOT overwritten here — these are additional cities in the same
+  // country, each with its own map dot and enterable city view.
+  if (!data && typeof MAJOR_CITIES !== 'undefined') {
+    MAJOR_CITIES.forEach(d => {
+      const k = W.byA3[d.c]; if (!k) return;
+      if (W.cities.some(c => c.a3 === d.c && c.name === d.n)) return;
+      const c = { id: W.cities.length, name: d.n, code: d.code, a3: d.c, lat: d.lat, lon: d.lon, x: projX(d.lon), y: projY(d.lat), pop: Math.max(5000, d.pop), port: !!d.port, isMajor: true };
+      c.size = Math.max(0.3, Math.min(1.3, (Math.log10(c.pop) - 4.3) / 2.7));
+      W.cities.push(c);
+    });
+  }
+  // Mark capitals, then split each country's real population and GDP
+  // across its cities (capital included), weighted by metro population.
+  // The cities together always add up to the country total, so the
+  // country popup stays the total and each city popup shows its share.
+  W.countries.forEach(k => { if (k.capital != null && W.cities[k.capital]) W.cities[k.capital].isCapital = true; });
+  W.countries.forEach(k => {
+    const cities = W.cities.filter(c => c.a3 === k.a3);
+    const tot = cities.reduce((s, c) => s + c.pop, 0) || 1;
+    cities.forEach(c => { c.popShare = c.pop / tot; c.popAlloc = Math.round(k.pop0 * c.popShare); c.gdpAlloc = k.gdp0 * 1e6 * c.popShare; });
+  });
   W.playable = W.countries.filter(k => k.playable && k.capital != null);
   W.playable.forEach(k => {
     const gdpPc = k.gdp0 * 1e6 / Math.max(1, k.pop0);

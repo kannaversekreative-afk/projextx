@@ -824,7 +824,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('mycity', () => openPanel('mycity'));
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
@@ -969,7 +969,7 @@ function enterGame(returning) {
 const TUT = [
   { t: () => S.mode === 'infinite' ? 'Welcome! There is no goal in Infinite mode. Play as long as you like and press Age whenever you want.' : `Welcome! No time limit. Grow ${esc(cname(S.home))}'s population, grow your money, and beat the stock market. Press Age to move a year forward.`, btn: 'Next' },
   { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
-  { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
+  { t: () => 'Tap ENTER CAPITAL to see the streets.', done: () => CityView.isOpen() },
   { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Time only moves when you press Age, one year at a time. Vehicles keep moving while you wait. No age limit — you can live 100 years, or 1000.', btn: 'Got it' },
@@ -1049,9 +1049,9 @@ function renderPopupInner() {
     const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
     const myProps = S.props.filter(x => x.city === c.id).length;
     $('popup').innerHTML = `<div class="popup card">
-      <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)} · Capital, military & port in one</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
-      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
-      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
+      <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)} · ${c.isCapital ? 'Capital, military & port in one' : (c.isMajor ? 'Major city' : 'City')}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">${c.isCapital ? 'ENTER CAPITAL' : 'ENTER CITY'}</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
+      <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.popAlloc || c.pop)}</b></div><div><span>GDP</span><b>${fmtMoney(c.gdpAlloc || 0, true)}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
       <h5>Businesses here</h5>
       ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('') || `<p class="muted small">No businesses here yet. ${esc(co.name)} is this country's main business — see it in Markets if you want its stock.</p>`}
       ${(() => { try { const tm = teamForCity(c.id); return tm ? `<div class="kv"><span>🏟️ ${esc(tm.stadium.name)} · ${esc(tm.name)}</span><button class="btn" data-a="openStadium" data-x="${tm.id}">OPEN TEAM</button></div>` : ''; } catch (e) { return ''; } })()}
@@ -1910,7 +1910,7 @@ PANELS.capital = () => {
     <h4>Motto</h4><div class="row"><input id="capMotto" class="search" value="${esc(cap.motto || '')}" placeholder="e.g. The city that builds the future"><button class="btn" data-a="capMotto">SAVE</button></div>
     <h4>Theme</h4><div class="row wrap">${CAPITAL_THEMES.map(th => `<button class="btn ${th.id === cap.theme ? 'on' : ''}" data-a="capTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
     <h4>Districts — build your capital, level by level</h4><p class="muted small">Costs scale with your GDP, so every country feels the same pressure. Government starts at level 1, the rest at 0. Prestige is the average district level.</p>
-    <p class="muted small">The capital is for government only — parliament, courts, barracks, trade halls. Your personal mansions and decor live in Your City, not here. Your HQ is this capital: HQ management opens from here.</p>
+    <p class="muted small">The capital is for government only — parliament, courts, barracks, trade halls. Your HQ is this capital: HQ management opens from here.</p>
     <div class="list">${distRows}</div>
     <div class="kv"><span>Prestige</span><b>${prestige.toFixed(1)}★ / 5</b></div>
     <p class="muted small">Bonuses land every week: stability from Government and Green, cash from Commerce and Transport, population from Culture, war power from Defence. At 4.5★ prestige or more, a world-capital bonus pays weekly too.</p>`);
@@ -1943,42 +1943,12 @@ PANELS.airport = () => {
   }
   const k = W.byA3[st.a3], from = airportFromCity();
   const rows = airportCities(st.a3).map(c => {
-    const city = c.id === -1 ? myCityPos() : W.cities[c.id];
-    const km = c.id === -1 ? 'in your home country' : `${airportDistanceKm(from, city).toLocaleString()} km`;
+    const city = W.cities[c.id];
+    const km = `${airportDistanceKm(from, city).toLocaleString()} km`;
     return `<div class="card in"><div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${c.kind} · ${esc(k.name)} · ${km}</div></div><button class="btn3d orange" data-a="airportFly" data-x="${c.id}">FLY ✈️</button></div></div>`;
   }).join('');
   return panelShell('Airport', `${esc(k.name)} — departures from ${esc(from.name)}.`,
     `<button class="btn" data-a="airportBack2">← COUNTRIES</button><div class="list">${rows}</div>`);
-};
-PANELS.mycity = () => {
-  const m = ensureMyCity();
-  // Gate: the city is absent until built for $1M. Show only the build
-  // screen — no decorating, buying, renaming or theming before that.
-  if (m.built !== true) return panelShell('Your City', `In ${esc(cname(S.home))} · not built yet`,
-    `<div class="card in"><h4>Your city isn't here yet</h4><p class="muted small">Your own city does not appear until you build it. Building it costs ${fmtMoney(MYCITY_BUILD_COST, true)} in-game cash. After that, this is where you place and buy buildings, roads and decor — mansions, whatever you want. Government functions stay in the capital, not here.</p><p><b>Your cash: ${fmtMoney(S.cash, true)}</b></p><button class="btn3d orange wide" data-a="myCityBuild">BUILD YOUR CITY · ${fmtMoney(MYCITY_BUILD_COST, true)}</button></div>`);
-  const theme = MYCITY_THEMES.find(x => x.id === m.theme) || MYCITY_THEMES[0];
-  const mult = myCityMult();
-  const row = (list, kind) => list.map(item => {
-    const owned = kind === 'house' ? m.houses.includes(item.id) : kind === 'car' ? m.cars.includes(item.id) : m.land.includes(item.id);
-    const price = myCityPrice(item.base);
-    return `<div class="kv"><span>${item.icon} ${item.name}</span>${owned ? '<span class="tagp green">OWNED</span>' : `<button class="btn" data-a="myCityBuy" data-x="${kind}|${item.id}">${fmtMoney(price, true)}</button>`}</div>`;
-  }).join('');
-  return panelShell('Your City ★', `${esc(m.name)} · in ${esc(cname(S.home))} · worth ${fmtMoney(myCityValue(), true)}`,
-    `<div class="card" style="background:${theme.bg}"><p><b>⭐ ${esc(m.name)}</b>${m.motto ? ` — <i>${esc(m.motto)}</i>` : ''}</p><p class="muted small">Your own city, marked on the map with a circle and a star. Theme: ${theme.name}. Prices here are ${mult.toFixed(1)}× the base price, because ${esc(cname(S.home))} is priced at its level — the best countries run into the trillions at the top end.</p></div>
-    <p class="muted small">This city is yours personally — mansions, roads and decor for you. Government functions live in the capital, not here.</p>
-    <h4>Rename your city</h4><div class="row"><input id="myCityName" class="search" value="${esc(m.name)}" placeholder="Your city name"><button class="btn" data-a="myCityRename">RENAME</button></div>
-    <h4>Motto</h4><div class="row"><input id="myCityMotto" class="search" value="${esc(m.motto || '')}" placeholder="e.g. Built by me"><button class="btn" data-a="myCityMotto">SAVE</button></div>
-    <h4>Theme</h4><div class="row wrap">${MYCITY_THEMES.map(th => `<button class="btn ${th.id === m.theme ? 'on' : ''}" data-a="myCityTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
-    <h4>Decorate your city — place buildings, roads and decor</h4><p class="muted small">Your own city, for you — not the government. That is what the capital is for. Pick an item, then tap an empty square to buy and place it there. Tap a placed item to sell it back for 80%.</p>
-    <div class="row wrap">${MYCITY_DECOR.map(it => `<button class="btn small ${(UI.myCityDecor || 'house') === it.id ? 'on' : ''}" data-a="myCityDecor" data-x="${it.id}">${it.icon} ${it.name} · ${fmtMoney(myCityPrice(it.base), true)}</button>`).join('')}</div>
-    <div class="mgrid" style="grid-template-columns:repeat(${MYCITY_GRID_W},1fr)">${(() => { const grid = ensureMyCityGrid(m); let h = ''; for (let y = 0; y < MYCITY_GRID_H; y++) for (let x = 0; x < MYCITY_GRID_W; x++) { const g = grid.find(p => p.x === x && p.y === y); const it = g ? myCityDecorItem(g.id) : null; h += `<button class="mtile ${g ? 'placed' : ''}" data-a="myCityCell" data-x="${x}|${y}" aria-label="${it ? it.name : 'Empty square'}">${it ? it.icon : '+'}</button>`; } return h; })()}</div>
-    <p class="muted small">${ensureMyCityGrid(m).length} placed · Decor worth ${fmtMoney(myCityGridValue(m), true)}</p>
-    <h4>Houses — end-game prices</h4><div class="list">${row(MYCITY_HOUSES, 'house')}</div>
-    <h4>Land and farmland</h4><div class="list">${row(MYCITY_LAND, 'land')}</div>
-    <h4>Cars</h4><div class="list">${row(MYCITY_CARS, 'car')}</div>
-    <h4>Your bank</h4><div class="kv"><span>🏦 Your bank · Lv ${m.bank}</span><button class="btn" data-a="myCityBuy" data-x="bank|bank">${m.bank ? `UPGRADE · ${fmtMoney(myCityPrice(500000000) * (m.bank + 1), true)}` : `OPEN BANK · ${fmtMoney(myCityPrice(500000000), true)}`}</button></div>
-    <h4>Your trading firm</h4><div class="kv"><span>📈 Your trading firm · Lv ${m.firm}</span><button class="btn" data-a="myCityBuy" data-x="firm|firm">${m.firm ? `UPGRADE · ${fmtMoney(myCityPrice(1000000000) * (m.firm + 1), true)}` : `OPEN FIRM · ${fmtMoney(myCityPrice(1000000000), true)}`}</button></div>
-    <p class="muted small">Bank and trading firm pay a small weekly income. The houses, land and cars are for owning — the top house in a top country costs trillions, and that is the point.</p>`);
 };
 PANELS.mars = () => marsPanelHTML();
 PANELS.casino = () => casinoPanelHTML();
@@ -2118,7 +2088,7 @@ PANELS.help = () => {
 // bottom bar is gone.
 const MENU_ITEMS = [
   ['leader', ICONS.leader, 'Leader'], ['news', ICONS.news, 'News'], ['markets', ICONS.markets, 'Markets'],
-  ['airport', ICONS.airport, 'Airport'], ['mycity', ICONS.city, 'Your City'],
+  ['airport', ICONS.airport, 'Airport'],
   ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'],
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'], ['estate', ICONS.house, 'My Estate'],
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
@@ -2145,7 +2115,7 @@ function openMenuPopup() {
   <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">${ICONS.company}</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
-  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
+  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mars', 'Mars']])}
   ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
@@ -2164,12 +2134,12 @@ function openDateModal() {
 }
 // ---------- map layers sheet ----------
 function openLayersModal() {
-  if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, star: true };
+  if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true };
   const L = S.mapLayers;
   const rows = [
     ['vehicles', ICONS.car, 'Vehicles', 'Cars, planes and boats moving on the map'],
     ['labels', ICONS.tag, 'City labels', 'Names on the map'],
-    ['star', ICONS.city, 'Your City star', 'The star marker for your personal city'],
+    ['cities', ICONS.city, 'City dots', 'The dots for every major city on the map'],
   ];
   openModal(`<h2>Map layers</h2><p class="muted">Choose what shows on the map.</p><div class="menu-list">${rows.map(([k, ic, t, d]) => `<div class="srow" style="cursor:default"><span class="avatar">${ic}</span><span class="sname"><b>${t}</b><span class="muted">${d}</span></span><button class="btn" data-a="layerToggle" data-x="${k}">${L[k] !== false ? 'ON' : 'OFF'}</button></div>`).join('')}</div>`, 'sheet');
 }
@@ -2289,7 +2259,7 @@ const A = {
   dateNo: () => closeModal(),
   ageYear: () => { closeModal(); A.ageUp(); },
   layers: () => openLayersModal(),
-  layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, star: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
+  layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),
   depCont: x => { UI.depCont = x; openDeparturesModal(); },
   depFly: x => { closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
@@ -2442,13 +2412,6 @@ const A = {
   airportBack: () => { UI.airport = { cont: null, a3: null }; renderPanel(); },
   airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
   airportFly: x => { act(() => airportFly(+x), null); },
-  myCityBuild: () => { act(() => myCityBuild(), 'Your city is built — now decorate it.'); },
-  myCityBuy: x => { const [kind, id] = x.split('|'); act(() => myCityBuy(kind, id), 'Bought for your city'); },
-  myCityDecor: x => { UI.myCityDecor = x; renderPanel(); },
-  myCityCell: x => { const [cx, cy] = x.split('|').map(Number); const m = ensureMyCity(); const placed = ensureMyCityGrid(m).some(g => g.x === cx && g.y === cy); if (placed) act(() => myCityRemove(cx, cy), 'Sold back for 80%'); else act(() => myCityPlace(UI.myCityDecor || 'house', cx, cy), 'Placed in your city'); },
-  myCityTheme: x => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); ensureMyCity().theme = x; renderPanel(); },
-  myCityRename: () => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); const v = document.getElementById('myCityName'); if (v && v.value.trim()) { ensureMyCity().name = v.value.trim(); toast('City renamed', 'good'); renderPanel(); } },
-  myCityMotto: () => { if (!myCityBuilt()) return toast('Build your city first — $1,000,000.', 'bad'); const v = document.getElementById('myCityMotto'); if (v) { ensureMyCity().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };

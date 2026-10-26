@@ -13,15 +13,10 @@ function airportCountries(cont) {
   return W.playable.filter(k => k.cont === cont).sort((a, b) => a.name.localeCompare(b.name));
 }
 function airportCities(a3) {
-  const cap = W.cities[W.byA3[a3].capital];
-  const out = cap ? [{ id: cap.id, name: cap.name, kind: 'Capital' }] : [];
-  // Your personal star city lives in your home country: it is a city
-  // you can fly to too.
-  if (a3 === S.home) {
-    const mc = myCityPos();
-    if (mc) out.push({ id: -1, name: (S.myCity && S.myCity.name) || 'Your City', kind: 'Your city ★' });
-  }
-  return out;
+  // Every city in the country, capital first, then major cities by size.
+  return W.cities.filter(c => c.a3 === a3)
+    .sort((a, b) => (b.isCapital ? 1 : 0) - (a.isCapital ? 1 : 0) || (b.pop || 0) - (a.pop || 0))
+    .map(c => ({ id: c.id, name: c.name, kind: c.isCapital ? 'Capital' : (c.isMajor ? 'Major city' : 'City') }));
 }
 function airportFromCity() {
   if (S.airportFrom != null && W.cities[S.airportFrom]) return W.cities[S.airportFrom];
@@ -35,14 +30,6 @@ function airportDistanceKm(a, b) {
 }
 function airportFly(cityId) {
   const from = airportFromCity();
-  if (cityId === -1) {
-    // Flying to your own star city: centre the map on it, open it.
-    const mc = myCityPos();
-    if (mc) { MapView.flyToXY(mc.x, mc.y, 4); S.airportFrom = W.byA3[S.home].capital; }
-    closePanel();
-    openPanel('mycity');
-    return null;
-  }
   const c = W.cities[cityId]; if (!c) return 'City not found.';
   const km = airportDistanceKm(from, c);
   S.airportFrom = cityId;
