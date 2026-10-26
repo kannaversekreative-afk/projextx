@@ -458,6 +458,23 @@ const MapView = (() => {
       c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 2; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
     });
     labelRects = [];
+    // Your city: a circle with a star in it, in your home country, just
+    // beside the capital. Tapping it opens Your City.
+    if (typeof myCityPos === 'function') {
+      try {
+        const mc = myCityPos();
+        if (mc) {
+          const [sx, sy] = toScreen(mc.x, mc.y);
+          if (sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30) {
+            const rr = Math.max(10, r * 2.2);
+            c.fillStyle = '#ffffff'; c.strokeStyle = '#2f7cf6'; c.lineWidth = 2.5;
+            c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+            c.fillStyle = '#d4a017'; c.font = `bold ${Math.round(rr * 1.3)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
+            c.fillText('★', sx, sy + 1);
+          }
+        }
+      } catch (e) {}
+    }
     W.cities.forEach(ct => { const [sx, sy] = toScreen(ct.x, ct.y); labelRects.push([sx - r, sy - r, sx + r, sy + r]); });
     const order = W.cities.map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
     const maxLabels = Math.round(14 + v.s * v.s * 40);
@@ -500,6 +517,12 @@ const MapView = (() => {
     if (!pickMode) {
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
+      if (typeof myCityPos === 'function') {
+        try {
+          const mc = myCityPos();
+          if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }
+        } catch (e) {}
+      }
       let best = null, bd = 18;
       W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
       if (best != null) { handlers.city && handlers.city(best); return; }

@@ -231,9 +231,15 @@ function renderPanel() {
   const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
   if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
   let html = '';
-  if (UI.panel === 'stock' && cur) html = tradeView(cur.a3);
-  else if (PANELS[UI.panel]) html = PANELS[UI.panel]();
-  else html = '<div class="card in"><p class="muted">That screen is not ready yet.</p></div>';
+  try {
+    if (UI.panel === 'stock' && cur) html = tradeView(cur.a3);
+    else if (PANELS[UI.panel]) html = PANELS[UI.panel]();
+    else html = '<div class="card in"><p class="muted">That screen is not ready yet.</p></div>';
+  } catch (e) {
+    // Never fail silently: a broken panel used to close the menu and show
+    // nothing. Now the panel opens and says exactly what broke.
+    html = '<div class="card in"><h3>That screen hit a problem</h3><p class="muted small">Please reload the game and try again. If it keeps happening, this is the error:</p><p class="muted small">' + esc(String(e && e.message || e)) + '</p><button class="btn3d orange wide" data-a="closePanel">CLOSE</button></div>';
+  }
   $('panel').innerHTML = html; $('panel').classList.add('open');
 }
 
@@ -652,7 +658,7 @@ function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1,
 async function boot() {
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('mycity', () => openPanel('mycity'));
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
   CityView.init($('cityview'), onPin);
@@ -1399,6 +1405,47 @@ PANELS.site = () => {
     <h4>Customer feedback this week</h4><div class="list">${fb}</div>
     <p class="muted small">How it works: rating = 1 + 4 x (right choices / 6). At 5.0 stars online sales pay x1.3, at 1.0 star x0.82. Praise means stop touching that choice. A complaint means that choice is still wrong — try a different one next week.</p>`);
 };
+PANELS.airport = () => {
+  const st = UI.airport || (UI.airport = { cont: null, a3: null });
+  if (!st.cont) {
+    const rows = airportContinents().map(c => `<button class="srow" data-a="airportCont" data-x="${c.name}"><span class="avatar">✈️</span><span class="sname"><b>${esc(c.name)}</b><small>${c.count} countries with airports</small></span><span class="sprice"><b>→</b></span></button>`).join('');
+    return panelShell('Airport', 'Every country has an airport. Tap a continent, then a country, then a city to fly there.',
+      `<p class="muted small">From: ${esc(airportFromCity().name)}. Distances are in km from where you are now.</p><div class="list">${rows}</div>`);
+  }
+  if (!st.a3) {
+    const rows = airportCountries(st.cont).map(k => { const cap = W.cities[k.capital]; return `<button class="srow" data-a="airportCountry" data-x="${k.a3}"><span class="avatar">${k.flag || '🏳️'}</span><span class="sname"><b>${esc(k.name)}</b><small>${cap ? esc(cap.name) : ''} · airport</small></span><span class="sprice"><b>→</b></span></button>`; }).join('');
+    return panelShell('Airport', `${esc(st.cont)} — pick a country.`,
+      `<button class="btn" data-a="airportBack">← CONTINENTS</button><div class="list">${rows}</div>`);
+  }
+  const k = W.byA3[st.a3], from = airportFromCity();
+  const rows = airportCities(st.a3).map(c => {
+    const city = c.id === -1 ? myCityPos() : W.cities[c.id];
+    const km = c.id === -1 ? 'in your home country' : `${airportDistanceKm(from, city).toLocaleString()} km`;
+    return `<div class="card in"><div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${c.kind} · ${esc(k.name)} · ${km}</div></div><button class="btn3d orange" data-a="airportFly" data-x="${c.id}">FLY ✈️</button></div></div>`;
+  }).join('');
+  return panelShell('Airport', `${esc(k.name)} — departures from ${esc(from.name)}.`,
+    `<button class="btn" data-a="airportBack2">← COUNTRIES</button><div class="list">${rows}</div>`);
+};
+PANELS.mycity = () => {
+  const m = ensureMyCity(), theme = MYCITY_THEMES.find(x => x.id === m.theme) || MYCITY_THEMES[0];
+  const mult = myCityMult();
+  const row = (list, kind) => list.map(item => {
+    const owned = kind === 'house' ? m.houses.includes(item.id) : kind === 'car' ? m.cars.includes(item.id) : m.land.includes(item.id);
+    const price = myCityPrice(item.base);
+    return `<div class="kv"><span>${item.icon} ${item.name}</span>${owned ? '<span class="tagp green">OWNED</span>' : `<button class="btn" data-a="myCityBuy" data-x="${kind}|${item.id}">${fmtMoney(price, true)}</button>`}</div>`;
+  }).join('');
+  return panelShell('Your City ★', `${esc(m.name)} · in ${esc(cname(S.home))} · worth ${fmtMoney(myCityValue(), true)}`,
+    `<div class="card" style="background:${theme.bg}"><p><b>⭐ ${esc(m.name)}</b>${m.motto ? ` — <i>${esc(m.motto)}</i>` : ''}</p><p class="muted small">Your own city, marked on the map with a circle and a star. Theme: ${theme.name}. Prices here are ${mult.toFixed(1)}× the base price, because ${esc(cname(S.home))} is priced at its level — the best countries run into the trillions at the top end.</p></div>
+    <h4>Rename your city</h4><div class="row"><input id="myCityName" class="search" value="${esc(m.name)}" placeholder="Your city name"><button class="btn" data-a="myCityRename">RENAME</button></div>
+    <h4>Motto</h4><div class="row"><input id="myCityMotto" class="search" value="${esc(m.motto || '')}" placeholder="e.g. Built by me"><button class="btn" data-a="myCityMotto">SAVE</button></div>
+    <h4>Theme</h4><div class="row wrap">${MYCITY_THEMES.map(th => `<button class="btn ${th.id === m.theme ? 'on' : ''}" data-a="myCityTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
+    <h4>Houses — end-game prices</h4><div class="list">${row(MYCITY_HOUSES, 'house')}</div>
+    <h4>Land and farmland</h4><div class="list">${row(MYCITY_LAND, 'land')}</div>
+    <h4>Cars</h4><div class="list">${row(MYCITY_CARS, 'car')}</div>
+    <h4>Your bank</h4><div class="kv"><span>🏦 Your bank · Lv ${m.bank}</span><button class="btn" data-a="myCityBuy" data-x="bank|bank">${m.bank ? `UPGRADE · ${fmtMoney(myCityPrice(500000000) * (m.bank + 1), true)}` : `OPEN BANK · ${fmtMoney(myCityPrice(500000000), true)}`}</button></div>
+    <h4>Your trading firm</h4><div class="kv"><span>📈 Your trading firm · Lv ${m.firm}</span><button class="btn" data-a="myCityBuy" data-x="firm|firm">${m.firm ? `UPGRADE · ${fmtMoney(myCityPrice(1000000000) * (m.firm + 1), true)}` : `OPEN FIRM · ${fmtMoney(myCityPrice(1000000000), true)}`}</button></div>
+    <p class="muted small">Bank and trading firm pay a small weekly income. The houses, land and cars are for owning — the top house in a top country costs trillions, and that is the point.</p>`);
+};
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
@@ -1479,6 +1526,7 @@ PANELS.help = () => {
 function moreSheet() {
   const items = [
     ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
+    ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
@@ -1549,7 +1597,7 @@ const A = {
   skipMenu: () => skipMenu(),
   skip: x => doSkip(+x),
   zoom: x => MapView.zoom(+x),
-  locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; const dbg = MapView.home(); toast(`Going home to ${cap} — instant v2 s=${dbg ? dbg.s.toFixed(2) : '?'} x=${dbg ? Math.round(dbg.x) : '?'} cap=${dbg ? Math.round(dbg.capX) : '?'} vw=${dbg ? dbg.vw : '?'}`); },
+  locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
   more: () => moreSheet(),
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
@@ -1631,6 +1679,15 @@ const A = {
   capTheme: x => { ensureCapital().theme = x; renderPanel(); },
   capRename: () => { const v = document.getElementById('capName'); if (v && v.value.trim()) { ensureCapital().name = v.value.trim(); applyCapitalName(); toast('Capital renamed', 'good'); renderPanel(); } },
   capMotto: () => { const v = document.getElementById('capMotto'); if (v) { ensureCapital().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
+  airportCont: x => { UI.airport = { cont: x, a3: null }; renderPanel(); },
+  airportCountry: x => { UI.airport = { cont: UI.airport.cont, a3: x }; renderPanel(); },
+  airportBack: () => { UI.airport = { cont: null, a3: null }; renderPanel(); },
+  airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
+  airportFly: x => { act(() => airportFly(+x), null); },
+  myCityBuy: x => { const [kind, id] = x.split('|'); act(() => myCityBuy(kind, id), 'Bought for your city'); },
+  myCityTheme: x => { ensureMyCity().theme = x; renderPanel(); },
+  myCityRename: () => { const v = document.getElementById('myCityName'); if (v && v.value.trim()) { ensureMyCity().name = v.value.trim(); toast('City renamed', 'good'); renderPanel(); } },
+  myCityMotto: () => { const v = document.getElementById('myCityMotto'); if (v) { ensureMyCity().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };
