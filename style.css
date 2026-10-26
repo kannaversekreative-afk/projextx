@@ -335,10 +335,7 @@ body.in-city #hud { display: none; }
 .hud-tl-text b { font-size: 15px; }
 .hud-tl-text small { font-size: 14px; color: #cfe0ff; font-weight: 700; }
 .hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; }
-.hud-tr-wrap { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 8px; align-items: center; }
-.hud-tr-wrap .hud-pill { position: static; }
-.hud-bell { position: relative; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; width: 44px; height: 44px; display: grid; place-items: center; font-size: 20px; box-shadow: var(--shadow); }
-.hud-bell-badge { position: absolute; top: -4px; right: -4px; background: #e03131; color: #fff; border-radius: 10px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; font-size: 11px; font-weight: 900; }
+/* Bell lives at the top of the More menu, not on the home HUD. */
 .hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }
 .hud-br { right: max(12px, env(safe-area-inset-right)); }
@@ -351,6 +348,8 @@ body.in-city #hud { display: none; }
 .menu-pop-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; background: #fff; border-bottom: 1.5px solid var(--line); position: sticky; top: 0; z-index: 1; }
 .menu-dots { width: 44px; height: 44px; flex: none; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; font-size: 20px; letter-spacing: 2px; color: #5a6b82; }
 .menu-pop-head h2 { margin: 0; flex: 1; font-size: 24px; }
+.menu-bell { position: relative; flex: none; width: 44px; height: 44px; border: 0; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; font-size: 20px; cursor: pointer; }
+.menu-bell-badge { position: absolute; top: -4px; right: -4px; background: #e03131; color: #fff; border-radius: 10px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; font-size: 11px; font-weight: 900; }
 .menu-pop-body { padding: 14px 16px 20px; }
 .menu-sec { font-size: 14px; font-weight: 700; color: var(--muted); margin: 16px 4px 8px; }
 .menu-sec:first-child { margin-top: 0; }

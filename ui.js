@@ -263,7 +263,7 @@ function renderHUD() {
     <span class="hud-flag">${hk.flag}</span>
     <span class="hud-tl-text"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)}</small></span>
   </button>
-  <div class="hud-tr-wrap"><button class="hud-bell" data-a="panel" data-x="inbox" aria-label="Messages">${(S.mail || []).filter(m => !m.read).length ? `<span class="hud-bell-badge">${(S.mail || []).filter(m => !m.read).length}</span>` : ''}🔔</button><button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button></div>
+  <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">☰</button>
@@ -1671,7 +1671,8 @@ function openMenuPopup() {
   const group = (title, items) => `<div class="menu-sec">${title}</div><div class="menu-card">${items.map(([x, ic, t, d], i) => row(x, ic, t, d, i)).join('')}</div>`;
   const find = x => { const m = MENU_ITEMS.find(m => m[0] === x); return [m[0], m[1], m[2]]; };
   const g = (title, defs) => group(title, defs.map(([x, d]) => [...find(x), d]));
-  openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
+  const unread = (S.mail || []).filter(m => !m.read).length;
+  openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="menu-bell" data-a="panel" data-x="inbox" aria-label="Messages">${unread ? `<span class="menu-bell-badge">${unread}</span>` : ''}🔔</button><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
   <div class="menu-pop-body">
   <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">🏢</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
