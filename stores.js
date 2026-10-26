@@ -135,6 +135,9 @@ function ensureStores() {
     if (st.manager.star == null) { st.manager.star = rand() < 0.35; st.manager.starCap = 85 + Math.floor(rand() * 14); }
     if (!isFinite(st.loseStreak)) st.loseStreak = 0;
     if (!isFinite(st.winStreak)) st.winStreak = 0;
+    // A store without products (bad save, bad test data) used to throw
+    // here and wipe every pin in the city view. Heal it from its type.
+    if (!Array.isArray(st.products)) st.products = (STORE_TYPES[st.type] || STORE_TYPES.coffee).products.map(p => Object.assign({}, p, { sold: 0, prevSold: 0, lvl: 1 }));
     st.products.forEach(p => { if (!isFinite(p.sold)) p.sold = 0; if (!isFinite(p.prevSold)) p.prevSold = 0; if (!p.lvl) p.lvl = 1; });
   });
   return S.stores;
@@ -159,6 +162,7 @@ function storeAddress(cityId, lotT) {
 }
 function buildStore(cityId, lot, type) {
   ensureStores();
+  if (typeof isGovCity === 'function' && isGovCity(W.cities[cityId])) return 'Capitals are government-only — build in another city.';
   const def = STORE_TYPES[type || 'coffee']; if (!def) return 'Unknown store type.';
   const lotObj = typeof lot === 'object' ? lot : (cityLots(cityId) || []).find(l => l.t === lot);
   if (!lotObj || lotObj.kind !== 'lease') return 'That lot is not for lease anymore.';

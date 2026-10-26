@@ -1178,6 +1178,15 @@ function onPin(pin) {
     toast(c ? `This is ${landmarkNameFor(c)} in ${c.name} — only your own capital can be designed here.` : 'Only your own capital can be designed here.', 'bad');
     return;
   }
+  if (pin.type === 'gov') {
+    const g = pin.gov;
+    const linkBtn = g.link === 'departures' ? `<button class="btn" data-a="departures">OPEN AIRPORT</button>` : g.link ? `<button class="btn" data-a="panel" data-x="${g.link}">OPEN</button>` : '';
+    $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>${g.icon} ${esc(g.name)}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <p class="muted small">${esc(g.desc)}</p>
+      <p class="muted small"><b>Effect:</b> ${esc(g.effect)}</p>
+      ${linkBtn}</div>`;
+    return;
+  }
   UI.popup = { type: 'pin', pin, lot: pin.lot }; renderPopup();
 }
 // Landmark name for a city, without reaching into CityView internals.
@@ -1994,7 +2003,8 @@ PANELS.stores = () => {
 
 
 PANELS.capital = () => {
-  if (!S.leader) return panelShell('Capital', 'Capital building is for leader games.', '<p class="muted small">Start a World, Worl Mode or Domination game to build your capital.</p>');
+  const govRows = govBuildingsFor(S.home).map(g => `<div class="kv"><span>${g.icon} ${esc(g.name)}<br><small class="muted">${esc(g.desc)}<br>${esc(g.effect)}</small></span>${g.link === 'departures' ? '<button class="btn" data-a="departures">OPEN AIRPORT</button>' : g.link ? `<button class="btn" data-a="panel" data-x="${g.link}">OPEN</button>` : ''}</div>`).join('');
+  if (!S.leader) return panelShell('Capital', 'Government-only city', `<p class="muted small">Capitals hold the government, not businesses. No new stores or building purchases here — but everything already built keeps working. These are the buildings in your capital. Tap them in the city view, or open their panels from here.</p><div class="list">${govRows}</div>`);
   const cap = ensureCapital(); const theme = CAPITAL_THEMES.find(x => x.id === cap.theme) || CAPITAL_THEMES[0];
   const prestige = capitalPrestige();
   const distRows = CAPITAL_DISTRICTS.map(d => {
@@ -2011,6 +2021,7 @@ PANELS.capital = () => {
     <p class="muted small">The capital is for government only — parliament, courts, barracks, trade halls. Your HQ is this capital: HQ management opens from here.</p>
     <div class="list">${distRows}</div>
     <div class="kv"><span>Prestige</span><b>${prestige.toFixed(1)}★ / 5</b></div>
+    <h4>Government buildings</h4><p class="muted small">The capital is government-only: these buildings are its content. Tap them in the city view too.</p><div class="list">${govRows}</div>
     <p class="muted small">Bonuses land every week: stability from Government and Green, cash from Commerce and Transport, population from Culture, war power from Defence. At 4.5★ prestige or more, a world-capital bonus pays weekly too.</p>`);
 };
 PANELS.site = () => {
@@ -2612,7 +2623,7 @@ const A = {
   storeRename: x => { const inp = document.getElementById('storeName'); act(() => renameStore(x, inp ? inp.value : ''), 'Store renamed'); },
   closeStore: x => { act(() => closeStore(x), 'Store closed'); closePanel(); openPanel('stores'); },
   takeLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeLoan(amt, mo), 'Loan taken'); },
-  buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); UI.buildLot = { cityId: +cityId, lotT: +lotT };
+  buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); if (typeof isGovCity === 'function' && isGovCity(W.cities[+cityId])) return toast('Capitals are government-only — build in another city.', 'bad'); UI.buildLot = { cityId: +cityId, lotT: +lotT };
     const lot = (cityLots(+cityId) || []).find(l => l.t === +lotT) || {};
     const city = W.cities[+cityId] || {};
     const country = city.a3 ? W.byA3[city.a3] : null;

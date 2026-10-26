@@ -82,6 +82,34 @@ function officeTreasuryStart(o) {
   return Math.round(gdp * 0.01);
 }
 
+// ---------- government-only capitals ----------
+// A capital is not a commercial city: it houses the government. No new
+// stores, no building purchases there — but everything already built
+// keeps working. The government buildings below are the capital's
+// content: police, fire, the country's agencies, the leader's house,
+// the military base, and the port (coastal countries only).
+function isGovCity(city) {
+  if (!city || typeof W === 'undefined') return false;
+  const k = W.byA3[city.a3];
+  return !!(k && k.capital === city.id);
+}
+function govBuildingsFor(a3) {
+  const ag = agencyOf(a3);
+  const mon = isMonarchy(a3);
+  const k = W.byA3[a3];
+  const list = [
+    { id: 'capitol', icon: '🏛️', name: 'Capitol', desc: 'The seat of government.', effect: 'Prestige of the capital.', link: 'capital' },
+    { id: 'residence', icon: '🏠', name: a3 === 'USA' ? 'White House' : a3 === 'JPN' ? 'Imperial Palace' : mon ? 'Royal Palace' : 'Presidential Palace', desc: mon ? 'Where the monarch lives.' : 'Where the head of state lives.', effect: 'Hold the top office to gain +0.3 popularity a week from living here.', link: 'elections' },
+    { id: 'police', icon: '🚔', name: 'Police Headquarters', desc: 'Law enforcement for the capital.', effect: '+0.1 stability a week for your home country.', link: null },
+    { id: 'fire', icon: '🚒', name: 'Fire Station', desc: 'Fire and rescue for the capital.', effect: '+0.1 stability a week for your home country.', link: null },
+    { id: 'agency-dom', icon: '🕵️', name: ag[0] + ' Headquarters', desc: 'Domestic intelligence.', effect: 'Tips from your advisors cost 10% less.', link: null },
+  ];
+  if (ag[1] !== ag[0]) list.push({ id: 'agency-for', icon: '🕵️', name: ag[1] + ' Headquarters', desc: 'Foreign intelligence.', effect: 'Tips from your advisors cost 10% less.', link: null });
+  list.push({ id: 'military', icon: '🎖️', name: 'Military Base', desc: 'The armed forces command.', effect: 'Opens the Military panel.', link: 'military' });
+  if (k && k.coastal) list.push({ id: 'port', icon: '⚓', name: 'Port', desc: 'The capital port.', effect: 'Opens the airport departures board.', link: 'departures' });
+  return list;
+}
+
 // ---------- agencies: every country has its own ----------
 const AGENCIES = { USA: ['FBI', 'CIA'], GBR: ['MI5', 'MI6'], RUS: ['FSB', 'SVR'], CHN: ['MSS', 'MSS'], FRA: ['DGSI', 'DGSE'], DEU: ['BfV', 'BND'], ISR: ['Shin Bet', 'Mossad'], IND: ['IB', 'RAW'], PAK: ['IB', 'ISI'], TUR: ['MIT', 'MIT'], IRN: ['MOIS', 'MOIS'], SAU: ['GIP', 'GIP'], EGY: ['GIS', 'GIS'], KOR: ['NIS', 'NIS'], JPN: ['PSIA', 'CIRO'], AUS: ['ASIO', 'ASIS'], CAN: ['CSIS', 'CSIS'], BRA: ['ABIN', 'ABIN'], ITA: ['AISI', 'AISE'], ESP: ['CNI', 'CNI'] };
 function agencyOf(a3) { return AGENCIES[a3] || ['Domestic Intelligence', 'Foreign Intelligence']; }
@@ -182,7 +210,7 @@ function fireCabinet(id) {
   P.cabinet.splice(i, 1); return null;
 }
 function cabHas(type) { return ensurePerson().cabinet.some(x => x.type === type); }
-function tipStake() { const P = ensurePerson(); return Math.max(10000, Math.min(5000000, Math.round(P.cash * 0.10 / 1000) * 1000)); }
+function tipStake() { const P = ensurePerson(); const base = Math.round(P.cash * 0.10 / 1000) * 1000; return Math.max(10000, Math.min(5000000, Math.round(base * 0.9 / 1000) * 1000)); }
 function tipRisk() { let r = 0.12; if (cabHas('lawyer')) r *= 0.5; if (cabHas('spy')) r *= 0.5; return r; }
 function tipChance(ad) { let c = 0.25 + (ad.rating || 50) / 200; if (cabHas('business')) c += 0.10; if (cabHas('spy')) c += 0.15; return Math.min(0.95, c); }
 function buyCabTip(id) {
@@ -307,6 +335,11 @@ function personWeek() {
       if (typeof news === 'function') news('Person', `Your term as ${title} ended.`, S.home);
     }
   }
+  // Home capital institutions: police + fire keep the country steady,
+  // and living in the leader's house while head of state lifts popularity.
+  const cs = (typeof country === 'function') ? country(S.home) : null;
+  if (cs) cs.stab = Math.max(0, Math.min(100, (cs.stab || 50) + 0.2));
+  if (P.office && P.office.id === 'head') P.pop = Math.min(100, P.pop + 0.3);
   P.cabinet.forEach(ad => {
     if (ad.type === 'family') P.pop = Math.min(100, P.pop + 0.3);
     else if (ad.type === 'friend') P.fame = Math.min(100, P.fame + 0.3);

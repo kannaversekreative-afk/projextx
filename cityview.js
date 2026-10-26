@@ -575,6 +575,21 @@ const CityView = (() => {
     // a built business opens its management panel (manager, products,
     // marketing, finance) instead of vanishing with the FOR LEASE sign.
     if (typeof storesInCity === 'function') storesInCity(city.id).forEach(st => add(st.lotT, 'pin-store', `<span class="logo own">${st.icon || '🏪'}</span>`, () => onPin({ type: 'store', store: st }), st.name));
+    // Government buildings, capitals only: police, fire, the agencies,
+    // the leader's house, the base and the port. They sit on the free
+    // lot tiles nearest the capitol, so they never cover a store, a
+    // company location or a building you already own.
+    if (typeof govBuildingsFor === 'function' && typeof isGovCity === 'function' && isGovCity(city) && filter === 'all') {
+      const govs = govBuildingsFor(city.a3);
+      const used = new Set();
+      lots.forEach(l => { if (l.kind === 'prop' || l.kind === 'taken') used.add(l.t); });
+      Object.keys(locAt).forEach(t => used.add(+t));
+      if (typeof storesInCity === 'function') storesInCity(city.id).forEach(st => used.add(st.lotT));
+      S.props.filter(p => p.city === city.id).forEach(pr => used.add(pr.t));
+      const L2 = layout.landmark;
+      const cands = layout.tiles.filter(t => t.kind === 'lot' && !used.has(t.y * N + t.x)).sort((a, b) => (Math.abs(a.x - L2.x) + Math.abs(a.y - L2.y)) - (Math.abs(b.x - L2.x) + Math.abs(b.y - L2.y)));
+      govs.forEach((g, i) => { const t = cands[i]; if (!t) return; add(t.y * N + t.x, 'pin-gov', `<span class="logo own">${g.icon}</span>`, () => onPin({ type: 'gov', gov: g, city }), g.name); });
+    }
     // Buildings bought by tapping them (not FOR SALE lots) still get
     // an owned pin, so you can open, renovate or sell them again.
     if (show('prop')) S.props.filter(p => p.city === city.id && !lots.some(l => l.t === p.t)).forEach(pr => add(pr.t, 'pin-prop', '<span class="logo own">\u{1F3E0}</span>', () => onPin({ type: 'prop', lot: { t: pr.t } })));
@@ -648,6 +663,9 @@ const CityView = (() => {
       if (lot && lot.kind === 'lease') { onPin({ type: 'lease', lot }); return; }
       if (lot && lot.kind === 'sale') { onPin({ type: 'sale', lot }); return; }
       if (lot && lot.kind === 'prop') { onPin({ type: 'prop', lot }); return; }
+      // Government-only capitals: tapping a plain building buys nothing.
+      // Owned buildings, company locations and built stores above still open.
+      if (typeof isGovCity === 'function' && isGovCity(city)) return;
       const b = buildingLotForTile(city.id, tIdx);
       if (b) onPin({ type: 'building', lot: b });
     } catch (err) {}

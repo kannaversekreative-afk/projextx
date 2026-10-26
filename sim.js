@@ -218,7 +218,15 @@ function baseLots(cityId) {
 }
 function setLot(cityId, t, state) { const m = S.lotState[cityId] || (S.lotState[cityId] = {}); if (state == null) delete m[t]; else m[t] = state; }
 function lotKind(cityId, lot) { const st = S.lotState[cityId] && S.lotState[cityId][lot.t]; return st || lot.kind; }
-function cityLots(cityId) { return baseLots(cityId).map(l => Object.assign({}, l, { kind: lotKind(cityId, l) })); }
+function cityLots(cityId) {
+  const lots = baseLots(cityId).map(l => Object.assign({}, l, { kind: lotKind(cityId, l) }));
+  // Government-only capitals: no new FOR LEASE or FOR SALE lots. Lots
+  // already taken or bought ('taken', 'prop') stay, so everything
+  // built there before keeps working.
+  const city = W.cities[cityId];
+  if (typeof isGovCity === 'function' && isGovCity(city)) return lots.filter(l => l.kind !== 'lease' && l.kind !== 'sale');
+  return lots;
+}
 const locMode = c => SECTORS[c.sector].loc.mode;
 const lotRent = (c, lot) => locMode(c) === 'size' ? lot.srent : lot.rent;
 function buildCost(c, interior) { const L = SECTORS[c.sector].loc; return Math.round(L.buildout * [1, 1.5, 2.4][interior] * Math.max(0.45, Math.pow(W.byA3[c.a3].wealth, 0.5)) / 1000) * 1000; }
@@ -576,6 +584,7 @@ function buildingLotForTile(cityId, tIdx) {
   return { t: tIdx, kind: 'building', traffic: t.traffic || 0, size, arch: t.arch, units, mrent, cond: 0.75, price, floors: t.floors, zone: t.zone };
 }
 function buyAnyBuilding(cityId, tIdx) {
+  if (typeof isGovCity === 'function' && isGovCity(W.cities[cityId])) return 'Capitals are government-only — no buildings for sale here.';
   const existing = cityLots(cityId).find(l => l.t === tIdx);
   if (existing && existing.kind === 'sale') return buyBuilding(cityId, tIdx);
   if (existing && existing.kind === 'prop') return 'You already own this building.';
