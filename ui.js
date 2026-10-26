@@ -259,7 +259,7 @@ function renderHUD() {
   const hk = W.byA3[S.home];
   const curCity = airportFromCity();
   $('hud').innerHTML = `
-  <button class="hud-pill hud-tl" data-a="panel" data-x="nation" aria-label="Nation">
+  <button class="hud-pill hud-tl" data-a="panel" data-x="country" aria-label="Your country">
     <span class="hud-flag">${hk.flag}</span>
     <span class="hud-tl-text"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)}</small></span>
   </button>
@@ -1171,6 +1171,51 @@ PANELS.web = () => {
     ${w.view === 'search' ? `<input id="wsearch" class="search" placeholder="Search companies, countries, products" value="${esc(w.q)}" autocomplete="off">` : ''}
     ${body}</div>`);
 };
+// ---------- Your Country: the condensed top-left panel ----------
+// Like the reference layout (original content only): a hero card with
+// your money and rating, chips, an Advisor that names the single best
+// next decision and does it with one tap, country rankings, ratings,
+// history, and links out to the deeper panels. Nothing here is fake:
+// every number comes from the live save, every Advisor button runs a
+// real action.
+function countryAdvisor() {
+  const cs = country(S.home), lw = cs.lastWeek || {};
+  const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(S.home) : [S.co[S.home]];
+  const losing = biz.find(b => b.week && b.week.profit < 0);
+  if (cs.stab < 50) return { title: 'Stability is low', body: `Stability is ${Math.round(cs.stab)}/100. Start Affordable housing — it adds stability and grows population.`, btn: 'START PROJECT', a: 'project', x: 'housing' };
+  if (lw.net < 0 && cs.tax < 0.5) return { title: 'Treasury lost money last week', body: `Last week net was ${fmtMoney(lw.net, true)}. Raise corporate tax 5 points to close the gap.`, btn: 'RAISE TAX 5 PTS', a: 'advisorTax', x: 'up' };
+  if (losing && cs.tax > 0.05) return { title: `${losing.name} is losing money`, body: `It made ${fmtMoney(losing.week.profit, true)} last week. Lower corporate tax 5 points to help it.`, btn: 'LOWER TAX 5 PTS', a: 'advisorTax', x: 'down' };
+  const mil = Object.entries(MILITARY).map(([b, d]) => [b, d, milCost(b)]).filter(([, , c]) => c != null).sort((a, b) => a[2] - b[2])[0];
+  if (milRank(S.home) > 100 && mil && S.cash >= mil[2]) return { title: 'Military is weak', body: `You rank #${milRank(S.home)} in military power. Upgrade ${mil[1].name} to strengthen it.`, btn: 'UPGRADE MILITARY', a: 'milUp', x: mil[0] };
+  if (!S.placed || !S.placed.length) return { title: 'Place your first business', body: 'You have not placed a business yet — the first one is free, and it pays weekly income from the spot you pick.', btn: 'PLACE BUSINESS', a: 'createBusiness', x: '' };
+  if (locCount() === 0) return { title: 'Open your first location', body: 'Lease a storefront in your capital city and your company starts earning there.', btn: 'ENTER CAPITAL', a: 'enterCity', x: String(W.byA3[S.home].capital) };
+  return { title: 'You are in good shape', body: 'No urgent move. Grow by placing another business or buying a stock in Markets.', btn: 'PLACE BUSINESS', a: 'createBusiness', x: '' };
+}
+PANELS.country = () => {
+  const cs = country(S.home), k = W.byA3[S.home], cap = W.cities[k.capital];
+  const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(S.home) : [S.co[S.home]];
+  const avgRating = biz.length ? biz.reduce((a, b) => a + (b.rating || 0), 0) / biz.length : 0;
+  const gdpSorted = W.playable.slice().sort((a, b) => b.gdp0 - a.gdp0);
+  const gdpRank = gdpSorted.findIndex(c => c.a3 === S.home) + 1;
+  const adv = countryAdvisor();
+  const top3 = gdpSorted.slice(0, 3);
+  const hist = S.news.filter(n => n.a3 === S.home).slice(0, 6);
+  return panelShell('Your country', `${k.flag} ${esc(cname(S.home))} · ${esc(countryStatus(S.home).t)}`,
+    `<div class="country-hero"><div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(cname(S.home))}</h2><div class="muted-light">Based in ${cap ? esc(cap.name) : ''} · Balance ${fmtMoney(S.cash, true)}</div></div></div>
+    <div class="stats4"><div><span>Businesses</span><b>${biz.length}</b></div><div><span>Placed</span><b>${(S.placed || []).length}</b></div><div><span>Rating</span><b>★ ${avgRating.toFixed(1)}</b></div><div><span>GDP rank</span><b>#${gdpRank}</b></div></div></div>
+    <div class="row wrap" style="margin-top:12px"><span class="chip">Corporate tax ${Math.round(cs.tax * 100)}%</span><span class="chip">Stability ${Math.round(cs.stab)}/100</span><span class="chip">Population ${fmtPop(nationPop())}</span><span class="chip">Level ${level()}</span></div>
+    <div class="card in"><h4>🧭 Advisor — best next decision</h4><p><b>${adv.title}</b></p><p class="muted small">${adv.body}</p><button class="btn3d orange wide" data-a="${adv.a}" data-x="${adv.x}">${adv.btn}</button></div>
+    <h4>Country rankings</h4><div class="card in"><p class="muted small">By GDP, against every country in the world.</p>
+    ${top3.map((c, i) => `<div class="kv"><span>#${i + 1} ${c.flag} ${esc(c.name)}</span><b>${fmtMoney(c.gdp0 * 1e6, true)}</b></div>`).join('')}
+    ${gdpRank > 3 ? `<div class="kv"><span>#${gdpRank} ${k.flag} ${esc(cname(S.home))} (you)</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div>` : ''}
+    <div class="kv"><span>Military rank</span><b>#${milRank(S.home)} of ${W.playable.length}</b></div>
+    <button class="btn wide" data-a="panel" data-x="leaderboard">SEE ALL RANKINGS</button></div>
+    <h4>Ratings</h4><div class="card in"><p class="muted small">You are at ★ ${avgRating.toFixed(1)} on average across your country's businesses.</p>
+    ${biz.map(b => `<div class="kv"><span>${(SECTORS[b.sector] && SECTORS[b.sector].icon) || '🏢'} ${esc(b.name)}</span><b>★ ${(b.rating || 0).toFixed(1)}</b></div>`).join('')}
+    ${S.rating ? `<div class="kv"><span>Your personal rating</span><b>★ ${S.rating.toFixed(1)}</b></div>` : ''}</div>
+    <h4>History</h4><div class="card in">${hist.map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No history yet — play a week and it lands here.</p>'}</div>
+    <div class="row"><button class="btn flex" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn flex" data-a="panel" data-x="leader">LEADER</button><button class="btn flex" data-a="panel" data-x="military">MILITARY</button></div>`);
+};
 PANELS.nation = () => {
   const cs = country(S.home), k = W.byA3[S.home];
   const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).map(n => {
@@ -1730,6 +1775,7 @@ const A = {
     UI.placing = true; renderHUD();
     toast(!S.placed || !S.placed.length ? 'Where do you want it? Tap anywhere on the map — first business free.' : 'Where do you want it? Tap anywhere on the map.', 'good');
   },
+  advisorTax: x => { const cs = country(S.home); cs.tax = x === 'up' ? Math.min(0.5, cs.tax + 0.05) : Math.max(0.05, cs.tax - 0.05); save(); renderPanel(); toast(`Corporate tax now ${Math.round(cs.tax * 100)}%.`, 'good'); },
   cancelPlace: () => { UI.placing = false; renderHUD(); toast('Placement cancelled.'); },
   dateModal: () => openDateModal(),
   dateYes: () => { closeModal(); A.ageWeek(); },
