@@ -50,15 +50,16 @@ function newGame(opt) {
   };
   S = s;
   W.lotCache = {};
-  // Countries, with military levels from their economic weight.
-  const ranked = W.playable.slice().sort((a, b) => b.gdp0 - a.gdp0);
-  ranked.forEach((k, rank) => {
+  // Countries, with military levels from their real strength: the
+  // 2025 Global Firepower ranking for the top 39, a GDP + population
+  // formula for everyone else. Every country starts under 20.
+  W.playable.forEach((k) => {
     const gdpPc = k.gdp0 * 1e6 / Math.max(1, k.pop0);
-    const lv = () => clamp((rank < 5 ? 4 : rank < 15 ? 3 : rank < 40 ? 2 : rank < 90 ? 1 : 0) + (rand() < 0.25 ? 1 : 0) - (rand() < 0.2 ? 1 : 0), 0, 5);
+    const lv = (typeof realMilLevel === 'function') ? realMilLevel(k) : 1;
     const cs = { pop: k.pop0, pop0: k.pop0, gdp: k.gdp0, growth: clamp(0.045 - 0.012 * Math.log10(gdpPc / 1000), 0.008, 0.06),
       stab: clamp(48 + k.wealth * 14 + gauss() * 12, 12, 95), mil: Math.sqrt(k.gdp0) * (0.6 + rand() * 0.8), tax: +(0.15 + rand() * 0.2).toFixed(2),
       incTax: 0.20, vat: 0.05, taxRev: 0,
-      milLv: { air: lv(), navy: k.coastal ? lv() : 0, army: lv() }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0, treasury: k.gdp0 * 1e6 * 0.05, debt: k.gdp0 * 1e6 * 0.54, lastWeek: null };
+      milLv: { air: lv, navy: k.coastal ? lv : 0, army: lv }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0, treasury: k.gdp0 * 1e6 * 0.05, debt: k.gdp0 * 1e6 * 0.54, lastWeek: null };
     k.nb.forEach(b => { if (W.byA3[b] && W.byA3[b].playable) cs.rel[b] = Math.round(clamp(30 + gauss() * 25, -40, 90)); });
     s.countries[k.a3] = cs;
   });

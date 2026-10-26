@@ -141,6 +141,7 @@ function migrateSave(s) {
       }
     });
   }
+  if (!s.milReal && typeof applyRealMilLevels === 'function') { try { applyRealMilLevels(s); } catch (e) {} }
   if (!Array.isArray(s.stores)) s.stores = [];
   if (!Array.isArray(s.loans)) s.loans = [];
   if (!s.sports) s.sports = null;

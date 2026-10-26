@@ -33,6 +33,26 @@ function upgradeMilitary(branch) {
   return null;
 }
 function milRank(a3) { const list = Object.keys(S.countries).sort((a, b) => milPower(b) - milPower(a)); return list.indexOf(a3) + 1; }
+// One-time migration for old saves: re-seed every country's military
+// levels from real strength. Your own country's upgrades are never
+// wiped — it keeps the higher of its old level and its real level.
+function applyRealMilLevels(s) {
+  if (!s || !s.countries || typeof W === 'undefined' || !W.byA3) return;
+  Object.keys(s.countries).forEach(a3 => {
+    const cs = s.countries[a3], k = W.byA3[a3];
+    if (!cs || !k) return;
+    const lv = (typeof realMilLevel === 'function') ? realMilLevel(k) : 1;
+    if (!cs.milLv) cs.milLv = { army: 0, navy: 0, air: 0 };
+    if (a3 === s.home) {
+      cs.milLv.army = Math.max(cs.milLv.army || 0, lv);
+      cs.milLv.air = Math.max(cs.milLv.air || 0, lv);
+      cs.milLv.navy = k.coastal ? Math.max(cs.milLv.navy || 0, lv) : 0;
+    } else {
+      cs.milLv.army = lv; cs.milLv.air = lv; cs.milLv.navy = k.coastal ? lv : 0;
+    }
+  });
+  s.milReal = true;
+}
 // ---------- war, new model ----------
 // No buying peace. War is declared from a War Plan, not from a button that
 // starts a years-long front war. The player orchestrates the attack first

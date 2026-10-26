@@ -48,11 +48,50 @@ const SUFFIX = {
 
 // Military branches you can fund for your home country. Power multiplies
 // the country's base strength in wars; air and navy show on the map.
+// Levels run 0-100. Names step up every 10 levels; costs keep the six
+// hand-set rungs, then grow 8% a level, so the climb from a real
+// starting level (every country starts under 20) to 100 is long and
+// expensive — no country starts able to rule the world.
+function milTierNames(branch) {
+  return { air: ['Trainer jets', 'Fighter squadron', 'Multirole fighters', 'Stealth fighters', 'Air dominance wing', 'Air supremacy wing', 'Aerospace command', 'Global air command', 'Orbital air force', 'World-class air force'],
+    navy: ['Patrol boats', 'Frigates', 'Destroyers', 'Submarine fleet', 'Carrier group', 'Carrier strike group', 'Fleet command', 'Blue-water navy', 'Ocean dominance fleet', 'World-class navy'],
+    army: ['Militia', 'Infantry', 'Armored brigades', 'Mechanized corps', 'Rapid reaction force', 'Elite corps', 'Special operations command', 'Continental army', 'Superpower force', 'World-class military'] }[branch];
+}
+function milLevels(branch) {
+  const tiers = milTierNames(branch), out = ['None'];
+  for (let lv = 1; lv <= 100; lv++) out.push(tiers[Math.floor((lv - 1) / 10)] + ' · Lv ' + lv);
+  return out;
+}
+function milCosts(base) {
+  const out = [0];
+  for (let lv = 1; lv <= 5; lv++) out.push(base[lv]);
+  for (let lv = 6; lv <= 100; lv++) out.push(Math.round(out[lv - 1] * 1.08 / 1e6) * 1e6);
+  return out;
+}
 const MILITARY = {
-  air: { name: 'Air force', icon: '✈️', levels: ['None', 'Trainer jets', 'Fighter squadron', 'Multirole fighters', 'Stealth fighters', 'Air dominance wing'], cost: [0, 40e6, 160e6, 600e6, 2.2e9, 7e9], power: 0.3 },
-  navy: { name: 'Navy', icon: '⚓', levels: ['None', 'Patrol boats', 'Frigates', 'Destroyers', 'Submarine fleet', 'Carrier group'], cost: [0, 50e6, 200e6, 750e6, 2.5e9, 8e9], power: 0.25 },
-  army: { name: 'Army', icon: '\u{1F6E1}️', levels: ['None', 'Militia', 'Infantry', 'Armored brigades', 'Mechanized corps', 'Rapid reaction force'], cost: [0, 30e6, 120e6, 450e6, 1.6e9, 5e9], power: 0.35 },
+  air: { name: 'Air force', icon: '✈️', levels: milLevels('air'), cost: milCosts([0, 40e6, 160e6, 600e6, 2.2e9, 7e9]), power: 0.3 },
+  navy: { name: 'Navy', icon: '⚓', levels: milLevels('navy'), cost: milCosts([0, 50e6, 200e6, 750e6, 2.5e9, 8e9]), power: 0.25 },
+  army: { name: 'Army', icon: '\u{1F6E1}️', levels: milLevels('army'), cost: milCosts([0, 30e6, 120e6, 450e6, 1.6e9, 5e9]), power: 0.35 },
 };
+
+// Real starting military levels, from the 2025 Global Firepower
+// ranking (145 countries, 60+ factors: manpower, equipment, finance,
+// logistics, geography). Rank bands map to levels; every country
+// starts under 20 — even the United States, at 19 — so reaching 100,
+// and ruling the world, takes a long climb. Countries outside the
+// ranked list get a level from their real economy and population,
+// capped at 10.
+const MIL_REAL = { USA: 19, RUS: 18, CHN: 18, IND: 17, KOR: 16, GBR: 16, FRA: 16, JPN: 16, TUR: 15, ITA: 15, BRA: 15, PAK: 15, IDN: 15, DEU: 15, ISR: 14, IRN: 14, ESP: 14, AUS: 14, EGY: 14, UKR: 14, POL: 13, TWN: 13, VNM: 13, SAU: 13, THA: 13, DZA: 13, SWE: 13, CAN: 13, SGP: 13, GRC: 13, NGA: 12, MEX: 12, ARG: 12, PRK: 12, BGD: 12, NLD: 12, MMR: 12, NOR: 12, PRT: 12 };
+function realMilLevel(k) {
+  if (!k) return 1;
+  if (MIL_REAL[k.a3] != null) return MIL_REAL[k.a3];
+  const gdp = Math.max(1, k.gdp0 || k.gdp || 0);
+  let lv = 1 + Math.floor(2 * Math.log10(gdp / 1000));
+  const pop = k.pop0 || k.pop || 0;
+  if (pop >= 50000000) lv += 1;
+  if (pop >= 150000000) lv += 1;
+  return Math.max(1, Math.min(10, lv));
+}
 
 // Websites (the Web tab). Tier sets online sales; ads are weekly spend;
 // add-ons are one-time buys.
