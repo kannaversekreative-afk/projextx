@@ -48,7 +48,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .xbtn svg { width: 20px; height: 20px; }
 .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--soft); font-size: 20px; font-weight: 900; }
 
-/* HUD like the airline screenshot: dark pill top-left, company card under it,
+/* HUD: white pill with blue text top-left, company card under it,
    settings + zoom + locate on the right, speed above a bottom bar.
    The map already fills the whole screen behind all of this. */
 .company-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); padding: 12px 16px; max-width: calc(100vw - 130px); }
@@ -69,7 +69,9 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .rail-btn { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; font-weight: 900; }
 .rail-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
 .speedpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
-.bottombar, .company-card, .popup, .citybar, .tut, .speedpill { background: #fff; color: var(--ink); }
+.bottombar, .company-card, .popup, .citybar, .tut, .speedpill { background: #ffffff; color: #1f5fd0; }
+.citybar b { color: #1f5fd0; }
+.citybar .muted { color: #2f7cf6; }
 .bottombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 999px; max-width: calc(100vw - 24px); }
 /* Fixed Age stepper: always in the same spot at the bottom, above the
    bottom bar, small and thumb-reachable. It sits in #hud (z-index 5),
@@ -123,7 +125,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .sname small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sprice { display: flex; flex-direction: column; text-align: right; font-variant-numeric: tabular-nums; }
 .sprice small { font-size: 12px; font-weight: 900; }
-.star-btn { font-size: 22px; color: var(--gold); flex: none; }
+.star-btn { font-size: 22px; color: #2f7cf6; flex: none; }
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 15px; }
 .kv:last-child { border-bottom: 0; }
 .kv span { color: var(--muted); } .kv b { text-align: right; }
@@ -162,11 +164,11 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .webbadge { margin-left: auto; flex: none; background: var(--blue); color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 900; }
 .webhome-note { color: var(--muted); font-size: 13px; margin: 0; }
 .web-hero b { font-size: 22px; } .web-hero span { opacity: 0.9; font-size: 14px; }
-.sponsored { border-color: var(--gold) !important; }
+.sponsored { border-color: #2f7cf6 !important; }
 
 /* more grid */
 .more-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
-.more-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 4px; border-radius: 18px; background: var(--soft); font-size: 12px; font-weight: 900; }
+.more-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 4px; border-radius: 18px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; font-size: 12px; font-weight: 900; }
 .more-item .mi { font-size: 26px; }
 
 /* pick country */
@@ -351,38 +353,42 @@ body.in-city #hud { display: none; }
    white pills top-left and top-right, small white buttons bottom-left
    and bottom-right, and a city pill centred at the bottom. No Go home
    button, no bottom bar. */
-.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
+.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
 .hud-tl { left: max(12px, env(safe-area-inset-left)); text-align: left; }
 .hud-flag { font-size: 26px; line-height: 1; }
 .hud-tl-text { display: flex; flex-direction: column; line-height: 1.2; }
-.hud-tl-text b { font-size: 15px; }
-.hud-tl-text small { font-size: 14px; color: var(--muted); font-weight: 700; }
-.hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; }
+.hud-tl-text b { font-size: 15px; color: #1f5fd0; }
+.hud-tl-text small { font-size: 14px; color: #2f7cf6; font-weight: 700; }
+.hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; color: #1f5fd0; }
 /* Bell lives at the top of the More menu, not on the home HUD. */
-.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
+.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }
 .hud-br { right: max(12px, env(safe-area-inset-right)); }
-.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
+.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
 .hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
 /* Departures board modal: white card, blue accents, dark text. */
 .mbox.dep { background: #fff; color: var(--ink); width: min(640px, 100%); }
 /* Menu popup (centred, not a side bar): header + grouped cards. */
-.mbox.menu { width: min(560px, 100%); max-height: 86vh; padding: 0; background: #eef2f7; overflow-y: auto; }
-.menu-pop-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; background: #fff; border-bottom: 1.5px solid var(--line); position: sticky; top: 0; z-index: 1; }
+.mbox.menu { width: min(560px, 100%); max-height: 86vh; padding: 0; background: #ffffff; overflow-y: auto; scrollbar-color: #2f7cf6 #ffffff; }
+.mbox.menu::-webkit-scrollbar { width: 10px; }
+.mbox.menu::-webkit-scrollbar-track { background: #ffffff; }
+.mbox.menu::-webkit-scrollbar-thumb { background: #2f7cf6; border-radius: 8px; }
+.menu-pop-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; background: #ffffff; border-bottom: 1.5px solid #2f7cf6; position: sticky; top: 0; z-index: 1; }
+.menu-pop-head h2 { color: #1f5fd0; }
 .menu-dots { width: 44px; height: 44px; flex: none; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; font-size: 20px; letter-spacing: 2px; color: #5a6b82; }
 .menu-pop-head h2 { margin: 0; flex: 1; font-size: 24px; }
 .menu-bell { position: relative; flex: none; width: 44px; height: 44px; border: 0; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; font-size: 20px; cursor: pointer; }
 .menu-bell-badge { position: absolute; top: -4px; right: -4px; background: #e03131; color: #fff; border-radius: 10px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; font-size: 11px; font-weight: 900; }
 .menu-pop-body { padding: 14px 16px 20px; }
-.menu-sec { font-size: 14px; font-weight: 700; color: var(--muted); margin: 16px 4px 8px; }
+.menu-sec { font-size: 14px; font-weight: 700; color: #2f7cf6; margin: 16px 4px 8px; }
 .menu-sec:first-child { margin-top: 0; }
-.menu-card { background: #fff; border: 1.5px solid var(--line); border-radius: 20px; overflow: hidden; }
-.menu-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #fff; border: 0; border-bottom: 1.5px solid var(--line); cursor: pointer; }
+.menu-card { background: #ffffff; border: 1.5px solid #2f7cf6; border-radius: 20px; overflow: hidden; }
+.menu-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #ffffff; border: 0; border-bottom: 1.5px solid #c9dcf5; cursor: pointer; }
 .menu-row:last-child { border-bottom: 0; }
 .menu-ic { width: 44px; height: 44px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 22px; }
 .menu-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.menu-txt b { font-size: 17px; color: var(--ink); }
-.menu-txt span { font-size: 13px; color: var(--muted); }
+.menu-txt b { font-size: 17px; color: #1f5fd0; }
+.menu-txt span { font-size: 13px; color: #2f7cf6; }
 .menu-chev { font-size: 22px; color: #9aa7b8; }
 /* Place-a-business banner: sits above the map, does not block taps
    anywhere else. */

@@ -314,8 +314,8 @@ function renderHUD() {
   if (!S || UI.pick) return;
   // New HUD, from the reference design (layout only, original art):
   // no Go home button, no bottom bar at all.
-  // Top-left: a dark pill with the country flag, the country name and
-  // your money. Top-right: a dark pill with the game date — tap it and
+  // Top-left: a white pill with blue text — the profile icon, the country
+  // name and your money. Top-right: a white pill with blue text, the game date — tap it and
   // it asks if you are done this week, with a calendar underneath.
   // Bottom-left: map layers — toggle what shows on the map.
   // Bottom-middle: your current city — tap it for the airport
