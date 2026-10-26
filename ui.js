@@ -84,6 +84,10 @@ function migrateSave(s) {
   if (s.lastWarDay == null) s.lastWarDay = null;
   if (!Array.isArray(s.papers)) s.papers = [];
   if (s.leader == null) s.leader = false;
+  if (!s.worl) s.worl = null;
+  if (!s.domination) s.domination = null;
+  if (s.pendingSituation === undefined) s.pendingSituation = null;
+  if (s.pendingVictory === undefined) s.pendingVictory = null;
   if (s.countryName === undefined) s.countryName = null;
   for (const a3 in s.countries) { const cs = s.countries[a3]; if (cs.incTax == null) cs.incTax = 0.20; if (cs.vat == null) cs.vat = 0.05; if (cs.taxRev == null) cs.taxRev = 0; if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05; if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54; }
   if (s.idx && !isFinite(s.idx.v)) { const fin = (s.idx.h && s.idx.h.w || []).filter(v => isFinite(v)); s.idx.v = fin.length ? fin[fin.length - 1] : 1000; if (s.idx.h) for (const k in s.idx.h) s.idx.h[k] = (s.idx.h[k] || []).filter(v => isFinite(v)); }
@@ -250,7 +254,7 @@ function renderHUD() {
   const hk = W.byA3[S.home], hcs = country(S.home);
   const cardTop = S.leader
     ? `<div class="company-card card">
-    <div class="cc-top"><b>${hk.flag} ${esc(cname(S.home))} — Leader</b><span class="muted small">Lv ${lv} · Stability ${Math.round(hcs.stab)} / 100</span></div>
+    <div class="cc-top"><b>${hk.flag} ${esc(cname(S.home))} — Leader</b><span class="muted small">Lv ${lv} · Stability ${Math.round(hcs.stab)} / 100 · ${(typeof modeLabel === 'function' ? modeLabel() : 'World')}</span></div>
     <div class="cc-line"><span>Treasury <b>${fmtMoney(S.cash, true)}</b></span><span>Debt <b>${fmtMoney(hcs.debt || 0, true)}</b></span><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 GDP <b>${fmtMoney(hcs.gdp * 1e6, true)}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
   </div>`
     : `<div class="company-card card">
@@ -676,8 +680,8 @@ function showInherit() {
   $('inherit').innerHTML = `<h1>WORL</h1>
     <div class="intro-modes">
       <button class="intro-mode" data-a="introMode" data-x="world"><b>World</b><span>Offline. The mode we are working on now. Lead a real country as it is today.</span></button>
-      <button class="intro-mode" data-a="introMode" data-x="worl"><b>Worl Mode</b><span>Random situations, events, and random landmasses and countries. PvP or vs CPU.</span><span class="later">COMING LATER</span></button>
-      <button class="intro-mode" data-a="introMode" data-x="domination"><b>Domination</b><span>PvP against 19 other players, with different rules from the other modes.</span><span class="later">COMING LATER</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="worl"><b>Worl Mode</b><span>Random situations, events, a shuffled world and rival leaders. Every run is different. Vs CPU rivals.</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="domination"><b>Domination</b><span>20 players, capture and hold. First to 1000 points, 10 lands, or last standing wins.</span></button>
     </div>
     <div id="inheritStep" class="intro-step"></div>`;
   $('inherit').classList.add('open');
@@ -698,10 +702,20 @@ function renderInheritStep() {
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
     if (sel) sel.addEventListener('change', updateInheritInfo);
     updateInheritInfo();
-  } else if (UI.introMode === 'worl') {
-    step.innerHTML = `<p>Worl Mode is coming later. Random situations, events, and random landmasses and countries, PvP or vs CPU — we will build it after World.</p>`;
-  } else if (UI.introMode === 'domination') {
-    step.innerHTML = `<p>Domination is coming later. PvP against 19 other players, with different rules from the other modes — we will build it after World.</p>`;
+  } else if (UI.introMode === 'worl' || UI.introMode === 'domination') {
+    const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const isWorl = UI.introMode === 'worl';
+    step.innerHTML = `<div class="inherit-line">You have inherited</div>
+      <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
+      <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
+      <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
+      <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
+      <p>${isWorl ? 'Worl Mode: random start, a shuffled world, a random goal, and a situation card every year. Rivals compete on the leaderboard.' : 'Domination: you plus 19 rival players. War cooldown is 1 year, not 10. Capture lands, earn points for every land you hold, first to 1000 points, 10 lands, or last standing wins. Your capital is protected.'}</p>
+      <div class="row"><button class="btn flex" data-a="introRandom">🎲 RANDOM COUNTRY</button><button class="btn3d orange flex" data-a="${isWorl ? 'worlContinue' : 'dominationContinue'}">START ${isWorl ? 'WORL MODE' : 'DOMINATION'}</button></div>`;
+    const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
+    const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
+    if (sel) sel.addEventListener('change', updateInheritInfo);
+    updateInheritInfo();
   }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
@@ -1174,7 +1188,7 @@ PANELS.warresult = () => {
     <div class="kv"><span>You</span><b>Army Lv ${r.att.milLv.army} · Navy Lv ${r.att.milLv.navy} · Air Lv ${r.att.milLv.air} · Stability ${Math.round(r.att.stab)} · Debt ${Math.round(r.att.debtRatio * 100)}% of GDP</b></div>
     <div class="kv"><span>Them</span><b>Army Lv ${r.def.milLv.army} · Navy Lv ${r.def.milLv.navy} · Air Lv ${r.def.milLv.air} · Stability ${Math.round(r.def.stab)} · Debt ${Math.round(r.def.debtRatio * 100)}% of GDP</b></div>
     ${win ? `<p><b>${cname(r.target)} is now occupied by you.</b> Its main company and its people count toward your nation.</p>` : `<p><b>Your invasion was driven back.</b> Your stability fell 15 points and the war cost was paid from your treasury.</p>`}
-    <p class="muted small">Next war: ${yearOf(S.day + WAR_COOLDOWN_DAYS)} — one declaration every 10 years.</p>
+    <p class="muted small">Next war: ${S.mode === 'domination' ? 'next year — Domination cooldown is 1 year.' : yearOf(S.day + WAR_COOLDOWN_DAYS) + ' — one declaration every 10 years.'}</p>
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 PANELS.military = () => {
@@ -1407,6 +1421,19 @@ PANELS.markets = () => {
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
     <div class="list">${rows.map(c => { const ch = chgVs(c), closes = (c.h.d || []).slice(-30), cap = companyValue(c), hi = closes.length ? Math.max(...closes) : c.price, lo = closes.length ? Math.min(...closes) : c.price; return `<button class="srow" data-a="stock" data-x="${c.a3}" style="flex-direction:column;align-items:stretch"><span class="row between" style="width:100%"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname" style="flex:1"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span></span>${lineChart(closes, { h: 50 })}<span class="row between muted small" style="width:100%"><span>Market cap ${fmtMoney(cap, true)}</span><span>Dividend ${(SECTORS[c.sector].div * 100).toFixed(1)}%</span><span>52w ${fmtMoney(lo)} - ${fmtMoney(hi)}</span><span>P/E ${c.pe.toFixed(1)}</span></span></button>`; }).join('') || '<div class="card in empty">Nothing here yet.</div>'}</div>`);
 };
+PANELS.mode = () => {
+  if (S.mode === 'worl' && typeof worlRivals === 'function') {
+    const w = ensureWorl(); const rows = worlRivals();
+    return panelShell('Worl Mode', `Goal: ${w.goalText} · Twist: ${w.twist} · Shuffled continent: ${w.shuffleCont || '—'} · Years: ${w.years} · Wins: ${w.wins} · Rank: ${worlRank()} / 10`,
+      `<div class="list">${rows.map((r, i) => `<div class="kv ${r.you ? 'you' : ''}"><span>${i + 1}. ${r.flag} ${esc(r.name)}${r.you ? ' (you)' : ''}</span><b>GDP ${fmtMoney(r.gdp * 1e6, true)}</b></div>`).join('')}</div><p class="muted small">Every Age Up draws a situation card after the newspaper. Answer it, or the year moves on without you.</p>`);
+  }
+  if (S.mode === 'domination' && typeof dominationStandings === 'function') {
+    const d = ensureDomination(); const rows = dominationStandings();
+    return panelShell('Domination', `You: ${d.points} points · ${dominationTerritories()} lands · Last Stand: ${d.lastStand} / 3 · Win at 1000 points, 10 lands, or last standing. War cooldown is 1 year. Your capital is protected.`,
+      `<div class="list">${rows.map((r, i) => `<div class="kv ${r.you ? 'you' : ''}"><span>${i + 1}. ${r.flag} ${esc(r.name)}${r.you ? ' (you)' : ''}</span><b>${r.points} pts · ${r.territories} lands</b></div>`).join('')}</div><p class="muted small">Capture a rival's home country in a war to knock them out and earn +100 points.</p>`);
+  }
+  return panelShell('World', 'Offline leader mode. No rival leaderboard, no domination points. Grow your country, trade, and invade neighbours when you choose.', '<p class="muted small">Switch modes from the intro: restart the game to pick Worl Mode or Domination.</p>');
+};
 PANELS.help = () => {
   return panelShell('Help', '',
     `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
@@ -1418,7 +1445,7 @@ function moreSheet() {
     ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
     ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
     ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
-    ['leaderboard', '🏆', 'Leaderboard'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
+    ['leaderboard', '🏆', 'Leaderboard'], ['mode', '🎲', 'Mode'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
     ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
   ];
   openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
@@ -1440,6 +1467,21 @@ const A = {
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
   },
   introMode: x => { UI.introMode = x; renderInheritStep(); },
+  introRandom: () => { const sel = document.getElementById('inheritCountry'); if (!sel) return; const list = W.playable; sel.value = list[Math.floor(Math.random() * list.length)].a3; sel.dispatchEvent(new Event('change')); },
+  worlContinue: () => {
+    const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
+    const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
+    S = newGame({ mode: 'worl', home: a3, leader: true, name: 'Leader', countryName }); if (typeof applyWorlStart === 'function') applyWorlStart(); save(); enterGame(false);
+  },
+  dominationContinue: () => {
+    const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
+    const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
+    S = newGame({ mode: 'domination', home: a3, leader: true, name: 'Leader', countryName }); if (typeof ensureDomination === 'function') ensureDomination(); save(); enterGame(false);
+  },
+  situationChoice: x => {
+    const msg = (typeof applySituation === 'function') ? applySituation(+x) : 'No situation.';
+    closeModal(); toast(msg, 'good'); save(); renderHUD(); if (UI.panel) renderPanel();
+  },
   inheritContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
@@ -1459,7 +1501,7 @@ const A = {
   vehicleCompany: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
   closeWatch: () => closeWatch(),
   paper: () => openPaper(),
-  closePaper: () => closePaper(),
+  closePaper: () => { closePaper(); if (S && S.pendingVictory) { const v = S.pendingVictory; S.pendingVictory = null; save(); openModal(`<h2>🏆 Victory!</h2><p>${esc(v)}</p><p class="muted small">Keep playing, or restart for a new run.</p><button class="btn3d orange wide" data-a="closeModal">KEEP PLAYING</button>`, 'center'); return; } if (S && S.pendingSituation && typeof WORL_SITUATIONS !== 'undefined') { const s = WORL_SITUATIONS.find(x => x.id === S.pendingSituation); if (s) openModal(`<h2>🎲 ${esc(s.title)}</h2><p>${esc(s.text)}</p>${s.choices.map((c, i) => `<button class="btn3d orange wide" data-a="situationChoice" data-x="${i}">${esc(c.label)} — ${esc(c.desc)}</button>`).join('')}`, 'center'); } },
   paperPrev: () => flipPaper(-1),
   paperNext: () => flipPaper(1),
   paperEdPrev: () => flipEdition(1),

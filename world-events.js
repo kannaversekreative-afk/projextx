@@ -44,7 +44,8 @@ const WAR_COOLDOWN_DAYS = 3650;
 function warOdds(att, def) { const a = milPower(att), d = milPower(def) * 1.15; return a / (a + d); }
 function warCooldownLeft() {
   if (S.lastWarDay == null) return 0;
-  return Math.max(0, S.lastWarDay + WAR_COOLDOWN_DAYS - S.day);
+  const cd = (S.mode === 'domination') ? 365 : WAR_COOLDOWN_DAYS;
+  return Math.max(0, S.lastWarDay + cd - S.day);
 }
 function canAttack(target) {
   if (target === S.home) return 'That is your own country.';
@@ -138,6 +139,7 @@ function resolveWar(plan) {
   if (attackerWins) {
     shockCountry(plan.target, 'invasion'); shockCountry(S.home, 'peace', 0.5);
     country(plan.target).occ = S.home; country(plan.target).occSince = S.day;
+    if (S.mode === 'domination' && typeof onDominationCapture === 'function') { try { onDominationCapture(plan.target); } catch (e) {} }
     occupy(S.home, plan.target);
     news('War', `Victory. ${cname(S.home)} defeated ${cname(plan.target)} and now occupies it.`, plan.target);
   } else {
@@ -403,6 +405,8 @@ function ratingForYear(c) {
   return { newR, sat, margin, reasons };
 }
 function yearEnd(year) {
+  if (S.mode === 'worl' && typeof worlYearEnd === 'function') { try { worlYearEnd(); } catch (e) {} }
+  if (S.mode === 'domination' && typeof dominationRound === 'function') { try { dominationRound(); } catch (e) {} }
   if (typeof sportSeason === 'function') { try { sportSeason(); } catch (e) {} }
   const entries = [];
   for (const a3 in S.co) {
