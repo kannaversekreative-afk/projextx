@@ -5,58 +5,61 @@
 // No sinks, no free money: every dollar has a payer and a recipient.
 'use strict';
 
-// Every business a player can start from a BUILD STORE picker. `unlock`
-// is the Progress level that opens it, `buildout` is the fit-out cost
-// on top of the lot deposit, `desc` is the plain-language pitch shown
-// in the picker. A store on its own earns modest weekly money —
-// trillions come from developing it (levels, products, managers),
-// never from just opening the doors.
+// Every business a player can start from a BUILD STORE picker.
+// Business types are NEVER locked behind a level: a coffee shop can
+// out-earn an advanced business early, and profit decides, not a
+// gate. `buildout` is the fit-out cost on top of the lot deposit,
+// `desc` is the plain-language pitch shown in the picker. Advanced
+// sectors (semiconductors, robotics) needing research, time and
+// money is a LATER system, not a level lock. A store on its own
+// earns modest weekly money — growth comes from developing it
+// (levels, products, managers), never from just opening the doors.
 const STORE_TYPES = {
-  coffee: { name: 'Coffee shop', icon: '☕', unlock: 1, buildout: 25000, desc: 'Cheap to open, steady foot traffic, small tickets.', products: [
+  coffee: { name: 'Coffee shop', icon: '☕', buildout: 25000, desc: 'Cheap to open, steady foot traffic, small tickets.', products: [
     { name: 'Hot Beverage', price: 4.5, cost: 1.1, capture: 0.32 },
     { name: 'Cold Beverage', price: 5.5, cost: 1.4, capture: 0.42 },
     { name: 'Foods', price: 6.0, cost: 2.2, capture: 0.14 } ] },
-  bakery: { name: 'Bakery', icon: '🥐', unlock: 1, buildout: 28000, desc: 'Morning regulars, cakes carry the margin.', products: [
+  bakery: { name: 'Bakery', icon: '🥐', buildout: 28000, desc: 'Morning regulars, cakes carry the margin.', products: [
     { name: 'Bread', price: 5.0, cost: 1.5, capture: 0.35 },
     { name: 'Pastries', price: 4.0, cost: 1.2, capture: 0.40 },
     { name: 'Cakes', price: 28.0, cost: 9.0, capture: 0.08 } ] },
-  burger: { name: 'Burger joint', icon: '🍔', unlock: 1, buildout: 30000, desc: 'High volume, thin margin, needs traffic.', products: [
+  burger: { name: 'Burger joint', icon: '🍔', buildout: 30000, desc: 'High volume, thin margin, needs traffic.', products: [
     { name: 'Burgers', price: 9.5, cost: 3.2, capture: 0.38 },
     { name: 'Fries', price: 4.0, cost: 1.0, capture: 0.30 },
     { name: 'Drinks', price: 3.5, cost: 0.8, capture: 0.30 } ] },
-  pizza: { name: 'Pizza place', icon: '🍕', unlock: 3, buildout: 35000, desc: 'Families and evenings. Delivery-sized tickets.', products: [
+  pizza: { name: 'Pizza place', icon: '🍕', buildout: 35000, desc: 'Families and evenings. Delivery-sized tickets.', products: [
     { name: 'Pizzas', price: 14.0, cost: 4.5, capture: 0.40 },
     { name: 'Sides', price: 6.0, cost: 1.8, capture: 0.30 },
     { name: 'Drinks', price: 3.5, cost: 0.8, capture: 0.28 } ] },
-  restaurant: { name: 'Restaurant', icon: '🍽️', unlock: 5, buildout: 60000, desc: 'Bigger tickets, bigger wage bill. Needs a good manager.', products: [
+  restaurant: { name: 'Restaurant', icon: '🍽️', buildout: 60000, desc: 'Bigger tickets, bigger wage bill. Needs a good manager.', products: [
     { name: 'Mains', price: 22.0, cost: 7.0, capture: 0.38 },
     { name: 'Starters', price: 9.0, cost: 2.8, capture: 0.30 },
     { name: 'Desserts', price: 8.0, cost: 2.2, capture: 0.22 } ] },
-  grocery: { name: 'Grocery store', icon: '🛒', unlock: 8, buildout: 90000, desc: 'Everyone shops. Low margin, very high volume in big cities.', products: [
+  grocery: { name: 'Grocery store', icon: '🛒', buildout: 90000, desc: 'Everyone shops. Low margin, very high volume in big cities.', products: [
     { name: 'Fresh food', price: 12.0, cost: 8.5, capture: 0.40 },
     { name: 'Pantry', price: 8.0, cost: 5.2, capture: 0.35 },
     { name: 'Household', price: 15.0, cost: 9.5, capture: 0.20 } ] },
-  clothing: { name: 'Clothing store', icon: '👕', unlock: 12, buildout: 55000, desc: 'Fashion margin, seasonal swings.', products: [
+  clothing: { name: 'Clothing store', icon: '👕', buildout: 55000, desc: 'Fashion margin, seasonal swings.', products: [
     { name: 'Tops', price: 32.0, cost: 12.0, capture: 0.38 },
     { name: 'Bottoms', price: 45.0, cost: 17.0, capture: 0.32 },
     { name: 'Accessories', price: 18.0, cost: 6.0, capture: 0.25 } ] },
-  pharmacy: { name: 'Pharmacy', icon: '💊', unlock: 20, buildout: 75000, desc: 'Repeat customers, steady demand in any city.', products: [
+  pharmacy: { name: 'Pharmacy', icon: '💊', buildout: 75000, desc: 'Repeat customers, steady demand in any city.', products: [
     { name: 'Medicine', price: 18.0, cost: 9.0, capture: 0.42 },
     { name: 'Wellness', price: 24.0, cost: 11.0, capture: 0.30 },
     { name: 'Essentials', price: 9.0, cost: 4.0, capture: 0.25 } ] },
-  electronics: { name: 'Electronics store', icon: '📱', unlock: 25, buildout: 110000, desc: 'Big tickets, but customers compare prices hard.', products: [
+  electronics: { name: 'Electronics store', icon: '📱', buildout: 110000, desc: 'Big tickets, but customers compare prices hard.', products: [
     { name: 'Phones', price: 699.0, cost: 520.0, capture: 0.10 },
     { name: 'Accessories', price: 29.0, cost: 10.0, capture: 0.45 },
     { name: 'Audio', price: 89.0, cost: 48.0, capture: 0.25 } ] },
-  gym: { name: 'Gym', icon: '🏋️', unlock: 35, buildout: 130000, desc: 'Membership money, week after week, if service holds up.', products: [
+  gym: { name: 'Gym', icon: '🏋️', buildout: 130000, desc: 'Membership money, week after week, if service holds up.', products: [
     { name: 'Membership', price: 39.0, cost: 8.0, capture: 0.45 },
     { name: 'Classes', price: 15.0, cost: 4.0, capture: 0.30 },
     { name: 'Gear', price: 25.0, cost: 11.0, capture: 0.20 } ] },
-  salon: { name: 'Salon', icon: '💇', unlock: 45, buildout: 45000, desc: 'Loyal clients, skill-driven reviews.', products: [
+  salon: { name: 'Salon', icon: '💇', buildout: 45000, desc: 'Loyal clients, skill-driven reviews.', products: [
     { name: 'Cuts', price: 35.0, cost: 8.0, capture: 0.42 },
     { name: 'Colour', price: 65.0, cost: 18.0, capture: 0.30 },
     { name: 'Products', price: 22.0, cost: 9.0, capture: 0.22 } ] },
-  bookstore: { name: 'Bookstore', icon: '📚', unlock: 50, buildout: 40000, desc: 'Quiet, loyal, and review-sensitive.', products: [
+  bookstore: { name: 'Bookstore', icon: '📚', buildout: 40000, desc: 'Quiet, loyal, and review-sensitive.', products: [
     { name: 'Books', price: 19.0, cost: 10.0, capture: 0.45 },
     { name: 'Stationery', price: 12.0, cost: 5.0, capture: 0.30 },
     { name: 'Cafe corner', price: 6.0, cost: 1.8, capture: 0.22 } ] },
@@ -92,11 +95,13 @@ function gainXP(n, reason) {
   return leveled;
 }
 function progressUnlockText(level) {
-  const typeUnlock = Object.values(STORE_TYPES).filter(t => t.unlock === level).map(t => `${t.name} unlocked`);
+  // Business types are deliberately NOT in here: no type is ever
+  // locked behind a level. Progress unlocks campaigns, store
+  // upgrades and manager levels only.
   const campUnlock = STORE_CAMPAIGNS.filter(c => c.unlock === level).map(c => `${c.name} campaign unlocked`);
   const mgr = { 5: 'Manager Lv 2 unlocked', 15: 'Manager Lv 3 unlocked', 30: 'Manager Lv 4 unlocked', 50: 'Manager Lv 5 unlocked' }[level];
   const up = { 15: 'Store upgrade Lv 2 unlocked', 25: 'Store upgrade Lv 3 unlocked', 45: 'Store upgrade Lv 4 unlocked', 70: 'Store upgrade Lv 5 unlocked' }[level];
-  const parts = [...typeUnlock, ...campUnlock];
+  const parts = [...campUnlock];
   if (mgr) parts.push(mgr);
   if (up) parts.push(up);
   return parts.join(' · ');
@@ -149,7 +154,6 @@ function storeAddress(cityId, lotT) {
 function buildStore(cityId, lot, type) {
   ensureStores();
   const def = STORE_TYPES[type || 'coffee']; if (!def) return 'Unknown store type.';
-  if (progressLevel() < (def.unlock || 1)) return `${def.name} unlocks at Progress Lv ${def.unlock}. You are Lv ${progressLevel()}.`;
   const lotObj = typeof lot === 'object' ? lot : (cityLots(cityId) || []).find(l => l.t === lot);
   if (!lotObj || lotObj.kind !== 'lease') return 'That lot is not for lease anymore.';
   if (S.stores.some(s => s.cityId === cityId && s.lotT === lotObj.t)) return 'That lot already has a store.';

@@ -1774,7 +1774,7 @@ PANELS.progress = () => {
   const selText = progressUnlockText(sel);
   return panelShell('Progress', `Lv ${p.level} · ${p.xp} XP · ${need ? `${need - p.xp} XP to Lv ${p.level + 1}` : 'Max level'}`,
     `<div class="card in"><h4>Your level</h4><div style="background:#eef5ff;border-radius:6px;height:12px;overflow:hidden"><div style="width:${pct}%;height:100%;background:#2f7cf6"></div></div><p class="muted small">${pct}% to next level.</p>
-    <p class="muted small">XP comes from doing: building a store (+150), developing a product (+40), upgrading a store (+60), and every profitable store week (+5). Levels unlock new business types, campaigns, store upgrades and manager levels — high-level employees stay locked until you earn them.</p>
+    <p class="muted small">XP comes from doing: building a store (+150), developing a product (+40), upgrading a store (+60), and every profitable store week (+5). Levels unlock campaigns, store upgrades and manager levels — business types are never locked, profit decides. High-level employees stay locked until you earn them.</p>
     ${next ? `<p><b>Next unlock:</b> Lv ${next.level} — ${esc(next.text)}</p>` : '<p><b>Everything unlocked.</b></p>'}</div>
     <h4>Rewards map — tap a level</h4><div class="row wrap">${tiles.join('')}</div>
     <div class="card in"><h4>Level ${sel}</h4><p>${selText ? esc(selText) : (sel < p.level ? 'No unlock at this level — it was a step toward the next one.' : sel === p.level ? 'Your current level.' : `Locked. ${next ? `Next unlock is Lv ${next.level}.` : ''}`)}</p></div>
@@ -2445,19 +2445,22 @@ const A = {
   buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); UI.buildLot = { cityId: +cityId, lotT: +lotT };
     const lot = (cityLots(+cityId) || []).find(l => l.t === +lotT) || {};
     const city = W.cities[+cityId] || {};
+    const country = city.a3 ? W.byA3[city.a3] : null;
+    const sectors = country && typeof sectorPoolForCountry === 'function' ? sectorPoolForCountry(country) : [];
     const rent = lot.rent || 2000, deposit = Math.round(rent * 10), lv = progressLevel();
     const cards = Object.entries(STORE_TYPES).map(([k, d]) => {
       const avgTicket = d.products.reduce((a, p) => a + p.price, 0) / d.products.length;
       const avgMargin = d.products.reduce((a, p) => a + (p.price - p.cost) / p.price, 0) / d.products.length;
       const total = deposit + (d.buildout || 25000);
-      const locked = lv < (d.unlock || 1);
-      return `<div class="card in"><div class="row between"><b>${d.icon} ${d.name}</b>${locked ? `<span>🔒 Unlocks at Lv ${d.unlock}</span>` : `<button class="btn3d orange" data-a="buildStoreDo" data-x="${k}">BUILD · ${fmtMoney(total, true)}</button>`}</div>
+      return `<div class="card in"><div class="row between"><b>${d.icon} ${d.name}</b><button class="btn3d orange" data-a="buildStoreDo" data-x="${k}">BUILD · ${fmtMoney(total, true)}</button></div>
       <p class="muted small">${esc(d.desc)}</p>
       <div class="kv"><span>Products</span><b>${d.products.map(p => esc(p.name)).join(', ')}</b></div>
       <div class="kv"><span>Avg ticket</span><b>${fmtMoney(avgTicket)}</b></div><div class="kv"><span>Avg margin</span><b>${Math.round(avgMargin * 100)}%</b></div>
       <div class="kv"><span>Fit-out</span><b>${fmtMoney(d.buildout || 25000, true)}</b></div><div class="kv"><span>Deposit + fit-out</span><b>${fmtMoney(total, true)}</b></div></div>`;
     }).join('');
-    openModal(`<h2>Build a store</h2><p class="muted">${esc(city.name || '')} · Population ${(city.pop || 0).toLocaleString()} · Foot traffic ${(lot.traffic || 0).toLocaleString()}/week · Rent ${fmtMoney(rent)}/week · Deposit ${fmtMoney(deposit, true)} upfront. Bigger cities mean more customers — pick the business that fits this spot, then develop it: a store alone never makes trillions.</p><p class="muted small">Your Progress: Lv ${lv} · Manager level available: Lv ${maxManagerLevel()}</p><div class="list">${cards}</div>`, 'sheet'); },
+    openModal(`<h2>Build a store</h2><p class="muted">${esc(city.name || '')} · Population ${(city.pop || 0).toLocaleString()} · Foot traffic ${(lot.traffic || 0).toLocaleString()}/week · Rent ${fmtMoney(rent)}/week · Deposit ${fmtMoney(deposit, true)} upfront. Bigger cities mean more customers — pick the business that fits this spot, then develop it: a store alone never makes trillions.</p>
+    ${sectors.length ? `<p class="muted small"><b>Sectors available in ${esc(country.name)}:</b> ${sectors.map(esc).join(' · ')}. Every country gets its own set. Advanced sectors like semiconductors and robotics will need research, time and money later — for now no business type is locked, and profit decides: a coffee shop can out-earn a fancy business early.</p>` : ''}
+    <p class="muted small">Your Progress: Lv ${lv} · Manager level available: Lv ${maxManagerLevel()}</p><div class="list">${cards}</div>`, 'sheet'); },
   buildStoreDo: x => { const lot = UI.buildLot; if (!lot) return toast('Pick a FOR LEASE pin first', 'bad'); const err = buildStore(lot.cityId, lot.lotT, x); if (err) return toast(err, 'bad'); closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Store opened! Results arrive every week.', 'good'); save(); refreshAll(); },
   openStadium: x => { closePopup(); if (CityView.isOpen()) leaveCity(); ensureSports(); S.sports.tab = sportTeam(x).league; openPanel('sports'); UI.stack = [x]; renderPanel(); },
   webCo: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
