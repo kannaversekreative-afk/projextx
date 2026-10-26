@@ -448,15 +448,25 @@ const MapView = (() => {
         });
       });
     }
-    const r = Math.max(3.4, Math.min(7.5, 2.6 + v.s * 2.2));
+    const r = Math.max(6, Math.min(14, 4 + v.s * 3));
     const mineSet = new Set(); for (const a3 in st.holdings) if (controlled(a3)) mineSet.add(W.byA3[a3].capital);
     W.cities.forEach(ct => {
       const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
       const isMine = mineSet.has(ct.id), isSel = sel === ct.id, held = st.holdings[ct.a3] && !isMine;
       const rr = isSel ? r * 1.7 : isMine ? r * 1.35 : r;
       if (isSel) { c.fillStyle = 'rgba(47,124,246,0.25)'; c.beginPath(); c.arc(sx, sy, rr * 2.2, 0, 7); c.fill(); }
-      c.fillStyle = isMine || isSel ? '#2f7cf6' : '#ffffff'; c.strokeStyle = isMine || isSel ? '#ffffff' : '#2f7cf6';
-      c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 2; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      // Each country's circle IS its flag: a circular flag badge,
+      // clipped to the circle, with a blue ring when it's yours or
+      // selected and a white ring otherwise.
+      const fl = W.byA3[ct.a3].flag || '🏳️';
+      c.save();
+      c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.clip();
+      c.fillStyle = '#ffffff'; c.fillRect(sx - rr, sy - rr, rr * 2, rr * 2);
+      c.font = `${Math.round(rr * 1.9)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(fl, sx, sy + 1);
+      c.restore();
+      c.strokeStyle = isMine || isSel ? '#2f7cf6' : '#ffffff';
+      c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 1.5; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
     });
     labelRects = [];
     // Your city: a circle with a star in it, in your home country, just
