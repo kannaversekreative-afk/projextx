@@ -234,6 +234,8 @@ function webF(c) { return (1 + WEB_TIERS[c.web.tier].boost + (c.web.addons.seo ?
 // One location for one week. Shared by the simulation and the lease forecast.
 function locEconomics(c, loc, nLocs) {
   const k = W.byA3[c.a3], w = k.wealth, L = SECTORS[c.sector].loc, s = c.set;
+  // Mars: an unlocked country's companies pay 15% less in location costs.
+  const cm = (typeof marsCostMult === 'function') ? marsCostMult(c.a3) : 1;
   const m = bizMult(c.a3, loc.city || c.city), brandF = 0.6 + (c.rating || 3.5) * 0.09, qualityF = 0.7 + 0.15 * s.quality, interiorF = [1, 1.15, 1.3][loc.interior];
   // Tax demand, normalised so the default rates (20% income, 5% VAT) change
   // nothing: raising them cuts household spending, cutting them lifts it.
@@ -249,7 +251,7 @@ function locEconomics(c, loc, nLocs) {
     const rev = served * L.ticket * Math.pow(w, 0.6) * s.price * Math.pow(econ(c), 0.7);
     const cogs = rev * L.cogs * (0.8 + 0.1 * s.quality);
     const wages = loc.staff * L.wage * Math.pow(w, 0.7) * s.wage;
-    return { demand, cap, served, sat, rev, cost: cogs + wages + loc.rent, profit: rev - cogs - wages - loc.rent };
+    return { demand, cap, served, sat, rev, cost: (cogs + wages + loc.rent) * cm, profit: rev - (cogs + wages + loc.rent) * cm };
   }
   // Offices and warehouses: revenue per employee, with a market that saturates.
   const totalStaff = c._staff != null ? c._staff : c.locs.reduce((a, l) => a + l.staff, 0);
@@ -259,7 +261,7 @@ function locEconomics(c, loc, nLocs) {
   const rev = loc.staff * L.perStaff * Math.pow(w, 0.7) * dF;
   const wages = loc.staff * L.wage * Math.pow(w, 0.8) * s.wage;
   const sat = clamp(3 + (s.wage - 1) * 2.5 + (s.quality - 3) * 0.3 + (interiorF - 1) * 3 - (s.price - 1) * 1.5 + extraSat, 1, 5);
-  return { demand: loc.staff, cap: maxStaff(c, loc), served: loc.staff, sat, rev, cost: wages + loc.rent, profit: rev - wages - loc.rent };
+  return { demand: loc.staff, cap: maxStaff(c, loc), served: loc.staff, sat, rev, cost: (wages + loc.rent) * cm, profit: rev - (wages + loc.rent) * cm };
 }
 function fleetDemand(c) {
   const k = W.byA3[c.a3], cs = country(c.a3);

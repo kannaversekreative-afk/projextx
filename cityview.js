@@ -5,6 +5,7 @@
 const CityView = (() => {
   const TW = 72, TH = 36;
   let el, canvas, ctx, layer, img, layout, city, view = { x: 0, y: 0, s: 1 }, ox = 0, oy = 0, W2 = 0, H2 = 0;
+  let marsMode = false;
   let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', vehicles = [], animTimer = null, lastAnim = 0;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -407,12 +408,52 @@ const CityView = (() => {
     [0.33, 0.66].forEach(f => { const mx = a[0] + (b[0] - a[0]) * f, my = a[1] + (b[1] - a[1]) * f; c.beginPath(); c.moveTo(mx, my - 6); c.lineTo(mx, my - 34); c.stroke(); c.beginPath(); c.moveTo(mx - 7, my - 34); c.lineTo(mx + 7, my - 34); c.stroke(); });
   }
 
+  // Mars city: dirt and mines only — no streets, buildings, parks or
+  // landmarks. Same isometric grid as an Earth city, so taps and pins
+  // work the same way; only the ground and the mine sites differ.
+  function renderMars(c) {
+    const N = layout.N, T = layout.tiles;
+    const sky = c.createLinearGradient(0, 0, 0, H2);
+    sky.addColorStop(0, '#120a12'); sky.addColorStop(0.5, '#2a1210'); sky.addColorStop(1, '#4a2418');
+    c.fillStyle = sky; c.fillRect(0, 0, W2, H2);
+    c.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 40; i++) { const sx = (i * 173) % W2, sy = (i * 89) % Math.max(80, oy - 60); c.fillRect(sx, sy, 2, 2); }
+    const dirt = ['#b5533c', '#a84a34', '#c05e42', '#9e4630'];
+    T.forEach(t => {
+      const fill = dirt[Math.floor(t.seed * dirt.length) % dirt.length];
+      diamond(c, t.x, t.y, fill);
+      diamond(c, t.x, t.y, shade(fill, 0.92), 0.06);
+      if (t.kind === 'dirt' && t.seed > 0.72) { // crater
+        const [cx, cy] = P(t.x + 0.5, t.y + 0.5);
+        c.fillStyle = 'rgba(60,20,12,0.45)'; c.beginPath(); c.ellipse(cx, cy, 12, 6, 0, 0, 7); c.fill();
+        c.fillStyle = 'rgba(255,220,190,0.25)'; c.beginPath(); c.ellipse(cx - 3, cy - 2, 6, 2.5, 0, 0, 7); c.fill();
+      }
+      if (t.kind === 'dirt' && t.seed < 0.25) { // scattered rocks
+        const [rx, ry] = P(t.x + 0.3 + t.seed, t.y + 0.6);
+        c.fillStyle = '#7a3a28'; c.beginPath(); c.arc(rx, ry, 3, 0, 7); c.fill();
+      }
+      if (t.kind === 'mine') {
+        const [cx, cy] = P(t.x + 0.5, t.y + 0.5);
+        // Open pit, spoil heap, shaft headframe and conveyor.
+        c.fillStyle = '#2b120c'; c.beginPath(); c.ellipse(cx, cy + 2, 20, 10, 0, 0, 7); c.fill();
+        c.fillStyle = '#5e2c1c'; c.beginPath(); c.ellipse(cx, cy, 14, 7, 0, 0, 7); c.fill();
+        c.fillStyle = '#8a4a30'; c.beginPath(); c.ellipse(cx + 18, cy + 8, 12, 6, 0, 0, 7); c.fill();
+        c.strokeStyle = '#d8c9b0'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(cx - 8, cy - 4); c.lineTo(cx - 4, cy - 30); c.moveTo(cx + 8, cy - 4); c.lineTo(cx + 4, cy - 30); c.moveTo(cx - 8, cy - 28); c.lineTo(cx + 8, cy - 28); c.stroke();
+        c.strokeStyle = '#3a3f45'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(cx + 18, cy + 6); c.lineTo(cx + 34, cy + 16); c.stroke();
+        roofs[t.y * N + t.x] = [cx, cy - 32];
+      }
+    });
+  }
+
   function render() {
     const N = layout.N, T = layout.tiles, maxH = 320;
     W2 = N * TW + 140; H2 = N * TH + maxH + 120; ox = W2 / 2; oy = maxH + 40;
     const dpr = Math.min(1.6, window.devicePixelRatio || 1);
     img = document.createElement('canvas'); img.width = W2 * dpr; img.height = H2 * dpr;
     const c = img.getContext('2d'); c.scale(dpr, dpr);
+    if (marsMode) { renderMars(c); return; }
     // Sky above the city, not flat green: a blue-to-pale gradient with
     // a few clouds, so the city sits in a sky instead of a green void.
     const sky = c.createLinearGradient(0, 0, 0, H2);
@@ -510,6 +551,15 @@ const CityView = (() => {
 
   function pins() {
     layer.innerHTML = '';
+    if (marsMode) {
+      const sites = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home) : [];
+      const add = (t, cls, html, fn, title) => { const r = roofs[t]; if (!r) return; const p = document.createElement('button'); p.className = 'pin ' + cls; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = html; if (title) p.title = title; p.addEventListener('click', e => { e.stopPropagation(); fn(); }); layer.appendChild(p); };
+      sites.forEach(s => {
+        if (s.owned) add(s.t, 'pin-prop', '<span class="logo own">⛏️</span>', () => onPin({ type: 'marsMine', site: s, lot: { t: s.t } }), s.resource + ' mine');
+        else add(s.t, 'pin-sale', '<span class="bld">⛏️</span><span class="tag">FOR SALE</span>', () => onPin({ type: 'marsMine', site: s, lot: { t: s.t } }), s.resource + ' mine site');
+      });
+      return;
+    }
     const lots = cityLots(city.id), N = layout.N, owner = S.co[city.a3], mineCo = controlled(city.a3);
     const locAt = {}; owner.locs.forEach(l => { if ((l.city || owner.city) === city.id) locAt[l.t] = l; });
     const show = k => filter === 'all' || filter === k || (filter === 'mine' && k === 'prop');
@@ -573,6 +623,11 @@ const CityView = (() => {
       const tx = Math.floor(dx / TW + dy / TH), ty = Math.floor(dy / TH - dx / TW);
       if (tx < 0 || ty < 0 || tx >= layout.N || ty >= layout.N) return;
       const tIdx = ty * layout.N + tx, tile = layout.tiles[tIdx];
+      if (marsMode) {
+        const site = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home).find(s => s.t === tIdx) : null;
+        if (site) onPin({ type: 'marsMine', site, lot: { t: tIdx } });
+        return;
+      }
       if (!tile || tile.kind !== 'lot') return;
       const owner = S.co[city.a3];
       const loc = owner.locs.find(l => (l.city || owner.city) === city.id && l.t === tIdx);
@@ -591,6 +646,7 @@ const CityView = (() => {
   return {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind(); },
     open(id) {
+      marsMode = false;
       city = W.cities[id]; layout = cityLayout(city); roofs = {}; render(); buildVehicles(); startAnim();
       el.classList.add('open');
       const vw = el.clientWidth, vh = el.clientHeight;
@@ -599,11 +655,23 @@ const CityView = (() => {
       view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
       pins(); apply();
     },
-    close() { stopAnim(); el.classList.remove('open'); city = null; img = null; },
+    openMars() {
+      marsMode = true;
+      city = { id: MARS_CITY_ID, name: 'Mars', a3: S.home, code: 'MARS', size: 0.5, port: false, wealth: 1, pop: 0 };
+      layout = (typeof marsLayout === 'function') ? marsLayout() : cityLayout(city); roofs = {}; vehicles = []; render();
+      el.classList.add('open');
+      const vw = el.clientWidth, vh = el.clientHeight;
+      view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
+      const [cx, cy] = P(layout.landmark.x + 1.5, layout.landmark.y + 1.5);
+      view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
+      pins(); apply();
+    },
+    close() { stopAnim(); marsMode = false; el.classList.remove('open'); city = null; img = null; },
     refresh() { if (city) pins(); },
     setFilter(f) { filter = f; pins(); },
     get filter() { return filter; },
     get city() { return city; },
     isOpen() { return !!city; },
+    isMars() { return marsMode; },
   };
 })();

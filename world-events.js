@@ -344,6 +344,7 @@ function businessWeek() {
   if (typeof ensureEarnings === 'function') { try { const e = ensureEarnings(); if (S.day >= e.next) earningsQuarter(); } catch (err) {} }
   if (typeof storesWeek === 'function') { try { storesWeek(); } catch (e) {} }
   if (typeof loansWeek === 'function') { try { loansWeek(); } catch (e) {} }
+  if (typeof marsWeek === 'function') { try { marsWeek(); } catch (e) {} }
   S.stats.bestWeek = Math.max(S.stats.bestWeek, profit);
   if (profit > 0) S.xp += Math.min(150, Math.sqrt(profit) / 4);
   // Monthly: lots churn; rival companies sometimes bid for yours.

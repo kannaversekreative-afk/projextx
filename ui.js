@@ -78,6 +78,7 @@ function migrateSave(s) {
   if (s.co) Object.values(s.co).forEach(c => { if (!Array.isArray(c.board)) c.board = []; if (!isFinite(c.weekProfitStreak)) c.weekProfitStreak = 0; if (!Array.isArray(c.weekNets)) c.weekNets = []; });
   if (!s.maxDays) s.maxDays = NORMAL_DAYS;
   if (!Array.isArray(s.placed)) s.placed = [];
+  if (!s.mars) s.mars = { unlocked: {}, mines: {}, sites: {}, unlockOrder: [], pool: null };
   if (s.yearsBought == null) s.yearsBought = 0;
   if (s.homeTaxPrev == null && s.countries && s.countries[s.home]) { const cs = s.countries[s.home]; s.homeTaxPrev = { tax: cs.tax, incTax: cs.incTax || 0.20, vat: cs.vat || 0.05 }; }
   if (s.extra == null) s.extra = {};
@@ -272,7 +273,15 @@ function renderHUD() {
 }
 function renderCityHUD() {
   if (!CityView.isOpen()) { $('chud').innerHTML = ''; return; }
-  const c = CityView.city, k = W.byA3[c.a3], co = S.co[c.a3];
+  const c = CityView.city;
+  if (typeof MARS_CITY_ID !== 'undefined' && c.id === MARS_CITY_ID) {
+    const sites = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home) : [];
+    const owned = sites.filter(s => s.owned).length;
+    $('chud').innerHTML = `<div class="citybar card"><div><b>🚀 Mars</b><span class="muted"> · Dirt and mines · ${owned} of ${sites.length} mine sites owned</span></div>
+    <div class="city-actions"><button data-a="leaveCity">✕ Leave Mars</button></div></div>`;
+    return;
+  }
+  const k = W.byA3[c.a3], co = S.co[c.a3];
   // A company's locations are all in its own capital city (co.city), by construction
   // in addLocation(), so the count here is exact, not a filter that happens to work.
   const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
@@ -912,7 +921,20 @@ function renderPopup() {
       <p class="muted small">Pays its weekly income straight to your cash every week.</p></div>`;
   } else if (p.type === 'pin') {
     const lot = p.lot, city = CityView.city, co = S.co[city.a3];
-    if (p.pin.type === 'stadium') {
+    if (p.pin.type === 'marsMine') {
+      const s = p.pin.site, roi = s.price ? s.income * 52 / s.price : 0;
+      if (s.owned) {
+        $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>⛏️ ${esc(s.resource)} mine</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">Mars · Your mine site</p>
+        <div class="stats3 box"><div><span>Value</span><b>${fmtMoney(s.price, true)}</b></div><div><span>Income / week</span><b>${fmtMoney(s.income)}</b></div><div><span>ROI</span><b>${(roi * 100).toFixed(2)}%</b></div></div>
+        <button class="btn flex" data-a="marsSellMine" data-x="${s.t}">SELL · ${fmtMoney(Math.round(s.price * 0.8), true)}</button></div>`;
+      } else {
+        $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>⛏️ ${esc(s.resource)} mine site</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">Mars · Dirt and mines · Buy it like a building in a city</p>
+        <div class="stats3 box"><div><span>Price</span><b>${fmtMoney(s.price, true)}</b></div><div><span>Weekly income</span><b>${fmtMoney(s.income)}</b></div><div><span>ROI</span><b>${(roi * 100).toFixed(2)}%</b></div></div>
+        <button class="btn3d orange wide" data-a="marsBuyMine" data-x="${s.t}">BUY MINE · ${fmtMoney(s.price, true)}</button></div>`;
+      }
+    } else if (p.pin.type === 'stadium') {
       const tm = p.pin.team;
       $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>🏟️ ${esc(tm.stadium.name)}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
         <p class="muted small">${esc(tm.name)} · ${tm.wins}W - ${tm.losses}L · ${tm.stadium.capacity.toLocaleString()} seats · Value ${fmtMoney(tm.value, true)}</p>
@@ -1590,6 +1612,7 @@ PANELS.mycity = () => {
     <h4>Your trading firm</h4><div class="kv"><span>📈 Your trading firm · Lv ${m.firm}</span><button class="btn" data-a="myCityBuy" data-x="firm|firm">${m.firm ? `UPGRADE · ${fmtMoney(myCityPrice(1000000000) * (m.firm + 1), true)}` : `OPEN FIRM · ${fmtMoney(myCityPrice(1000000000), true)}`}</button></div>
     <p class="muted small">Bank and trading firm pay a small weekly income. The houses, land and cars are for owning — the top house in a top country costs trillions, and that is the point.</p>`);
 };
+PANELS.mars = () => marsPanelHTML();
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
@@ -1675,7 +1698,7 @@ const MENU_ITEMS = [
   ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
   ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
   ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
-  ['hq', '🏭', 'HQ'],
+  ['hq', '🏭', 'HQ'], ['mars', '🚀', 'Mars'],
   ['goals', '🎯', 'Daily goals'],
   ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['bank', '🏦', 'Bank'],
   ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
@@ -1699,7 +1722,7 @@ function openMenuPopup() {
   <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">🏢</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
-  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city']])}
+  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
   ${g('Play', [['sports', 'Teams and leagues'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
@@ -1833,6 +1856,10 @@ const A = {
   departures: () => openDeparturesModal(),
   depCont: x => { UI.depCont = x; openDeparturesModal(); },
   depFly: x => { closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
+  marsExpand: () => { const err = marsExpand(S.home); if (err) return toast(err, 'bad'); save(); renderPanel(); toast('Mine expanded.', 'good'); },
+  marsTravel: () => { closePanel(); closeModal(); CityView.openMars(); document.body.classList.add('in-city'); renderCityHUD(); toast('Welcome to Mars.', 'good'); },
+  marsBuyMine: x => { const err = marsBuySite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine bought. Income arrives every week.', 'good'); save(); refreshAll(); },
+  marsSellMine: x => { const err = marsSellSite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine sold.', 'good'); save(); refreshAll(); },
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
   star: (x, el, e) => {
