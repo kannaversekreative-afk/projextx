@@ -306,7 +306,13 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 
 body.in-city #hud { display: none; }
 @media (max-width: 760px) {
-  #panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 72vh; border-radius: 24px; }
+  /* Phone panels open as a full-width sheet, like the More menu —
+     never a narrow side panel that cuts content off. Matches the
+     .mbox.sheet height (86vh) and top-only rounding. */
+  #panel { left: 0; right: 0; top: auto; bottom: 0; width: 100%; max-width: 100%; max-height: 86vh; border-radius: 24px 24px 0 0; }
+  .panel-head { flex-wrap: wrap; }
+  .panel-title, .panel-title > div { min-width: 0; }
+  .panel-head h3 { overflow-wrap: anywhere; }
   @keyframes slidein { from { transform: translateY(40px); opacity: 0; } }
   .popup { top: auto; bottom: 12px; transform: translateX(-50%); max-height: 62vh; }
   .company-card { max-width: calc(100vw - 80px); }
@@ -329,6 +335,10 @@ body.in-city #hud { display: none; }
 .hud-tl-text b { font-size: 15px; }
 .hud-tl-text small { font-size: 14px; color: #cfe0ff; font-weight: 700; }
 .hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; }
+.hud-tr-wrap { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 8px; align-items: center; }
+.hud-tr-wrap .hud-pill { position: static; }
+.hud-bell { position: relative; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; width: 44px; height: 44px; display: grid; place-items: center; font-size: 20px; box-shadow: var(--shadow); }
+.hud-bell-badge { position: absolute; top: -4px; right: -4px; background: #e03131; color: #fff; border-radius: 10px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; font-size: 11px; font-weight: 900; }
 .hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }
 .hud-br { right: max(12px, env(safe-area-inset-right)); }
@@ -382,12 +392,18 @@ body.in-city #hud { display: none; }
    lives in #game, so rotating that one box rotates map, HUD, panels
    and city view together. Only portrait phones get this — a phone
    already held sideways, a tablet and a desktop are untouched, because
-   they are already horizontal. When rotated, the panel goes back to
-   the web side sheet on the right, not the phone bottom sheet. */
+   they are already horizontal. Phone panels stay full-width sheets
+   (see the override below), not the web side sheet on the right. */
 body.landscape-phone #game { position: fixed; width: 100dvh; height: 100dvw; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg); overflow: hidden; }
 body.landscape-phone #panel { left: auto; right: 12px; top: 12px; bottom: 12px; width: min(420px, 52%); max-height: none; }
 body.landscape-phone .popup { top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100% - 120px); }
 body.landscape-phone .company-card { max-width: calc(100% - 130px); }
+/* Phone panels stay full-width sheets even when the game is rotated:
+   this must come after the landscape-phone side-sheet rule above,
+   or that rule wins and the panel shrinks back to a 52% strip. */
+@media (max-width: 760px) {
+  body.landscape-phone #panel { left: 0; right: 0; top: auto; bottom: 0; width: 100%; max-width: 100%; max-height: 86vh; border-radius: 24px 24px 0 0; }
+}
 
 /* Leader inherit screen: white, full screen, above everything else. */
 #inherit { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; background: #000; color: #fff; padding: 24px; text-align: center; overflow-y: auto; -webkit-overflow-scrolling: touch; }
