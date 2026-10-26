@@ -156,14 +156,20 @@ function tickerFor(name, used) {
 }
 function makeCompany(k, sector, usedNames, usedSyms) {
   const info = SECTORS[sector];
-  let brand, name, sym;
+  let brand, name, sym, hqCity = null;
   // Shuffled world only: names/tickers from the separate random pool, so
   // a random run never reuses the real World's naming pool. Real World
   // and tycoon games keep the base generator below, unchanged.
   if (typeof genRandomCompany === 'function' && isRandomWorld()) { const g = genRandomCompany(sector, usedNames, usedSyms); if (g) { brand = g.brand; name = g.name; sym = g.sym; } }
   if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand); name = brand + pick(SUFFIX[sector]); sym = tickerFor(brand, usedSyms); }
+  // Parody table: a flagship in a covered sector takes its parody name,
+  // ticker and real HQ city (exact game city, else the country's largest).
+  if (!isRandomWorld() && typeof parodyFor === 'function') {
+    const p = parodyFor(k.a3, sector, usedNames, usedSyms);
+    if (p) { name = p.name; sym = p.sym; usedNames.add(name); usedSyms.add(sym); hqCity = hqCityId(k.a3, p.hq); }
+  }
   const g = Math.log10(Math.max(30, k.gdp0));
-  const c = { a3: k.a3, sector, name, sym, city: k.capital, color: LOGO_COLORS[Math.floor(rand() * LOGO_COLORS.length)],
+  const c = { a3: k.a3, sector, name, sym, city: hqCity || k.capital, color: LOGO_COLORS[Math.floor(rand() * LOGO_COLORS.length)],
     price: 1, p0: 1, shares: 1, listed: true, ai: true, pe: info.pe * (0.85 + rand() * 0.3), vol: info.vol * (0.85 + rand() * 0.4) * (k.wealth < 0.6 ? 1.2 : 1),
     beta: info.beta * (0.8 + rand() * 0.4), mood: gauss() * 0.3, moodT: gauss() * 0.4, tmp: 0, shock: 0, pattern: null,
     set: { price: 1, quality: 3, wage: 1 }, locs: [], fleet: 0, web: { tier: clamp(Math.round(k.wealth * 1.4 + rand() * 1.2 - 0.4), 0, 4), ads: {}, addons: {} },

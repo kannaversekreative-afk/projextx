@@ -474,6 +474,26 @@ function sectorPoolForCountry(k, year) {
   const out = []; pool.forEach(n => { const s = LEADER_SECTOR_BY_NAME[n]; if (s && !out.includes(n) && !(s.to && yr > s.to)) out.push(n); });
   return out;
 }
+// ---------- parody company table (real-companies.js) ----------
+// REAL_COMPANIES[a3] lists parody companies (parody name + ticker, real
+// HQ city) per sector. A generated company in a covered sector takes the
+// parody instead of a fictional name. Random worlds never use it.
+function parodyFor(a3, sector, usedNames, usedSyms) {
+  const list = (typeof REAL_COMPANIES !== 'undefined' && REAL_COMPANIES[a3]) || [];
+  return list.find(e => e.sector === sector && !(usedNames && usedNames.has(e.name)) && !(usedSyms && usedSyms.has(e.sym))) || null;
+}
+// HQ city resolution: exact game-city name match in the country
+// (accents/punctuation ignored), else the country's largest city.
+function hqCityId(a3, hq) {
+  if (!hq || typeof W === 'undefined' || !W || !W.cities) return null;
+  const inCountry = W.cities.filter(c => c.a3 === a3);
+  if (!inCountry.length) return null;
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').trim();
+  const exact = inCountry.find(c => norm(c.name) === norm(hq));
+  if (exact) return exact.id;
+  return inCountry.slice().sort((x, y) => y.pop - x.pop)[0].id;
+}
+
 function inheritDifficulty(k) {
   const gdpPc = k.gdp0 * 1e6 / Math.max(1, k.pop0);
   if (k.gdp0 > 1e6) return 'Powerful';
@@ -496,6 +516,11 @@ function makeExtraBusiness(k, sector, usedNames, usedSyms, idx) {
   // Shuffled world only: separate random pool (see random-names.js).
   if (typeof genRandomCompany === 'function' && isRandomWorld()) { const g = genRandomCompany(sector, usedNames, usedSyms); if (g) { brand = g.brand; name = g.name; sym = g.sym; } }
   if (!name) { do { brand = pick(BRAND_A) + pick(BRAND_B); } while (usedNames.has(brand)); usedNames.add(brand); name = brand + pick(SUFFIX[sector] || [' Co.']); sym = tickerFor(brand, usedSyms); }
+  // Parody table: an extra in a covered sector takes its parody name/ticker.
+  if (!isRandomWorld() && typeof parodyFor === 'function') {
+    const p = parodyFor(k.a3, sector, usedNames, usedSyms);
+    if (p) { name = p.name; sym = p.sym; usedNames.add(name); usedSyms.add(sym); }
+  }
   const gdpDollars = k.gdp0 * 1e6;
   const value = Math.max(1e6, gdpDollars * 0.008 / 3 * (0.7 + rand() * 0.6));
   const p0 = +(8 + rand() * 190).toFixed(2);
