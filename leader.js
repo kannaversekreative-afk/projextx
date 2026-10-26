@@ -104,16 +104,40 @@ LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
 // group: transport sectors get a fleet, others get a location template.
 (function expandSectors() {
   if (typeof SECTORS === 'undefined') return;
-  const locFor = g => g === 'food' || g === 'service' ? { name: 'Shop', mode: 'traffic', capture: 0.08, ticket: 40, cogs: 0.5, throughput: 200, wage: 700, staff: 3, buildout: 120000 }
-    : g === 'transport' ? { name: 'Depot', mode: 'size', perStaff: 1500, wage: 850, staffPerSize: 8, buildout: 200000 }
+  // Foot traffic is NOT worth the same everywhere: what matters is
+  // capture x ticket per visitor. A restaurant visitor spends a small
+  // ticket often; a general-retail visitor (phones, appliances) spends
+  // a big ticket rarely. The old single Shop template (ticket 40 for
+  // every food/service sector) made a coffee location earn exactly what
+  // a phone-retail location earned at equal traffic. These per-sector
+  // [ticket, capture] pairs fix that; revenue per visitor is ticket x
+  // capture, so Restaurants (16 x 0.30 = 4.80) now earns clearly less
+  // than Retail – General (90 x 0.14 = 12.60) at the same foot traffic.
+  const TRAFFIC_TICKET = {
+    'Crop Farming': [14, 0.15], 'Livestock Farming': [20, 0.10], 'Fishing & Aquaculture': [18, 0.15],
+    'Forestry & Timber': [25, 0.08], 'Food Processing': [28, 0.12], 'Beverages & Tobacco': [18, 0.22],
+    'Dairy Products': [16, 0.20], 'Meat Processing': [32, 0.10], 'Bakery & Confectionery': [12, 0.32],
+    'Animal Feed': [22, 0.08],
+    'Retail – Grocery': [48, 0.32], 'Retail – General': [90, 0.14], 'Hotels': [130, 0.05],
+    'Restaurants & Bars': [16, 0.30], 'Healthcare Services': [70, 0.12],
+    'Education – Schools': [30, 0.08], 'Education – Higher': [30, 0.08],
+    'Entertainment – Film & Music': [14, 0.28], 'Entertainment – Gaming & Sports': [28, 0.16],
+    'Tourism Services': [95, 0.08], 'Personal Services': [35, 0.20], 'Real Estate – Residential': [400, 0.01] };
+  const locFor = (g, n) => {
+    if (g === 'food' || g === 'service') {
+      const t = TRAFFIC_TICKET[n] || [40, 0.08];
+      return { name: 'Shop', mode: 'traffic', capture: t[1], ticket: t[0], cogs: 0.5, throughput: 200, wage: 700, staff: 3, buildout: 120000 };
+    }
+    return g === 'transport' ? { name: 'Depot', mode: 'size', perStaff: 1500, wage: 850, staffPerSize: 8, buildout: 200000 }
     : { name: 'Office', mode: 'size', perStaff: 2500, wage: 1300, staffPerSize: 10, buildout: 240000 };
+  };
   const fleetFor = n => n === 'Airlines – Passenger' || n === 'Airlines – Cargo' ? SECTORS.Airline.fleet
     : n === 'Shipping – Freight' || n === 'Shipping – Passenger' ? SECTORS.Shipping.fleet
     : n === 'Oil Extraction' || n === 'Oil Refining & Fuels' ? SECTORS.Energy.fleet : null;
   LEADER_SECTORS.forEach(s => {
     if (SECTORS[s.n]) return;
     SECTORS[s.n] = { icon: s.icon, color: s.c, pe: 16, growth: s.growth, vol: s.vol, beta: s.beta, div: s.div,
-      tag: s.n + '.', products: [s.n], loc: locFor(s.g), fleet: fleetFor(s.n) };
+      tag: s.n + '.', products: [s.n], loc: locFor(s.g, s.n), fleet: fleetFor(s.n) };
     if (typeof SUFFIX !== 'undefined' && !SUFFIX[s.n]) SUFFIX[s.n] = [' Co.', ' Group', ' Industries', ' Ltd.', ' Corp.'];
     // SECTOR_LIST was built from the original 5 sectors at data load time.
     // If it is not expanded here, marketDay looks up sec[newSector] as
