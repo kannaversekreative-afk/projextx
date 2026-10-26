@@ -311,7 +311,7 @@ function transferToBusiness(amount) {
   const P = ensurePerson();
   const amt = amount === 'all' ? P.cash : Math.min(P.cash, +amount);
   if (amt <= 0) return 'No personal money to invest.';
-  P.cash -= amt; S.cash += amt; return null;
+  P.cash -= amt; S.cash += amt; S.invested = true; return null;
 }
 function transferToPersonal(amount) {
   const P = ensurePerson();

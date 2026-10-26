@@ -973,6 +973,7 @@ function nameCompany() {
 function enterGame(returning) {
   UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit();
   S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
+  if (typeof ensurePerson === 'function') { try { ensurePerson(); } catch (e) {} }
   const da = S.leader ? 0 : autoCreditDaily(), ca = S.leader ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
@@ -988,14 +989,27 @@ const TUT = [
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Time only moves when you press Age, one year at a time. Vehicles keep moving while you wait. No age limit — you can live 100 years, or 1000.', btn: 'Got it' },
 ];
+// Flow games (new standard games) start with personal money only, so
+// the tutorial opens with investing, then follows the same steps. The
+// final step is reworded: the game runs week by week, not year by year.
+const TUT_FLOW = [
+  { t: () => `Welcome! You're 18 in ${esc(W.cities[W.byA3[S.home].capital].name)}. Invest some of your $250,000 into your business first — open your profile (the person icon, top left) and tap INVEST.`, done: () => !!S.invested },
+  { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
+  { t: () => 'Tap ENTER CAPITAL to see the streets.', done: () => CityView.isOpen() },
+  { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
+  { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
+  { t: () => 'Your business runs week by week. When you are done, press DONE THIS WEEK to advance and collect profits. No age limit — you can play 100 years, or 1000.', btn: 'Got it' },
+];
 function renderTutorial() {
-  if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= TUT.length) { $('tut').innerHTML = ''; return; }
-  const s = TUT[S.tutorial];
+  const T = S && S.flow ? TUT_FLOW : TUT;
+  if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= T.length) { $('tut').innerHTML = ''; return; }
+  const s = T[S.tutorial];
   const tutText = typeof s.t === 'function' ? s.t() : s.t;
   $('tut').innerHTML = `<div class="tut card"><p>${tutText}</p><div class="row end"><button data-a="tutSkip">Skip</button>${s.btn ? `<button class="btn" data-a="tutNext">${s.btn}</button>` : '<span class="muted small">Do this to continue</span>'}</div></div>`;
 }
 function tutCheck() {
-  if (S && S.tutorial >= 0 && S.tutorial < TUT.length && TUT[S.tutorial].done && TUT[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
+  const T = S && S.flow ? TUT_FLOW : TUT;
+  if (S && S.tutorial >= 0 && S.tutorial < T.length && T[S.tutorial].done && T[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
 }
 function welcomeBack() {
   if (S.lastSeen && Date.now() - S.lastSeen > 864e5) {
@@ -1009,6 +1023,10 @@ function welcomeBack() {
 // ---------- map / city popups ----------
 function onCityTap(id) {
   if (UI.pick || !S) return;
+  // Flow games: only the home country is open until you own an office
+  // and a full board. The map still shows the world; foreign cities
+  // just refuse to open, with the requirement stated.
+  if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && W.cities[id] && W.cities[id].a3 !== S.home) { toast('Only your home country is open. Buy an office and hire a full board to look outward.', 'bad'); return; }
   MapView.select(id); UI.popup = { type: 'city', id }; renderPopup(); tutCheck();
 }
 function onCountryTap(a3) {
@@ -1604,6 +1622,7 @@ PANELS.country = () => {
   return panelShell('Your country', `${k.flag} ${esc(cname(S.home))} · ${esc(countryStatus(S.home).t)}`,
     `<div class="country-hero"><div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(cname(S.home))}</h2><div class="muted-light">Based in ${cap ? esc(cap.name) : ''} · Balance ${fmtMoney(S.cash, true)}</div></div></div>
     <div class="stats4"><div><span>Businesses</span><b>${biz.length}</b></div><div><span>Placed</span><b>${(S.placed || []).length}</b></div><div><span>Rating</span><b>★ ${avgRating.toFixed(1)}</b></div><div><span>GDP rank</span><b>#${gdpRank}</b></div></div></div>
+    ${S.flow ? `<div class="card in"><h4>🌍 Domination</h4><p class="muted small">${(S.dominated || []).length} countries dominated. ${flowDominated(S.home) ? 'You dominate your home country ✓.' : 'To dominate a country: control its flagship (50%+) and buy an office there.'} ${flowCanExpand() ? 'The world is open — you can expand.' : 'Buy an office and hire a full board to open the world.'}</p></div>` : ''}
     <div class="row wrap" style="margin-top:12px"><span class="chip">Corporate tax ${Math.round(cs.tax * 100)}%</span><span class="chip">Stability ${Math.round(cs.stab)}/100</span><span class="chip">Population ${fmtPop(nationPop())}</span><span class="chip">Level ${level()}</span></div>
     <div class="row" style="margin-top:12px"><button class="btn flex" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn flex" data-a="panel" data-x="leader">LEADER</button><button class="btn flex" data-a="panel" data-x="military">MILITARY</button></div>
     <div class="card in"><h4>🧭 Advisor — best next decision</h4><p><b>${adv.title}</b></p><p class="muted small">${adv.body}</p><button class="btn3d orange wide" data-a="${adv.a}" data-x="${adv.x}">${adv.btn}</button></div>
@@ -1810,7 +1829,7 @@ PANELS.hq = () => {
     const board = (typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full';
     return `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)} · Board ${board} · ${c.weekProfitStreak || 0} / 2 profitable weeks</div>
     <div class="kv"><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div><div class="kv"><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div class="kv"><span>Locations</span><b>${c.locs.length}</b></div>
-    <div class="row wrap"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="siteMaker" data-x="${c.a3}">CUSTOMIZE SITE</button><button class="btn" data-a="panel" data-x="offices">BOARD</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO</button>` : '<span class="muted small">Listed</span>'}</div></div>`;
+    <div class="row wrap"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="siteMaker" data-x="${c.a3}">CUSTOMIZE SITE</button><button class="btn" data-a="panel" data-x="offices">BOARD</button>${S.flow && !c.office ? `<button class="btn" data-a="buyOffice" data-x="${c.a3}">BUY OFFICE (${fmtMoney(50000, true)})</button>` : ''}${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO</button>` : '<span class="muted small">Listed</span>'}</div></div>`;
   }).join('') || '<p class="muted small">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p>';
   const placedRows = placed.map(b => `<div class="kv"><span>${b.icon || ICONS.company} ${esc(b.name)} · ${esc(cname(b.a3))}</span><b>${fmtMoney(b.value, true)} · ${fmtMoney(b.income, true)}/week</b></div>`).join('') || '<p class="muted small">No placed businesses yet. Build one from a FOR LEASE lot in a city — press BUILD STORE there.</p>';
   return panelShell('HQ', `${hk ? hk.flag : ''} ${esc(cname(S.home))}${capCity ? ` · HQ in ${esc(capCity.name)}` : ''}`,
@@ -2146,7 +2165,7 @@ PANELS.offices = () => {
   };
   const companies = Object.values(S.co).filter(c => controlled(c.a3));
   const teams = (typeof ownedSportTeams === 'function') ? ownedSportTeams() : [];
-  const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>
+  const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>${S.flow ? (c.office ? `<div class="kv"><span>Office</span><b>Opened</b></div>` : `<div class="row"><button class="btn" data-a="buyOffice" data-x="${c.a3}">BUY OFFICE (${fmtMoney(50000, true)})</button><span class="muted small">Needed before hiring a board here.</span></div>`) : ''}
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
     ${mgrSection(c)}
@@ -2478,7 +2497,7 @@ const A = {
   layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),
   depCont: x => { UI.depCont = x; openDeparturesModal(); },
-  depFly: x => { closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
+  depFly: x => { const dc = W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
   marsExpand: () => { const err = marsExpand(S.home); if (err) return toast(err, 'bad'); save(); renderPanel(); toast('Mine expanded.', 'good'); },
   marsTravel: () => { closePanel(); closeModal(); CityView.openMars(); document.body.classList.add('in-city'); renderCityHUD(); toast('Welcome to Mars.', 'good'); },
   marsBuyMine: x => { const err = marsBuySite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine bought. Income arrives every week.', 'good'); save(); refreshAll(); },
@@ -2581,8 +2600,8 @@ const A = {
   tradeOut: x => { UI.tradeOut = x; renderPanel(); },
   tradeIn: x => { const [tid, pid] = x.split('|'); UI.tradeTarget = tid; UI.tradeIn = pid; renderPanel(); },
   doSportTrade: x => { const cash = Math.floor(+($('tradeCash') ? $('tradeCash').value : 0)); act(() => tradeSportPlayer(x, UI.tradeOut, UI.tradeTarget, UI.tradeIn, cash), 'Trade done!'); UI.tradeOut = null; UI.tradeIn = null; },
-  hireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
-  findCand: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
+  hireBoard: x => { const [kind, id, role] = x.split('|'); if (kind === 'co' && S.flow && typeof flowHasOffice === 'function' && !flowHasOffice(id)) return toast('Buy an office for this company first.', 'bad'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
+  findCand: x => { const [kind, id, role] = x.split('|'); if (kind === 'co' && S.flow && typeof flowHasOffice === 'function' && !flowHasOffice(id)) return toast('Buy an office for this company first.', 'bad'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
   findCandMore: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; if (e.candPool) delete e.candPool[role]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
   hireSelect: x => { const [kind, id, role, candId] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; const c = boardCandidates(e, role).find(y => y.id === candId); if (!c) return toast('Candidate not found.', 'bad'); UI.hire = { kind, id, role, candId, salary: c.ask, grant: 'none', shares: 0 }; renderPanel(); },
   hireStep: x => { if (!UI.hire) return; UI.hire.salary = Math.max(1000, UI.hire.salary + (+x)); renderPanel(); },
@@ -2591,6 +2610,7 @@ const A = {
   hireCancel: () => { UI.hire = null; renderPanel(); },
   offerBoard: () => {
     const h = UI.hire; if (!h) return;
+    if (h.kind === 'co' && S.flow && typeof flowHasOffice === 'function' && !flowHasOffice(h.id)) return toast('Buy an office for this company first.', 'bad');
     const e = h.kind === 'team' ? sportTeam(h.id) : S.co[h.id];
     const c = boardCandidates(e, h.role).find(y => y.id === h.candId);
     const err = offerBoard(e, h.role, c, h.salary, h.kind === 'team' ? 'none' : h.grant, h.kind === 'team' ? 0 : h.shares);
@@ -2599,6 +2619,7 @@ const A = {
     save(); renderPanel();
   },
   fireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => fireBoard(e, role), `${role} seat cleared.`); },
+  buyOffice: x => { act(() => buyOffice(x), 'Office opened'); },
   hireExecMgr: x => { const [id, kind] = x.split('|'); const e = S.co[id]; if (!e) return; if (typeof execManagerCandidates === 'function') execManagerCandidates(e, kind); UI.mgrHire = { id, kind }; renderPanel(); },
   hireExecMgrDo: x => { const [id, kind, candId] = x.split('|'); const e = S.co[id]; if (!e) return; const err = (typeof hireExecManager === 'function') ? hireExecManager(e, kind, candId) : 'unavailable'; UI.mgrHire = null; if (err) toast(err, 'bad'); else toast('Manager hired', 'good'); renderPanel(); },
   fireExecMgr: x => act(() => { const [id, kind] = x.split('|'); const e = S.co[id]; return (typeof fireExecManager === 'function') ? fireExecManager(e, kind) : 'unavailable'; }, 'Manager fired'),
@@ -2655,7 +2676,7 @@ const A = {
   airportCountry: x => { UI.airport = { cont: UI.airport.cont, a3: x }; renderPanel(); },
   airportBack: () => { UI.airport = { cont: null, a3: null }; renderPanel(); },
   airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
-  airportFly: x => { act(() => airportFly(+x), null); },
+  airportFly: x => { const dc = W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); act(() => airportFly(+x), null); },
   webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };
@@ -2670,7 +2691,7 @@ const A = {
   acceptOffer: x => act(() => acceptOffer(x), 'Offer accepted'),
   project: x => act(() => fundProject(x), 'Project funded'),
   diplomacy: x => act(() => diplomacy(x), 'Relations improved'),
-  warPlan: x => { const ap0 = approachList(x).find(a => a.ok); UI.warPlan = { target: x, army: 100, navy: 100, air: 100, approach: ap0 ? ap0.id : 'land', approachBonus: ap0 ? ap0.bonus : 0, research: false }; closePopup(); if (CityView.isOpen()) leaveCity(); openPanel('warplan'); },
+  warPlan: x => { if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand()) return toast('Buy an office and hire a full board to expand.', 'bad'); const ap0 = approachList(x).find(a => a.ok); UI.warPlan = { target: x, army: 100, navy: 100, air: 100, approach: ap0 ? ap0.id : 'land', approachBonus: ap0 ? ap0.bonus : 0, research: false }; closePopup(); if (CityView.isOpen()) leaveCity(); openPanel('warplan'); },
   warApproach: x => { const [target, id] = x.split('|'); const ap = approachList(target).find(a => a.id === id); if (!ap || !ap.ok) return toast(ap ? ap.why : 'Approach not available', 'bad'); UI.warPlan.approach = id; UI.warPlan.approachBonus = ap.bonus; renderPanel(); },
   warCommit: x => { const [branch, delta] = x.split('|'); UI.warPlan[branch] = clamp(UI.warPlan[branch] + (+delta), 0, 100); renderPanel(); },
   warResearch: () => { const e = researchWar(UI.warPlan); if (e) toast(e, 'bad'); else toast('War research done: +15% attack power for this attack', 'good'); save(); renderPanel(); },
@@ -2683,7 +2704,7 @@ const A = {
   warBattleLeave: () => { const plan = UI.pendingWarPlan; if (UI.warBattle) UI.warBattle.resolved = true; UI.warBattle = null; if (plan) { startOngoingWar(plan); closePanel(); openPanel('war'); save(); } else closePanel(); },
   buyBase: () => act(() => buyBase(), 'Military base built'),
   milUp: x => act(() => upgradeMilitary(x), 'Military upgraded'),
-  personInvest: x => act(() => transferToBusiness(x === 'all' ? 'all' : +x), 'Invested in your business'),
+  personInvest: x => { act(() => transferToBusiness(x === 'all' ? 'all' : +x), 'Invested in your business'); tutCheck(); },
   personPay: x => act(() => transferToPersonal(x === 'all' ? 'all' : +x), 'Paid yourself'),
   personPromo: () => act(() => promoteJob(), 'Promoted!'),
   personJoinAgency: x => act(() => joinAgency(x), 'Joined the agency'),

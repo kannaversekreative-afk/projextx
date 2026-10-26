@@ -36,7 +36,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 // ---------- new game ----------
 function newGame(opt) {
   const s = {
-    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
+    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', flow: !opt.leader && opt.mode !== 'worl' && opt.mode !== 'random', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
@@ -131,6 +131,7 @@ function newGame(opt) {
   } else {
     s.holdings[opt.home] = { qty: home.shares, cost: 0 };
   }
+  if (s.flow) s.cash = 0; // Flow games start with personal money only; invest it to fund the business.
   if (typeof ensureSports === 'function') { try { ensureSports(); } catch (e) {} }
   if (typeof ensureStores === 'function') { try { ensureStores(); } catch (e) {} }
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
@@ -185,6 +186,35 @@ const cname = a3 => (S && S.countryName && a3 === S.home) ? S.countryName : W.by
 const homeCo = () => S.co[S.home];
 function stake(a3) { const h = S.holdings[a3]; return h && h.qty > 0 ? h.qty / S.co[a3].shares : 0; }
 const controlled = a3 => stake(a3) >= 0.5;
+
+// ---------- game flow (new standard games only) ----------
+// S.flow marks games on the locked flow: home country only until you
+// own an office + a full board, then the world opens and expansion
+// (invasion) is enabled. Old saves have no flag and stay open-world.
+const OFFICE_COST = 50000;
+function flowOffice(a3) { const c = S.co && S.co[a3]; return c ? c.office || null : null; }
+function flowHasOffice(a3) { return !!flowOffice(a3); }
+function flowBoardFull() { const c = S.co && S.co[S.home]; return !!c && typeof boardFull === 'function' && boardFull(c); }
+function flowCanExpand() { return !!S.flow && flowHasOffice(S.home) && flowBoardFull(); }
+function flowDominated(a3) { return !!S.flow && controlled(a3) && flowHasOffice(a3); }
+function buyOffice(a3) {
+  if (!S.flow) return 'Offices are part of the new-game flow.';
+  const c = S.co && S.co[a3]; if (!c) return 'No company there.';
+  if (c.office) return 'You already own an office there.';
+  if (!controlled(a3)) return 'Control the flagship company first (50%+ stake).';
+  if (S.cash < OFFICE_COST) return 'Not enough business cash.';
+  S.cash -= OFFICE_COST; c.office = { day: S.day, cost: OFFICE_COST };
+  news('Business', `Office opened in ${cname(a3)}.`, a3);
+  if (flowDominated(a3) && !(S.dominated || []).includes(a3)) { (S.dominated = S.dominated || []).push(a3); news('Milestone', `You dominate ${cname(a3)}.`, a3); }
+  return null;
+}
+function flowDominanceCheck() {
+  if (!S.flow) return;
+  S.dominated = S.dominated || [];
+  (W.playable || []).forEach(k => {
+    if (!S.dominated.includes(k.a3) && flowDominated(k.a3)) { S.dominated.push(k.a3); news('Milestone', `You dominate ${cname(k.a3)}.`, k.a3); }
+  });
+}
 function mine() { const out = []; for (const a3 in S.holdings) if (S.co[a3] && controlled(a3)) out.push(S.co[a3]); return out.sort((a, b) => (b.a3 === S.home) - (a.a3 === S.home) || companyValue(b) - companyValue(a)); }
 function locCount() { return mine().reduce((a, c) => a + c.locs.length, 0); }
 function news(cat, text, a3) {
