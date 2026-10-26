@@ -649,16 +649,38 @@ function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1,
 // exactly like web. A phone already sideways, a tablet and a desktop
 // are already horizontal, so they are left alone. After the class
 // changes, the map has a new size, so fire a resize for it.
+// Rotation fix: on a real phone the browser reports stale viewport sizes
+// for a while after a rotation (dynamic toolbar / dvh lag), and a single
+// 50ms re-measure was not enough — the rotated #game box could keep its
+// old portrait size on a landscape screen, showing only a ~half-width
+// strip. So #game is now sized in px from innerWidth/innerHeight (never
+// dvh, which lags rotation), and re-measured on several ticks until the
+// size settles, plus on visualViewport changes (toolbar show/hide).
+let orientState = null;
 function updateGameOrientation() {
-  const portraitPhone = window.innerWidth <= 760 && window.innerHeight > window.innerWidth;
-  const was = document.body.classList.contains('landscape-phone');
+  const w = window.innerWidth, h = window.innerHeight;
+  const vv = window.visualViewport, vwv = vv ? Math.round(vv.width) : w, vvh = vv ? Math.round(vv.height) : h;
+  const portraitPhone = w <= 760 && h > w;
+  if (orientState && orientState.w === w && orientState.h === h && orientState.vw === vwv && orientState.vh === vvh && orientState.cls === portraitPhone) return;
+  orientState = { w, h, vw: vwv, vh: vvh, cls: portraitPhone };
   document.body.classList.toggle('landscape-phone', portraitPhone);
-  if (portraitPhone !== was) setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  const game = $('game');
+  if (game) {
+    if (portraitPhone) { game.style.width = h + 'px'; game.style.height = w + 'px'; }
+    else { game.style.width = ''; game.style.height = ''; }
+  }
+  let tries = 0;
+  const tick = () => {
+    window.dispatchEvent(new Event('resize'));
+    if (tries++ < 6) setTimeout(tick, tries < 3 ? 80 : 200);
+  };
+  requestAnimationFrame(tick);
 }
 async function boot() {
   updateGameOrientation();
   window.addEventListener('resize', updateGameOrientation);
   window.addEventListener('orientationchange', updateGameOrientation);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('mycity', () => openPanel('mycity'));

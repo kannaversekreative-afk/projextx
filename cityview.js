@@ -5,7 +5,7 @@
 const CityView = (() => {
   const TW = 72, TH = 36;
   let el, canvas, ctx, layer, img, layout, city, view = { x: 0, y: 0, s: 1 }, ox = 0, oy = 0, W2 = 0, H2 = 0;
-  let onPin = null, filter = 'all', roofs = {};
+  let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', vehicles = [], animTimer = null, lastAnim = 0;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -36,7 +36,8 @@ const CityView = (() => {
     [0.12, 0.88].forEach(o => { const p = h ? [P(t.x, t.y + o), P(t.x + 1, t.y + o)] : [P(t.x + o, t.y), P(t.x + o, t.y + 1)]; c.beginPath(); c.moveTo(p[0][0], p[0][1]); c.lineTo(p[1][0], p[1][1]); c.stroke(); });
   }
   function lotGround(c, t) {
-    diamond(c, t.x, t.y, '#e8e2d0');
+    diamond(c, t.x, t.y, '#cfc9b8'); // sidewalk border around every lot
+    diamond(c, t.x, t.y, '#e8e2d0', 0.04);
     const green = t.arch === 'house' || t.arch === 'rowhouse' || t.kind === 'park';
     diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
     if (t.arch === 'warehouse' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
@@ -48,9 +49,11 @@ const CityView = (() => {
   function plazaGround(c, t) {
     diamond(c, t.x, t.y, '#ebe5d6');
     diamond(c, t.x, t.y, (t.x + t.y) % 2 ? '#a8d877' : '#e4dccb', 0.18);
-    // People dots on the plaza.
+    // People dots on the plaza, plus a fountain and a food stall.
     const cols = ['#e5484d', '#2f7cf6', '#f5b301', '#12a150', '#7c4dff'];
-    for (let i = 0; i < 3; i++) { const [px, py] = P(t.x + 0.2 + (i * 0.3) % 0.7, t.y + 0.3 + (i * 0.2) % 0.5); c.fillStyle = cols[(t.x + t.y + i) % cols.length]; c.beginPath(); c.arc(px, py, 2, 0, 7); c.fill(); }
+    for (let i = 0; i < 7; i++) { const [px, py] = P(t.x + 0.15 + (i * 0.37) % 0.75, t.y + 0.2 + (i * 0.53) % 0.6); c.fillStyle = cols[(t.x + t.y + i) % cols.length]; c.beginPath(); c.arc(px, py, 2.2, 0, 7); c.fill(); c.fillStyle = '#333'; c.fillRect(px - 1, py - 4, 2, 2); }
+    const [fx, fy] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#9ec9e6'; c.beginPath(); c.ellipse(fx, fy, 10, 5, 0, 0, 7); c.fill(); c.fillStyle = '#e8f4fa'; c.beginPath(); c.ellipse(fx, fy - 2, 5, 2.5, 0, 0, 7); c.fill();
+    if ((t.x + t.y) % 3 === 0) { const [vx, vy] = P(t.x + 0.82, t.y + 0.2); c.fillStyle = '#ff6b2c'; c.fillRect(vx - 7, vy - 6, 14, 7); c.fillStyle = '#fff'; c.fillRect(vx - 7, vy - 9, 14, 3); }
   }
   function water(c, t) {
     diamond(c, t.x, t.y, '#2aa8d8');
@@ -90,6 +93,15 @@ const CityView = (() => {
   }
   function roofDetails(c, g, t, r) {
     const cx = (g.A[0] + g.C[0]) / 2, cy = (g.A[1] + g.C[1]) / 2 - g.h;
+    // Parapet edge so rooftops read as finished, not flat colour.
+    c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 1; c.beginPath(); c.moveTo(g.A[0], g.A[1] - g.h); c.lineTo(g.B[0], g.B[1] - g.h); c.lineTo(g.C[0], g.C[1] - g.h); c.lineTo(g.D[0], g.D[1] - g.h); c.closePath(); c.stroke();
+    if (r() < 0.4) { // rooftop garden patch with a mini tree
+      c.fillStyle = '#6fbf5a'; c.fillRect(cx - 10, cy - 3, 12, 6); c.fillStyle = '#3e8f3a'; c.beginPath(); c.arc(cx - 4, cy - 6, 4, 0, 7); c.fill();
+    } else if (r() < 0.65) { // solar panels
+      c.fillStyle = '#1d3a5f'; c.fillRect(cx + 2, cy - 4, 12, 7); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(cx + 6, cy - 4); c.lineTo(cx + 6, cy + 3); c.moveTo(cx + 2, cy - 0.5); c.lineTo(cx + 14, cy - 0.5); c.stroke();
+    } else if (t.arch === 'apartment' || t.arch === 'rowhouse') { // wooden water tank, New-York-rooftop style
+      c.fillStyle = '#8a6a4a'; c.fillRect(cx + 6, cy - 11, 9, 9); c.fillStyle = '#6b4f3a'; c.beginPath(); c.moveTo(cx + 5, cy - 11); c.lineTo(cx + 10.5, cy - 15); c.lineTo(cx + 16, cy - 11); c.fill();
+    }
     if (t.floors > 14 && t.seed > 0.55) { c.fillStyle = '#3c4552'; c.beginPath(); c.ellipse(cx, cy, 10, 5, 0, 0, 7); c.fill(); c.fillStyle = '#e8eaee'; c.font = 'bold 7px sans-serif'; c.textAlign = 'center'; c.fillText('H', cx, cy + 2.5); return; }
     for (let i = 0; i < 2 + Math.floor(r() * 2); i++) { const dx = (r() - 0.5) * 16, dy = (r() - 0.5) * 7; c.fillStyle = '#b9bfc6'; c.fillRect(cx + dx - 3, cy + dy - 4, 6, 4); c.fillStyle = '#d7dbe0'; c.fillRect(cx + dx - 3, cy + dy - 5.5, 6, 1.6); }
     if (t.arch === 'apartment' && t.seed > 0.7) { c.fillStyle = '#7b5a43'; c.fillRect(cx + 6, cy - 12, 6, 9); c.fillStyle = '#5d4332'; c.beginPath(); c.moveTo(cx + 5, cy - 12); c.lineTo(cx + 9, cy - 16); c.lineTo(cx + 13, cy - 12); c.fill(); }
@@ -112,8 +124,10 @@ const CityView = (() => {
     } else {
       g = box(c, x0, y0, x1, y1, h, t.color);
       if (t.arch === 'glass') glassFaces(c, g, t.color, h);
-      else if (t.arch === 'office') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } }); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
+      else if (t.arch === 'office') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } });
+        const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
       else if (t.arch === 'apartment') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
+        for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.25), b = lerp(g.D, g.C, 0.75); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1; c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1); c.lineTo(b[0], b[1] - i * floorH - 1); c.stroke(); }
         c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.1), b = lerp(g.D, g.C, 0.9); c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1.5); c.lineTo(b[0], b[1] - i * floorH - 1.5); c.stroke(); } }
       else if (t.arch === 'shop') shopFront(c, g, t, h);
     }
@@ -184,10 +198,11 @@ const CityView = (() => {
     let g = box(c, x0, y0, x1, y1, h1, t.color); glassFaces(c, g, t.color, h1);
     const m1 = 0.12; g = box(c, x0 + m1, y0 + m1, x1 - m1, y1 - m1, h2 - h1, t.color, h1); glassFaces(c, g, t.color, h2 - h1, h1);
     const m2 = 0.24; g = box(c, x0 + m2, y0 + m2, x1 - m2, y1 - m2, h - h2, t.color, h2); glassFaces(c, g, t.color, h - h2, h2);
-    // Antenna.
+    // Crown: spire, stepped crown, or glass crown — so towers differ.
     const [ax, ay] = P((x0 + x1) / 2, (y0 + y1) / 2);
-    c.strokeStyle = '#555'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(ax, ay - h); c.lineTo(ax, ay - h - 22); c.stroke();
-    c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(ax, ay - h - 24, 2.5, 0, 7); c.fill();
+    if (r() < 0.4) { c.strokeStyle = '#555'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(ax, ay - h); c.lineTo(ax, ay - h - 22); c.stroke(); c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(ax, ay - h - 24, 2.5, 0, 7); c.fill(); }
+    else if (r() < 0.7) { const m3 = 0.32; box(c, x0 + m3, y0 + m3, x1 - m3, y1 - m3, 10, '#dfe6ec', h); }
+    else { c.fillStyle = 'rgba(180,220,245,0.9)'; c.beginPath(); c.moveTo(ax - 10, ay - h); c.lineTo(ax, ay - h - 14); c.lineTo(ax + 10, ay - h); c.fill(); }
     // Billboard on the front face, upper third.
     const bm = lerp(g.D, g.C, 0.5); const bb = ['#ff6b2c', '#e5484d', '#2f7cf6', '#f5b301'][Math.floor(r() * 4)];
     c.fillStyle = bb; c.fillRect(bm[0] - 13, bm[1] - h * 0.72, 26, 14); c.fillStyle = '#ffffff'; c.fillRect(bm[0] - 13, bm[1] - h * 0.72, 26, 2.5);
@@ -210,6 +225,8 @@ const CityView = (() => {
       const px = P(x + 0.35 + i * 0.3, y + 0.35);
       c.fillStyle = '#e5484d'; c.fillRect(px[0] - 3, px[1] - 10, 6, 10); c.fillStyle = '#ffffff'; c.fillRect(px[0] - 3, px[1] - 8, 6, 2);
     }
+    // A car waiting at a pump.
+    car(c, x + 0.5, y + 0.35, true, '#2f7cf6');
     // Price sign by the road.
     const [sx, sy] = P(x + 0.9, y + 0.1);
     c.fillStyle = '#333'; c.fillRect(sx - 1, sy - 18, 2, 18);
@@ -224,6 +241,8 @@ const CityView = (() => {
       poly(c, [up(a, 7), up(d, 7), cc, b], shade(t.color, 1.12));
     }
     [0.2, 0.5, 0.8].forEach(f => { const p = lerp(g.D, g.C, f); poly(c, [[p[0] - 5, p[1]], [p[0] + 5, p[1] + 2.5], [p[0] + 5, p[1] - 8], [p[0] - 5, p[1] - 10.5]], '#7d858d'); });
+    // A delivery truck at the loading dock.
+    const [tx, ty] = P(t.x + 0.5, t.y + 0.95); c.fillStyle = '#f4f4f4'; c.fillRect(tx - 12, ty - 10, 18, 8); c.fillStyle = t.color; c.fillRect(tx + 6, ty - 8, 8, 6);
     // Shipping containers stacked beside the warehouse.
     const cols = ['#e5484d', '#2f7cf6', '#12a150', '#f5b301'];
     for (let i = 0; i < 3; i++) { const cx = t.x + 0.12 + i * 0.28, cy = t.y + 0.85; box(c, cx, cy, cx + 0.22, cy + 0.12, 6, cols[i % 4]); }
@@ -247,8 +266,115 @@ const CityView = (() => {
     c.strokeStyle = '#efe6cf'; c.lineWidth = 3; const a = P(t.x, t.y + 0.5), b = P(t.x + 1, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 6, b[0], b[1]); c.stroke();
     for (let i = 0; i < 3; i++) tree(c, t.x + 0.15 + r() * 0.7, t.y + 0.15 + r() * 0.7, 0.85 + r() * 0.45);
     for (let i = 0; i < 5; i++) { const [fx, fy] = P(t.x + 0.1 + r() * 0.8, t.y + 0.1 + r() * 0.8); c.fillStyle = ['#ff8fa3', '#ffd166', '#ffffff'][i % 3]; c.beginPath(); c.arc(fx, fy, 1.8, 0, 7); c.fill(); }
-    const [bx, by] = P(t.x + 0.5, t.y + 0.2); c.fillStyle = '#7a5a3c'; c.fillRect(bx - 7, by - 2, 14, 3);
+    const [bx, by] = P(t.x + 0.5, t.y + 0.2); c.fillStyle = '#7a5a3c'; c.fillRect(bx - 7, by - 2, 14, 3); c.fillRect(bx - 7, by + 8, 14, 3);
+    // Flower beds and a tiny playground slide.
+    for (let i = 0; i < 2; i++) { const [gx, gy] = P(t.x + 0.2 + i * 0.55, t.y + 0.65); c.fillStyle = '#ff8fa3'; c.beginPath(); c.ellipse(gx, gy, 8, 4, 0, 0, 7); c.fill(); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(gx, gy, 2, 0, 7); c.fill(); }
+    const [sx, sy] = P(t.x + 0.8, t.y + 0.8); c.strokeStyle = '#e5484d'; c.lineWidth = 2; c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 8, sy + 6); c.stroke();
   }
+
+  // ---------- landmarks: original, per-city, not traced copies ----------
+  // Each returns its top screen point (for the landmark pin) and sets
+  // landmarkName. Silhouettes are drawn fresh in this file's own style.
+  function latticeTower(c, col, h, deckCol) {
+    const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.6);
+    const w0 = 34, w1 = 8;
+    c.strokeStyle = col; c.lineWidth = 3;
+    const leg = sgn => { c.beginPath(); c.moveTo(cx + sgn * w0, base); c.lineTo(cx + sgn * w1 * 0.5, base - h); c.stroke(); };
+    leg(-1); leg(1);
+    c.lineWidth = 1.2;
+    for (let i = 1; i <= 6; i++) { const f = i / 7, y = base - h * f, w = w0 * (1 - f) + w1 * f; c.beginPath(); c.moveTo(cx - w, y); c.lineTo(cx + w, y + 8); c.moveTo(cx + w, y); c.lineTo(cx - w, y + 8); c.stroke(); }
+    [0.45, 0.8].forEach(f => { const w = w0 * (1 - f) + w1 * f; c.fillStyle = deckCol; c.fillRect(cx - w - 6, base - h * f - 4, (w + 6) * 2, 6); });
+    c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(cx, base - h); c.lineTo(cx, base - h - 22); c.stroke();
+    c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, base - h - 24, 3, 0, 7); c.fill();
+    return [cx, base - h - 26];
+  }
+  function clockTower(c) {
+    const L = layout.landmark, g = box(c, L.x + 1.0, L.y + 1.0, L.x + 2.0, L.y + 2.0, 120, '#c9a86a');
+    const fm = lerp(g.D, g.C, 0.5); c.fillStyle = '#fdf6e3'; c.beginPath(); c.arc(fm[0], fm[1] - 100, 13, 0, 7); c.fill(); c.strokeStyle = '#333'; c.lineWidth = 1.5; c.beginPath(); c.arc(fm[0], fm[1] - 100, 13, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(fm[0], fm[1] - 100); c.lineTo(fm[0], fm[1] - 108); c.moveTo(fm[0], fm[1] - 100); c.lineTo(fm[0] + 7, fm[1] - 97); c.stroke();
+    poly(c, [up(lerp(g.D, g.C, 0.2), 120), up(lerp(g.D, g.C, 0.8), 120), [fm[0], fm[1] - 150]], '#3a5a40');
+    return [fm[0], fm[1] - 150];
+  }
+  function torchStatue(c) {
+    const L = layout.landmark, g = box(c, L.x + 0.9, L.y + 0.9, L.x + 2.1, L.y + 2.1, 22, '#d8d2c2');
+    const [cx, base] = P(L.x + 1.5, L.y + 1.5); const top = base - 22;
+    c.fillStyle = '#6fae9a'; c.beginPath(); c.moveTo(cx - 10, top); c.lineTo(cx - 3, top - 52); c.lineTo(cx + 9, top); c.closePath(); c.fill();
+    c.beginPath(); c.arc(cx - 1, top - 58, 6, 0, 7); c.fill();
+    c.strokeStyle = '#6fae9a'; c.lineWidth = 3; c.beginPath(); c.moveTo(cx + 4, top - 44); c.lineTo(cx + 16, top - 66); c.stroke();
+    c.fillStyle = '#ffb020'; c.beginPath(); c.ellipse(cx + 16, top - 70, 4, 7, 0, 0, 7); c.fill();
+    return [cx + 16, top - 78];
+  }
+  function gate(c, col) {
+    const L = layout.landmark, g = box(c, L.x + 0.6, L.y + 1.0, L.x + 2.4, L.y + 2.0, 14, col);
+    const a = lerp(g.D, g.C, 0.5);
+    for (let i = 0; i < 5; i++) { const p = lerp(g.D, g.C, 0.12 + i * 0.19); c.fillStyle = '#efe9dc'; c.fillRect(p[0] - 2.5, p[1] - 52, 5, 38); }
+    poly(c, [up(lerp(g.D, g.C, 0.05), 56), up(lerp(g.D, g.C, 0.95), 56), up(lerp(g.D, g.C, 0.95), 66), up(lerp(g.D, g.C, 0.05), 66)], col);
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5); c.fillStyle = '#8a7a5a'; c.beginPath(); c.arc(cx, cy - 74, 4, 0, 7); c.fill();
+    return [cx, cy - 80];
+  }
+  function arena(c) {
+    const L = layout.landmark, [cx, cy] = P(L.x + 1.5, L.y + 1.5);
+    c.fillStyle = '#c9b49a'; c.beginPath(); c.ellipse(cx, cy, 46, 24, 0, 0, 7); c.fill();
+    c.fillStyle = '#e8dcc4'; c.beginPath(); c.ellipse(cx, cy - 18, 46, 24, 0, 0, 7); c.fill();
+    c.fillStyle = '#8a7a5a'; c.beginPath(); c.ellipse(cx, cy - 18, 30, 15, 0, 0, 7); c.fill();
+    c.fillStyle = '#6fbf5a'; c.beginPath(); c.ellipse(cx, cy - 18, 20, 10, 0, 0, 7); c.fill();
+    return [cx, cy - 42];
+  }
+  function pyramid(c) {
+    const L = layout.landmark, [cx, cy] = P(L.x + 1.5, L.y + 2.2);
+    poly(c, [[cx - 44, cy], [cx + 44, cy], [cx, cy - 62]], '#d9b878');
+    poly(c, [[cx, cy - 62], [cx + 44, cy], [cx + 20, cy - 10]], '#c2a05e');
+    return [cx, cy - 62];
+  }
+  function pagoda(c) {
+    const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.2); let y = base, w = 30;
+    for (let i = 0; i < 4; i++) { c.fillStyle = '#a63a2e'; c.fillRect(cx - w - 6, y - 8, (w + 6) * 2, 8); c.fillStyle = '#f2e2c4'; c.fillRect(cx - w, y - 22, w * 2, 14); w -= 6; y -= 24; }
+    poly(c, [[cx - 10, y], [cx + 10, y], [cx, y - 14]], '#3a5a40');
+    return [cx, y - 14];
+  }
+  function obelisk(c) {
+    const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.2);
+    poly(c, [[cx - 9, base], [cx + 9, base], [cx + 4, base - 110], [cx - 4, base - 110]], '#e8e2d2');
+    poly(c, [[cx - 4, base - 110], [cx + 4, base - 110], [cx, base - 124]], '#c9a86a');
+    return [cx, base - 124];
+  }
+  function lighthouse(c) {
+    const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.2);
+    for (let i = 0; i < 5; i++) { c.fillStyle = i % 2 ? '#e5484d' : '#ffffff'; c.fillRect(cx - 10 + i * 0.4, base - (i + 1) * 16, 20 - i * 0.8, 16); }
+    c.fillStyle = '#ffd166'; c.fillRect(cx - 7, base - 96, 14, 12); c.fillStyle = '#333'; c.beginPath(); c.moveTo(cx - 9, base - 96); c.lineTo(cx, base - 106); c.lineTo(cx + 9, base - 96); c.fill();
+    c.fillStyle = 'rgba(255,233,163,0.25)'; poly(c, [[cx + 7, base - 90], [cx + 44, base - 78], [cx + 44, base - 62], [cx + 7, base - 78]], c.fillStyle);
+    return [cx, base - 106];
+  }
+  function cathedral(c) {
+    const L = layout.landmark, g = box(c, L.x + 0.8, L.y + 0.8, L.x + 2.2, L.y + 2.2, 30, '#d8d2c2');
+    const fm = lerp(g.D, g.C, 0.5); c.fillStyle = '#fdf6e3'; c.beginPath(); c.arc(fm[0], fm[1] - 18, 7, 0, 7); c.fill();
+    [[-1, 0.25], [1, 0.75]].forEach(([sgn, f]) => { const p = lerp(g.D, g.C, f); poly(c, [[p[0] - 6, p[1] - 30], [p[0] + 6, p[1] - 30], [p[0], p[1] - 78]], '#8a7a5a'); });
+    return [fm[0], fm[1] - 78];
+  }
+  function onionDomes(c) {
+    const L = layout.landmark, g = box(c, L.x + 0.7, L.y + 0.9, L.x + 2.3, L.y + 2.1, 26, '#efe9dc');
+    const cols = ['#e5484d', '#2f7cf6', '#12a150'];
+    [0.2, 0.5, 0.8].forEach((f, i) => { const p = lerp(g.D, g.C, f); c.fillStyle = cols[i]; c.beginPath(); c.arc(p[0], p[1] - 32, 8, 0, 7); c.fill(); poly(c, [[p[0] - 8, p[1] - 32], [p[0] + 8, p[1] - 32], [p[0], p[1] - 46]], cols[i]); });
+    return [lerp(g.D, g.C, 0.5)[0], g.D[1] - 46];
+  }
+  function landmark(c) {
+    const n = city.name;
+    if (n === 'Paris') { landmarkName = 'Iron Tower'; return latticeTower(c, '#7a5a3c', 190, '#5f6e7e'); }
+    if (n === 'Tokyo') { landmarkName = 'Red Tower'; return latticeTower(c, '#d23c2e', 170, '#f2f2f2'); }
+    if (n === 'London') { landmarkName = 'Clock Tower'; return clockTower(c); }
+    if (n === 'New York') { landmarkName = 'Torch Statue'; return torchStatue(c); }
+    if (n === 'Washington, D.C.') { landmarkName = 'Capitol'; return capitol(c); }
+    if (n === 'Rome') { landmarkName = 'Grand Arena'; return arena(c); }
+    if (n === 'Beijing') { landmarkName = 'Pagoda Tower'; return pagoda(c); }
+    if (n === 'Moscow') { landmarkName = 'Onion Domes'; return onionDomes(c); }
+    if (n === 'Cairo') { landmarkName = 'Great Pyramid'; return pyramid(c); }
+    if (n === 'Berlin') { landmarkName = 'Victory Gate'; return gate(c, '#c9b49a'); }
+    if (n === 'Athens') { landmarkName = 'Temple'; return gate(c, '#e8e2d2'); }
+    if (n === 'Seoul') { landmarkName = 'Pagoda Tower'; return pagoda(c); }
+    const picks = [['Obelisk', obelisk], ['Lighthouse', lighthouse], ['Cathedral', cathedral], ['Grand Arena', arena], ['Pagoda Tower', pagoda]];
+    const [nm, fn] = picks[hashStr('lm:' + n) % picks.length]; landmarkName = nm; return fn(c);
+  }
+
   function capitol(c) {
     const L = layout.landmark, x0 = L.x + 0.35, y0 = L.y + 0.75, x1 = L.x + 2.65, y1 = L.y + 2.25;
     shadowOf(c, x0, y0, x1, y1, 40);
@@ -267,6 +393,18 @@ const CityView = (() => {
     for (let i = 0; i < 6; i++) { const r = mulberry(i + 7); tree(c, L.x + 0.15 + r() * 2.7, L.y + 0.1 + r() * 0.5, 0.8); }
     const fx = P(L.x + 1.5, L.y + 2.7); c.fillStyle = '#9ec9e6'; c.beginPath(); c.ellipse(fx[0], fx[1], 12, 6, 0, 0, 7); c.fill(); c.fillStyle = '#d9d2c2'; c.fillRect(fx[0] - 1.5, fx[1] - 8, 3, 8);
     return [cx, top - 48];
+  }
+
+
+  function bridge(c) {
+    const N = layout.N, ws = layout.waterSide; if (ws < 0) return;
+    const mid = (N - 1) / 2, horiz = ws === 1 || ws === 3;
+    const a = horiz ? P(ws === 1 ? N - 5 : 0, mid) : P(mid, ws === 0 ? 0 : N - 5);
+    const b = horiz ? P(ws === 1 ? N - 1 : 4, mid) : P(mid, ws === 0 ? 4 : N - 1);
+    c.strokeStyle = '#7a828e'; c.lineWidth = 15; c.lineCap = 'round'; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    c.strokeStyle = '#f2d36b'; c.lineWidth = 1.6; c.setLineDash([8, 7]); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); c.setLineDash([]);
+    c.strokeStyle = '#e5484d'; c.lineWidth = 2;
+    [0.33, 0.66].forEach(f => { const mx = a[0] + (b[0] - a[0]) * f, my = a[1] + (b[1] - a[1]) * f; c.beginPath(); c.moveTo(mx, my - 6); c.lineTo(mx, my - 34); c.stroke(); c.beginPath(); c.moveTo(mx - 7, my - 34); c.lineTo(mx + 7, my - 34); c.stroke(); });
   }
 
   function render() {
@@ -291,6 +429,7 @@ const CityView = (() => {
       if (t.kind === 'water') water(c, t); else if (t.kind === 'beach') beach(c, t); else if (t.kind === 'road') road(c, t, T);
       else if (t.kind === 'plaza') plazaGround(c, t); else lotGround(c, t);
     });
+    bridge(c);
     // pass 2: shadows
     T.forEach(t => { if (t.kind === 'lot' && t.arch !== 'house') { const h = Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2)); shadowOf(c, t.x + 0.15, t.y + 0.15, t.x + 0.85, t.y + 0.85, t.arch === 'warehouse' ? 25 : h); } });
     // pass 3: objects back to front
@@ -305,7 +444,7 @@ const CityView = (() => {
         if (horiz !== vert) { const col = ['#e5484d', '#f4f4f4', '#2f7cf6', '#222831', '#f5b301', '#9aa3ad'][Math.floor(t.seed * 60) % 6]; const lane = t.seed > 0.91 ? 0.3 : 0.7; objs.push([d + 0.5, t.x, () => car(c, horiz ? t.x + 0.5 : t.x + lane, horiz ? t.y + lane : t.y + 0.5, horiz, col)]); }
       }
     });
-    const L = layout.landmark; objs.push([L.x + L.y + 4.6, L.x + 2, () => { roofs.capitol = capitol(c); }]);
+    const L = layout.landmark; objs.push([L.x + L.y + 4.6, L.x + 2, () => { roofs.capitol = landmark(c); }]);
     objs.sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(o => o[2]());
     // Stadium on the city map, at the southern edge like a waterfront
     // ballpark: an oval bowl with a green field, stands and floodlights.
@@ -338,6 +477,37 @@ const CityView = (() => {
     } catch (e) {}
   }
 
+
+  function buildVehicles() {
+    vehicles = [];
+    const N = layout.N, T = layout.tiles, r = mulberry(hashStr('traffic:' + city.code + city.name));
+    const segs = [];
+    for (let y = 0; y < N; y++) { let st = -1; for (let x = 0; x <= N; x++) { const isR = x < N && T[y * N + x].kind === 'road'; if (isR && st < 0) st = x; if (!isR && st >= 0) { if (x - st >= 5) segs.push({ horiz: true, fixed: y, a: st + 0.5, b: x - 0.5 }); st = -1; } } }
+    for (let x = 0; x < N; x++) { let st = -1; for (let y = 0; y <= N; y++) { const isR = y < N && T[y * N + x].kind === 'road'; if (isR && st < 0) st = y; if (!isR && st >= 0) { if (y - st >= 5) segs.push({ horiz: false, fixed: x, a: st + 0.5, b: y - 0.5 }); st = -1; } } }
+    const cols = ['#e5484d', '#f4f4f4', '#2f7cf6', '#222831', '#f5b301', '#12a150', '#9aa3ad'];
+    segs.sort(() => r() - 0.5);
+    segs.slice(0, 18).forEach(sg => vehicles.push({ ...sg, pos: sg.a + r() * (sg.b - sg.a), dir: r() < 0.5 ? 1 : -1, speed: 0.9 + r() * 1.4, col: cols[Math.floor(r() * cols.length)], bus: r() < 0.25 }));
+  }
+  function drawVehicles(c2) {
+    if (!vehicles.length) return;
+    const sc = view.s;
+    vehicles.forEach(v => {
+      const lane = v.dir > 0 ? 0.32 : 0.68;
+      const [px, py] = v.horiz ? P(v.pos, v.fixed + lane) : P(v.fixed + lane, v.pos);
+      const sx = view.x + px * sc, sy = view.y + py * sc;
+      if (sx < -40 || sy < -40 || sx > el.clientWidth + 40 || sy > el.clientHeight + 40) return;
+      const tv = v.horiz ? [TW / 2 * sc, TH / 2 * sc] : [-TW / 2 * sc, TH / 2 * sc];
+      const cv = v.horiz ? [-TW / 2 * sc, TH / 2 * sc] : [TW / 2 * sc, TH / 2 * sc];
+      const L = v.bus ? 0.42 : 0.24, Wd = 0.14;
+      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [sx + a * L * tv[0] + b * Wd * cv[0], sy + a * L * tv[1] + b * Wd * cv[1] - 3 * sc]);
+      c2.fillStyle = v.col; c2.beginPath(); corners.forEach((pt, i) => i ? c2.lineTo(pt[0], pt[1]) : c2.moveTo(pt[0], pt[1])); c2.closePath(); c2.fill();
+      const cab = [[-0.4, -0.6], [0.4, -0.6], [0.4, 0.6], [-0.4, 0.6]].map(([a, b]) => [sx + a * L * tv[0] + b * Wd * cv[0], sy + a * L * tv[1] + b * Wd * cv[1] - 6 * sc]);
+      c2.fillStyle = v.bus ? v.col : '#9fc3dd'; c2.beginPath(); cab.forEach((pt, i) => i ? c2.lineTo(pt[0], pt[1]) : c2.moveTo(pt[0], pt[1])); c2.closePath(); c2.fill();
+    });
+  }
+  function startAnim() { if (animTimer) return; lastAnim = performance.now(); animTimer = setInterval(() => { const now = performance.now(), dt = Math.min(0.1, (now - lastAnim) / 1000); lastAnim = now; vehicles.forEach(v => { v.pos += v.dir * v.speed * dt; if (v.pos > v.b) { v.pos = v.b; v.dir = -1; } if (v.pos < v.a) { v.pos = v.a; v.dir = 1; } }); if (city) apply(); }, 50); }
+  function stopAnim() { if (animTimer) { clearInterval(animTimer); animTimer = null; } }
+
   function pins() {
     layer.innerHTML = '';
     const lots = cityLots(city.id), N = layout.N, owner = S.co[city.a3], mineCo = controlled(city.a3);
@@ -354,7 +524,7 @@ const CityView = (() => {
     // Buildings bought by tapping them (not FOR SALE lots) still get
     // an owned pin, so you can open, renovate or sell them again.
     if (show('prop')) S.props.filter(p => p.city === city.id && !lots.some(l => l.t === p.t)).forEach(pr => add(pr.t, 'pin-prop', '<span class="logo own">\u{1F3E0}</span>', () => onPin({ type: 'prop', lot: { t: pr.t } })));
-    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('div'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} Capitol</span>`; layer.appendChild(p); }
+    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('div'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} ${landmarkName}</span>`; layer.appendChild(p); }
     if (roofs.stadium && roofs.stadiumTeam) { const r = roofs.stadium, tm = roofs.stadiumTeam; const p = document.createElement('button'); p.className = 'pin pin-stadium'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = '<span class="logo">🏟️</span>'; p.title = tm.name; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'stadium', team: tm }); }); layer.appendChild(p); }
   }
 
@@ -369,6 +539,7 @@ const CityView = (() => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#cfe8f5'; ctx.fillRect(0, 0, vw, vh);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, view.x, view.y, W2 * view.s, H2 * view.s);
+    drawVehicles(ctx);
     layer.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
     layer.style.setProperty('--inv', Math.min(1, 0.85 / view.s));
   }
@@ -420,7 +591,7 @@ const CityView = (() => {
   return {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind(); },
     open(id) {
-      city = W.cities[id]; layout = cityLayout(city); roofs = {}; render();
+      city = W.cities[id]; layout = cityLayout(city); roofs = {}; render(); buildVehicles(); startAnim();
       el.classList.add('open');
       const vw = el.clientWidth, vh = el.clientHeight;
       view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
@@ -428,7 +599,7 @@ const CityView = (() => {
       view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
       pins(); apply();
     },
-    close() { el.classList.remove('open'); city = null; img = null; },
+    close() { stopAnim(); el.classList.remove('open'); city = null; img = null; },
     refresh() { if (city) pins(); },
     setFilter(f) { filter = f; pins(); },
     get filter() { return filter; },
