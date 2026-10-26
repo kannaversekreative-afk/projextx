@@ -571,6 +571,10 @@ const CityView = (() => {
       else if (l.kind === 'lease' && show('lease')) add(l.t, 'pin-lease', '<span class="sign">FOR<br>LEASE</span>', () => onPin({ type: 'lease', lot: l }));
       else if (l.kind === 'sale' && show('sale')) add(l.t, 'pin-sale', '<span class="bld">\u{1F3E2}</span><span class="tag">FOR SALE</span>', () => onPin({ type: 'sale', lot: l }));
     });
+    // Stores built on a leased lot get their logo as a pin, so tapping
+    // a built business opens its management panel (manager, products,
+    // marketing, finance) instead of vanishing with the FOR LEASE sign.
+    if (typeof storesInCity === 'function') storesInCity(city.id).forEach(st => add(st.lotT, 'pin-store', `<span class="logo own">${st.icon || '🏪'}</span>`, () => onPin({ type: 'store', store: st }), st.name));
     // Buildings bought by tapping them (not FOR SALE lots) still get
     // an owned pin, so you can open, renovate or sell them again.
     if (show('prop')) S.props.filter(p => p.city === city.id && !lots.some(l => l.t === p.t)).forEach(pr => add(pr.t, 'pin-prop', '<span class="logo own">\u{1F3E0}</span>', () => onPin({ type: 'prop', lot: { t: pr.t } })));
@@ -638,6 +642,8 @@ const CityView = (() => {
       if (loc) { onPin({ type: 'loc', loc, lot: { t: tIdx } }); return; }
       const prop = S.props.find(p => p.city === city.id && p.t === tIdx);
       if (prop) { onPin({ type: 'prop', lot: { t: tIdx } }); return; }
+      const builtStore = (typeof storesInCity === 'function') ? storesInCity(city.id).find(s => s.lotT === tIdx) : null;
+      if (builtStore) { onPin({ type: 'store', store: builtStore }); return; }
       const lot = cityLots(city.id).find(l => l.t === tIdx);
       if (lot && lot.kind === 'lease') { onPin({ type: 'lease', lot }); return; }
       if (lot && lot.kind === 'sale') { onPin({ type: 'sale', lot }); return; }

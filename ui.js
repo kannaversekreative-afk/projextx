@@ -1115,6 +1115,10 @@ function renderPopupInner() {
         <div class="stats3 box"><div><span>Profit / week</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}</b></div><div><span>Customers</span><b>${l.cust}</b></div><div><span>Satisfaction</span><b>${l.sat.toFixed(1)}★</b></div></div>
         <p class="muted small">Staff ${l.staff} · Rent ${fmtMoney(l.rent)}/week · Traffic ${l.traffic}</p>
         <button class="btn" data-a="closeLoc" data-x="${co.a3}|${l.id}">CLOSE LOCATION</button></div>`;
+    } else if (p.pin.type === 'store') {
+      const st = p.pin.store;
+      closePopup(); closeModal();
+      UI.panel = 'stores'; UI.stack = [st.id]; renderPanel(); renderHUD();
     } else if (p.pin.type === 'lease') {
       const rentW = lotRent(co, lot), deposit = Math.round(rentW * 10);
       $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Property for lease</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
@@ -1501,9 +1505,9 @@ function countryAdvisor() {
   if (losing && cs.tax > 0.05) return { title: `${losing.name} is losing money`, body: `It made ${fmtMoney(losing.week.profit, true)} last week. Lower corporate tax 5 points to help it.`, btn: 'LOWER TAX 5 PTS', a: 'advisorTax', x: 'down' };
   const mil = Object.entries(MILITARY).map(([b, d]) => [b, d, milCost(b)]).filter(([, , c]) => c != null).sort((a, b) => a[2] - b[2])[0];
   if (milRank(S.home) > 100 && mil && S.cash >= mil[2]) return { title: 'Military is weak', body: `You rank #${milRank(S.home)} in military power. Upgrade ${mil[1].name} to strengthen it.`, btn: 'UPGRADE MILITARY', a: 'milUp', x: mil[0] };
-  if (!S.placed || !S.placed.length) return { title: 'Place your first business', body: 'You have not placed a business yet — the first one is free, and it pays weekly income from the spot you pick.', btn: 'PLACE BUSINESS', a: 'createBusiness', x: '' };
+  if (!S.stores || !S.stores.length) return { title: 'Build your first business', body: 'You have no store yet. Open a city, tap a FOR LEASE lot, and press BUILD STORE to pick a business.', btn: 'MY STORES', a: 'panel', x: 'stores' };
   if (locCount() === 0) return { title: 'Open your first location', body: 'Lease a storefront in your capital city and your company starts earning there.', btn: 'ENTER CAPITAL', a: 'enterCity', x: String(W.byA3[S.home].capital) };
-  return { title: 'You are in good shape', body: 'No urgent move. Grow by placing another business or buying a stock in Markets.', btn: 'PLACE BUSINESS', a: 'createBusiness', x: '' };
+  return { title: 'You are in good shape', body: 'No urgent move. Grow by building another store, developing its products, or buying a stock in Markets.', btn: 'MY STORES', a: 'panel', x: 'stores' };
 }
 // User profile — entry only, as requested. No new profile features
 // are inferred here; Nicholas said he will get to those himself later.
@@ -1741,12 +1745,12 @@ PANELS.hq = () => {
     <div class="kv"><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div><div class="kv"><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div class="kv"><span>Locations</span><b>${c.locs.length}</b></div>
     <div class="row wrap"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="siteMaker" data-x="${c.a3}">CUSTOMIZE SITE</button><button class="btn" data-a="panel" data-x="offices">BOARD</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO</button>` : '<span class="muted small">Listed</span>'}</div></div>`;
   }).join('') || '<p class="muted small">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p>';
-  const placedRows = placed.map(b => `<div class="kv"><span>${b.icon || ICONS.company} ${esc(b.name)} · ${esc(cname(b.a3))}</span><b>${fmtMoney(b.value, true)} · ${fmtMoney(b.income, true)}/week</b></div>`).join('') || '<p class="muted small">No placed businesses yet. Place one from Create business in More.</p>';
+  const placedRows = placed.map(b => `<div class="kv"><span>${b.icon || ICONS.company} ${esc(b.name)} · ${esc(cname(b.a3))}</span><b>${fmtMoney(b.value, true)} · ${fmtMoney(b.income, true)}/week</b></div>`).join('') || '<p class="muted small">No placed businesses yet. Build one from a FOR LEASE lot in a city — press BUILD STORE there.</p>';
   return panelShell('HQ', `${hk ? hk.flag : ''} ${esc(cname(S.home))}${capCity ? ` · HQ in ${esc(capCity.name)}` : ''}`,
     `<div class="card in"><p><b>🏛️ Your HQ is in ${capCity ? esc(capCity.name) : 'your capital'}.</b></p><p class="muted small">HQ is not a separate place — it is your capital city, where the government sits. Open the capital to run it, or manage your companies from here.</p><button class="btn3d orange wide" data-a="panel" data-x="capital">🏛️ OPEN CAPITAL</button></div>
     <div class="stats3 box"><div><span>Companies controlled</span><b>${mineList.length}</b></div><div><span>Total value</span><b>${fmtMoney(totalValue, true)}</b></div><div><span>Week profit</span><b class="${upCls(totalProfit)}">${fmtMoney(totalProfit, true)}</b></div></div>
     <div class="kv"><span>Locations</span><b>${totalLocs}</b></div><div class="kv"><span>Placed businesses</span><b>${placed.length}</b></div><div class="kv"><span>Buildings owned</span><b>${S.props.length}</b></div>
-    <div class="row wrap"><button class="btn" data-a="panel" data-x="company">MANAGE COMPANIES</button><button class="btn" data-a="panel" data-x="capital">OPEN CAPITAL</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="bank">BANK</button><button class="btn" data-a="panel" data-x="estate">BUILDINGS</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button><button class="btn" data-a="createBusiness">CREATE BUSINESS</button></div>
+    <div class="row wrap"><button class="btn" data-a="panel" data-x="company">MANAGE COMPANIES</button><button class="btn" data-a="panel" data-x="capital">OPEN CAPITAL</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="bank">BANK</button><button class="btn" data-a="panel" data-x="estate">BUILDINGS</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button><button class="btn" data-a="panel" data-x="stores">MY STORES</button></div>
     <h4>Your companies</h4>${companyCards}
     <h4>Placed businesses</h4><div class="list">${placedRows}</div>`);
 };
@@ -1756,6 +1760,25 @@ PANELS.goals = () => {
     `<div class="stats3 box"><div><span>Level</span><b>Lv ${level()}</b></div><div><span>XP</span><b>${S.xp}</b></div><div><span>Companies controlled</span><b>${mine().length}</b></div></div>
     ${stage ? `<h4>${stage.name}</h4>${stage.goals.map((g, i) => `<div class="goal ${S.goalsDone.includes(S.career + ':' + i) ? 'done' : ''}"><span>${S.goalsDone.includes(S.career + ':' + i) ? '✓' : '○'}</span>${g.t}</div>`).join('')}` : '<p class="muted small">Legend status reached 👑</p>'}
     <h4>Daily reward</h4><div class="kv"><span>Today</span><b>${fmtMoney(dailyRewardInfo().amount, true)}</b></div><p class="muted small">Added to your cash automatically each day, no claiming needed.</p>`);
+};
+PANELS.progress = () => {
+  const p = ensureProgress(), sel = UI.progressSel || p.level;
+  const need = p.level >= 100 ? 0 : progressXPNeeded(p.level);
+  const pct = need ? Math.round(p.xp / need * 100) : 100;
+  const next = nextUnlockAfter(p.level);
+  const tiles = [];
+  for (let l = 1; l <= 100; l++) {
+    const state = l < p.level ? 'done' : l === p.level ? 'current' : 'locked';
+    tiles.push(`<button class="btn ${state === 'current' ? 'on' : ''}" style="min-width:44px;padding:8px 0;text-align:center;opacity:${state === 'locked' ? 0.55 : 1}" data-a="progressSel" data-x="${l}">${l}${state === 'done' ? ' ✓' : state === 'current' ? ' ●' : ' 🔒'}</button>`);
+  }
+  const selText = progressUnlockText(sel);
+  return panelShell('Progress', `Lv ${p.level} · ${p.xp} XP · ${need ? `${need - p.xp} XP to Lv ${p.level + 1}` : 'Max level'}`,
+    `<div class="card in"><h4>Your level</h4><div style="background:#eef5ff;border-radius:6px;height:12px;overflow:hidden"><div style="width:${pct}%;height:100%;background:#2f7cf6"></div></div><p class="muted small">${pct}% to next level.</p>
+    <p class="muted small">XP comes from doing: building a store (+150), developing a product (+40), upgrading a store (+60), and every profitable store week (+5). Levels unlock new business types, campaigns, store upgrades and manager levels — high-level employees stay locked until you earn them.</p>
+    ${next ? `<p><b>Next unlock:</b> Lv ${next.level} — ${esc(next.text)}</p>` : '<p><b>Everything unlocked.</b></p>'}</div>
+    <h4>Rewards map — tap a level</h4><div class="row wrap">${tiles.join('')}</div>
+    <div class="card in"><h4>Level ${sel}</h4><p>${selText ? esc(selText) : (sel < p.level ? 'No unlock at this level — it was a step toward the next one.' : sel === p.level ? 'Your current level.' : `Locked. ${next ? `Next unlock is Lv ${next.level}.` : ''}`)}</p></div>
+    <p class="muted small">First pass — unlocks will be adjusted as the game grows.</p>`);
 };
 PANELS.inbox = () => {
   S.mail.forEach(m => { m.read = true; });
@@ -1875,7 +1898,7 @@ PANELS.stores = () => {
     let body = `<div class="row wrap">${tabs.map(x => `<button class="chip ${tab === x ? 'on' : ''}" data-a="storeTab" data-x="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>`;
     if (tab === 'service') {
       const m = st.manager, bar = v => `<div style="background:#eef5ff;border-radius:6px;height:10px;overflow:hidden"><div style="width:${v}%;height:100%;background:#2f7cf6"></div></div>`;
-      body += `<div class="card in"><h4>Manager · ${esc(m.name)}</h4><p class="muted small">Manager since ${m.since} · Staff ${st.staff}</p>
+      body += `<div class="card in"><h4>Manager · ${esc(m.name)} · Lv ${m.level || 1}</h4><p class="muted small">Manager since ${m.since} · Staff ${st.staff} · Store Lv ${st.level || 1}</p><p class="muted small">Employee levels are earned, not bought: manager Lv 2 unlocks at Progress Lv 5, Lv 3 at 15, Lv 4 at 30, Lv 5 at 50. Firing hires a replacement at your highest unlocked level.</p>
       <p class="muted small">People ${m.people}</p>${bar(m.people)}<p class="muted small">Product ${m.product}</p>${bar(m.product)}<p class="muted small">Marketing ${m.marketing}</p>${bar(m.marketing)}<p class="muted small">Ethics ${m.ethics}</p>${bar(m.ethics)}
       <div class="row"><button class="btn" data-a="mgrSalary" data-x="${st.id}|-5000">− $5K</button><b>${fmtMoney(m.salary)}/yr</b><button class="btn" data-a="mgrSalary" data-x="${st.id}|5000">+ $5K</button></div>
       <h4>MANAGER DELEGATION</h4>${Object.entries({ staffing: 'Delegate staffing and salary', products: 'Delegate products and pricing', marketing: 'Delegate store marketing', troubles: 'Delegate store troubles' }).map(([k, label]) => `<div class="kv"><span>${label}</span><button class="btn" data-a="storeDel" data-x="${st.id}|${k}">${st.delegation[k] ? 'ON' : 'OFF'}</button></div>`).join('')}
@@ -1883,14 +1906,19 @@ PANELS.stores = () => {
       <h4>CUSTOMER REVIEWS ${st.reviews.overall} ★ · ${st.reviews.count} reviews</h4>
       <div class="kv"><span>Price</span><b>${st.reviews.price.toFixed(1)}</b></div><div class="kv"><span>Product</span><b>${st.reviews.product.toFixed(1)}</b></div><div class="kv"><span>Service</span><b>${st.reviews.service.toFixed(1)}</b></div><div class="kv"><span>Atmosphere</span><b>${st.reviews.atmosphere.toFixed(1)}</b></div></div>`;
     } else if (tab === 'product') {
-      body += `<div class="card in">${st.products.map((p, i) => { const d = p.prevSold ? (p.sold - p.prevSold) / Math.max(1, p.prevSold) : 0; return `<div class="kv"><span><b>${esc(p.name)}</b> · ${p.sold.toLocaleString()} sold ${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)}%</span><b>${fmtMoney(p.price)}</b></div><div class="row"><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|-0.5">− $0.50</button><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|0.5">+ $0.50</button></div>`; }).join('')}
+      const nextUp = (st.level || 1) + 1, upNeed = storeUpgradeUnlock(nextUp);
+      body += `<div class="card in">${st.products.map((p, i) => { const d = p.prevSold ? (p.sold - p.prevSold) / Math.max(1, p.prevSold) : 0; return `<div class="kv"><span><b>${esc(p.name)}</b> · Lv ${p.lvl || 1} · ${p.sold.toLocaleString()} sold ${d >= 0 ? '+' : ''}${(d * 100).toFixed(0)}%</span><b>${fmtMoney(p.price)}</b></div><div class="row"><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|-0.5">− $0.50</button><button class="btn" data-a="storePrice" data-x="${st.id}|${i}|0.5">+ $0.50</button>${(p.lvl || 1) >= 5 ? '<span class="muted small">Fully developed</span>' : `<button class="btn" data-a="storeDev" data-x="${st.id}|${i}">DEVELOP · ${fmtMoney(productDevCost(p), true)}</button>`}</div>`; }).join('')}
+      <h4>DEVELOP THIS STORE · Lv ${st.level || 1} / 5</h4><p class="muted small">Each store level adds 10% to customer demand. Developing products and upgrading the store is how a shop grows — opening one alone never makes trillions.</p>
+      ${(st.level || 1) >= 5 ? '<p class="muted small">Fully upgraded.</p>' : (progressLevel() < upNeed ? `<p class="muted small">🔒 Store Lv ${nextUp} unlocks at Progress Lv ${upNeed}.</p>` : `<button class="btn3d orange wide" data-a="storeUp" data-x="${st.id}">UPGRADE TO LV ${nextUp} · ${fmtMoney(storeUpgradeCost(st), true)}</button>`)}
+      <h4>LOGO</h4><p class="muted small">Pick an icon for this business. It shows on the city map, in the store list and here.</p>
+      <div class="row"><span style="font-size:28px">${st.icon || def.icon}</span><button class="btn" data-a="storeIconOpen" data-x="${st.id}">CHANGE LOGO</button></div>
       <h4>COMPANY BLEND</h4><p class="muted small">Your house blend is the ${esc(def.products[0].name)} line above — price it like any other product, or rename the store to name the blend.</p>
       <label class="muted small">STORE NAME</label><input id="storeName" class="search" value="${esc(st.name)}"><button class="btn" data-a="storeRename" data-x="${st.id}">SAVE NAME</button></div>`;
     } else if (tab === 'marketing') {
       body += `<div class="card in"><h4>MARKET SHARES IN AREA</h4>
       <div style="width:120px;height:120px;border-radius:50%;background:conic-gradient(#2f7cf6 0 ${Math.round(share.mine * 360)}deg, #c9dcf5 ${Math.round(share.mine * 360)}deg 360deg);margin:8px auto"></div>
       <div class="kv"><span>${esc(st.name)} · ${esc(st.address)}</span><b>${(share.mine * 100).toFixed(1)}%</b></div><div class="kv"><span>Other shops in ${esc(W.cities[st.cityId] ? W.cities[st.cityId].name : '')}</span><b>${(share.ai * 100).toFixed(1)}%</b></div>
-      <h4>MARKETING CAMPAIGNS</h4>${STORE_CAMPAIGNS.map(c => { const on = st.campaigns.some(x => x.id === c.id); return `<div class="kv"><span><b>${c.name}</b> · +${Math.round(c.boost * 100)}% foot traffic · ${fmtMoney(c.cost)}/week</span><button class="btn" data-a="storeCamp" data-x="${st.id}|${c.id}">${on ? 'RUNNING' : 'START'}</button></div>`; }).join('')}</div>`;
+      <h4>MARKETING CAMPAIGNS</h4>${STORE_CAMPAIGNS.map(c => { const on = st.campaigns.some(x => x.id === c.id); const locked = progressLevel() < (c.unlock || 1); return `<div class="kv"><span><b>${c.name}</b> · +${Math.round(c.boost * 100)}% foot traffic · ${fmtMoney(c.cost)}/week</span>${locked ? `<span>🔒 Lv ${c.unlock}</span>` : `<button class="btn" data-a="storeCamp" data-x="${st.id}|${c.id}">${on ? 'RUNNING' : 'START'}</button>`}</div>`; }).join('')}</div>`;
     } else if (tab === 'finance') {
       const wk = st.weeks[0] || { rev: 0, income: 0 };
       body += `<div class="card in"><div class="stats3 box"><div><span>Store Revenue</span><b>${fmtMoney(wk.rev, true)}</b></div><div><span>Store Income</span><b class="${upCls(wk.income)}">${fmtMoney(wk.income, true)}</b></div><div><span>Rent / week</span><b>${fmtMoney(st.rent)}</b></div></div>
@@ -1899,10 +1927,10 @@ PANELS.stores = () => {
       <div class="kv"><span>Total Revenues</span><b>${fmtMoney(wk.rev, true)}</b></div><div class="kv"><span>Rent + wages + ingredients (this week)</span><b>${fmtMoney(Math.max(0, wk.rev - wk.income), true)}</b></div><div class="kv"><span>Net income</span><b class="${upCls(wk.income)}">${fmtMoney(wk.income, true)}</b></div>
       <button class="btn" data-a="closeStore" data-x="${st.id}">CLOSE STORE</button></div>`;
     }
-    return panelShell(`${esc(st.name)}`, `${esc(st.address)} · Rent ${fmtMoney(st.rent)}/week · Foot traffic ${st.footTraffic.toLocaleString()}/week`, body);
+    return panelShell(`${st.icon || def.icon} ${esc(st.name)} · Lv ${st.level || 1}`, `${esc(st.address)} · Rent ${fmtMoney(st.rent)}/week · Foot traffic ${st.footTraffic.toLocaleString()}/week`, body);
   }
   return panelShell('Stores', 'Stores you built from a FOR LEASE lot. Tap one to manage it.',
-    `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${(STORE_TYPES[st.type] || STORE_TYPES.coffee).icon}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
+    `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${st.icon || (STORE_TYPES[st.type] || STORE_TYPES.coffee).icon}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
     <p class="muted small">Stores earn every in-game week: customers pay, the store pays rent, wages, ingredients and campaigns, and the net lands in your cash.</p>`);
 };
 
@@ -2105,6 +2133,7 @@ const MENU_ITEMS = [
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'], ['estate', ICONS.house, 'My Estate'],
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
+  ['progress', '🏆', 'Progress'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
@@ -2124,8 +2153,7 @@ function openMenuPopup() {
   const unread = (S.mail || []).filter(m => !m.read).length;
   openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="menu-bell" data-a="panel" data-x="inbox" aria-label="Messages">${unread ? `<span class="menu-bell-badge">${unread}</span>` : ''}${ICONS.bell}</button><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
   <div class="menu-pop-body">
-  <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">${ICONS.company}</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
-  ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
+  ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['progress', 'Levels 1-100 and what each unlocks'], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
   ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mars', 'Mars']])}
   ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
@@ -2405,11 +2433,31 @@ const A = {
   storeDel: x => { const [id, k] = x.split('|'); act(() => toggleStoreDelegation(id, k), 'Delegation changed'); },
   mgrSalary: x => { const [id, d] = x.split('|'); act(() => adjustManagerSalary(id, +d), 'Manager salary changed'); },
   fireMgr: x => act(() => fireStoreManager(x), 'New manager hired'),
+  progressSel: x => { UI.progressSel = +x; renderPanel(); },
+  storeDev: x => { const [id, idx] = x.split('|'); act(() => developProduct(id, +idx), 'Product developed'); },
+  storeUp: x => act(() => upgradeStore(x), 'Store upgraded'),
+  storeIconOpen: x => { openModal(`<h2>Pick a logo</h2><p class="muted">Tap an icon for this business.</p><div class="row wrap">${STORE_ICONS.map(ic => `<button class="btn" style="font-size:22px;padding:8px 10px" data-a="storeIconDo" data-x="${x}|${ic}">${ic}</button>`).join('')}</div>`, 'sheet'); },
+  storeIconDo: x => { const [id, ic] = x.split('|'); act(() => setStoreIcon(id, ic), 'Logo changed'); closeModal(); },
   storeCamp: x => { const [id, cid] = x.split('|'); act(() => startStoreCampaign(id, cid), 'Campaign started'); },
   storeRename: x => { const inp = document.getElementById('storeName'); act(() => renameStore(x, inp ? inp.value : ''), 'Store renamed'); },
   closeStore: x => { act(() => closeStore(x), 'Store closed'); closePanel(); openPanel('stores'); },
   takeLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeLoan(amt, mo), 'Loan taken'); },
-  buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); UI.buildLot = { cityId: +cityId, lotT: +lotT }; openModal(`<h2>Build a store</h2><p class="muted">Choose a store type for this leased lot.</p><div class="row wrap">${Object.entries(STORE_TYPES).map(([k, d]) => `<button class="btn flex" data-a="buildStoreDo" data-x="${k}">${d.icon} ${d.name}</button>`).join('')}</div>`, 'sheet'); },
+  buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); UI.buildLot = { cityId: +cityId, lotT: +lotT };
+    const lot = (cityLots(+cityId) || []).find(l => l.t === +lotT) || {};
+    const city = W.cities[+cityId] || {};
+    const rent = lot.rent || 2000, deposit = Math.round(rent * 10), lv = progressLevel();
+    const cards = Object.entries(STORE_TYPES).map(([k, d]) => {
+      const avgTicket = d.products.reduce((a, p) => a + p.price, 0) / d.products.length;
+      const avgMargin = d.products.reduce((a, p) => a + (p.price - p.cost) / p.price, 0) / d.products.length;
+      const total = deposit + (d.buildout || 25000);
+      const locked = lv < (d.unlock || 1);
+      return `<div class="card in"><div class="row between"><b>${d.icon} ${d.name}</b>${locked ? `<span>🔒 Unlocks at Lv ${d.unlock}</span>` : `<button class="btn3d orange" data-a="buildStoreDo" data-x="${k}">BUILD · ${fmtMoney(total, true)}</button>`}</div>
+      <p class="muted small">${esc(d.desc)}</p>
+      <div class="kv"><span>Products</span><b>${d.products.map(p => esc(p.name)).join(', ')}</b></div>
+      <div class="kv"><span>Avg ticket</span><b>${fmtMoney(avgTicket)}</b></div><div class="kv"><span>Avg margin</span><b>${Math.round(avgMargin * 100)}%</b></div>
+      <div class="kv"><span>Fit-out</span><b>${fmtMoney(d.buildout || 25000, true)}</b></div><div class="kv"><span>Deposit + fit-out</span><b>${fmtMoney(total, true)}</b></div></div>`;
+    }).join('');
+    openModal(`<h2>Build a store</h2><p class="muted">${esc(city.name || '')} · Population ${(city.pop || 0).toLocaleString()} · Foot traffic ${(lot.traffic || 0).toLocaleString()}/week · Rent ${fmtMoney(rent)}/week · Deposit ${fmtMoney(deposit, true)} upfront. Bigger cities mean more customers — pick the business that fits this spot, then develop it: a store alone never makes trillions.</p><p class="muted small">Your Progress: Lv ${lv} · Manager level available: Lv ${maxManagerLevel()}</p><div class="list">${cards}</div>`, 'sheet'); },
   buildStoreDo: x => { const lot = UI.buildLot; if (!lot) return toast('Pick a FOR LEASE pin first', 'bad'); const err = buildStore(lot.cityId, lot.lotT, x); if (err) return toast(err, 'bad'); closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Store opened! Results arrive every week.', 'good'); save(); refreshAll(); },
   openStadium: x => { closePopup(); if (CityView.isOpen()) leaveCity(); ensureSports(); S.sports.tab = sportTeam(x).league; openPanel('sports'); UI.stack = [x]; renderPanel(); },
   webCo: x => { UI.web = { view: 'site', q: '', a3: x }; openPanel('web'); },
