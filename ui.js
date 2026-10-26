@@ -1470,7 +1470,7 @@ const A = {
   skipMenu: () => skipMenu(),
   skip: x => doSkip(+x),
   zoom: x => MapView.zoom(+x),
-  locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
+  locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap} — instant v2`); },
   more: () => moreSheet(),
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
