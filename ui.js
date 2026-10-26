@@ -2025,8 +2025,8 @@ PANELS.offices = () => {
     }).join('');
     return ceoRow + rows;
   };
-  // Managers hired by your executives, on company cards only. Store
-  // managers are hired by the CFO, so there is no CFO row here.
+  // Managers hired by your executives, on company cards only. The
+  // CFO hires nobody, so there is no CFO row here.
   const mgrSection = (c) => {
     const mgrs = (typeof ensureExecManagers === 'function') ? ensureExecManagers(c) : {};
     const row = (kind, label, execRole, mgr) => {
@@ -2044,7 +2044,7 @@ PANELS.offices = () => {
       const cands = (typeof execManagerCandidates === 'function') ? execManagerCandidates(c, kind) : [];
       candList = `<div class="card in"><h4>Hire ${kind} manager — ${esc(c.name)}</h4><p class="muted small">Pick one. A manager's level never exceeds their executive's level. ⭐ means developable: they improve over time, up to a personal cap below 99.</p>${cands.map(x => `<div class="kv"><span>${esc(x.name)} · Lv ${x.level} · Skill ${x.skill}${x.star ? ' ⭐ developable' : ''}</span><b>${fmtMoney(x.salary)}/yr <button class="btn small" data-a="hireExecMgrDo" data-x="${c.a3}|${kind}|${x.id}">HIRE</button></b></div>`).join('')}<button class="btn" data-a="mgrHireCancel">CANCEL</button></div>`;
     }
-    return `<div class="card in"><h4>Managers — hired by your executives</h4><p class="muted small">Store managers are hired by the CFO. Product, marketing, and technology managers are hired here by their executives.</p>${row('product', 'Product manager', 'CPO', mgrs.product)}${row('marketing', 'Marketing manager', 'CMO', mgrs.marketing)}${row('tech', 'Technology manager', 'CTO', mgrs.tech)}${candList}</div>`;
+    return `<div class="card in"><h4>Managers — hired by your executives</h4><p class="muted small">The CFO hires nobody: IPO, loans and forecasts are advice. Every other executive hires a manager in their own domain.</p>${row('product', 'Product manager', 'CPO', mgrs.product)}${row('marketing', 'Marketing manager', 'CMO', mgrs.marketing)}${row('tech', 'Technology manager', 'CTO', mgrs.tech)}${candList}</div>`;
   };
   const hireSection = () => {
     const h = UI.hire; if (!h) return '';
@@ -2086,7 +2086,7 @@ PANELS.offices = () => {
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
     ${boardRow(t, 'team', t.id)}
     ${t.ipo ? '<p class="muted small">Already public.</p>' : '<p class="muted small">IPO in the team Finance tab, up to 100% at today\'s valuation minus a 7% fee.</p>'}</div>`).join('') || '<p class="muted small">No teams you own yet. Buy one in Sports.</p>';
-  return panelShell('Offices', 'You are the CEO. Hire 5 executives — COO, CFO, CPO, CMO, CTO — and each hires a manager in their own domain. The CFO also advises on IPO, loans, and forecasts. Higher level members boost revenue more — and cost more.',
+  return panelShell('Offices', 'You are the CEO. Hire 5 executives — COO, CFO, CPO, CMO, CTO — and each hires a manager in their own domain. The CFO hires nobody: IPO, loans and forecasts are advice. Higher level members boost revenue more — and cost more.',
     `${hireSection()}<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
 };
 PANELS.bank = () => {
