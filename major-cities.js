@@ -222,7 +222,7 @@ const MAJOR_CITIES = [
   {n:'Darwin', c:'AUS', code:'DRW', lat:-12.46, lon:130.84, pop:150000, port:1},
   // South Korea (capital Seoul already in data)
   {n:'Busan', c:'KOR', code:'PUS', lat:35.18, lon:129.08, pop:3400000, port:1},
-  {n:'Incheon', c:'KOR', code:'ICN', lat:37.46, lon:126.71, pop:3000000, port:1},
+  {n:'Incheon', c:'KOR', code:'ICH', lat:37.46, lon:126.71, pop:3000000, port:1},
   {n:'Daegu', c:'KOR', code:'TAE', lat:35.87, lon:128.60, pop:2400000, port:0},
   {n:'Daejeon', c:'KOR', code:'CJU', lat:36.35, lon:127.38, pop:1500000, port:0},
   {n:'Gwangju', c:'KOR', code:'KWJ', lat:35.16, lon:126.85, pop:1500000, port:0},
@@ -245,7 +245,7 @@ const MAJOR_CITIES = [
   {n:'Dammam', c:'SAU', code:'DMM', lat:26.42, lon:50.10, pop:1200000, port:1},
   {n:'Khobar', c:'SAU', code:'KHB', lat:26.22, lon:50.21, pop:700000, port:1},
   {n:'Abha', c:'SAU', code:'AHB', lat:18.22, lon:42.50, pop:600000, port:0},
-  {n:'Tabuk', c:'SAU', code:'TBU', lat:28.38, lon:36.57, pop:600000, port:0},
+  {n:'Tabuk', c:'SAU', code:'TUU', lat:28.38, lon:36.57, pop:600000, port:0},
   // Argentina (capital Buenos Aires already in data)
   {n:'Córdoba', c:'ARG', code:'COR', lat:-31.42, lon:-64.19, pop:1600000, port:0},
   {n:'Rosario', c:'ARG', code:'ROS', lat:-32.95, lon:-60.66, pop:1400000, port:1},
@@ -390,7 +390,7 @@ const MAJOR_CITIES = [
   // Portugal (capital Lisbon already in data)
   {n:'Porto', c:'PRT', code:'OPO', lat:41.16, lon:-8.63, pop:1300000, port:1},
   {n:'Braga', c:'PRT', code:'BRG2', lat:41.55, lon:-8.43, pop:200000, port:0},
-  {n:'Coimbra', c:'PRT', code:'CBR', lat:40.20, lon:-8.42, pop:140000, port:0},
+  {n:'Coimbra', c:'PRT', code:'COI', lat:40.20, lon:-8.42, pop:140000, port:0},
   {n:'Faro', c:'PRT', code:'FAO', lat:37.02, lon:-7.93, pop:70000, port:1},
   // Ireland (capital Dublin already in data)
   {n:'Cork', c:'IRL', code:'ORK', lat:51.90, lon:-8.47, pop:210000, port:1},
