@@ -43,6 +43,22 @@ function buildWorld(data) {
     if (!W.byA3[k.a3] || (k.playable && !W.byA3[k.a3].playable)) W.byA3[k.a3] = k;
     W.countries.push(k);
   });
+  // World population is 8.3 billion, but the country data is old and
+  // only adds up to about 7.68 billion. Scale every country's
+  // population by the same factor (real world only, not Random World),
+  // so the world totals exactly 8.3 billion and each country's share
+  // stays the same. City splits, GDP per person and growth all follow
+  // from the scaled total automatically.
+  if (!data) {
+    const totalPop = W.countries.reduce((s, k) => s + k.pop0, 0) || 1;
+    const factor = 8300000000 / totalPop;
+    W.countries.forEach(k => { k.pop0 = Math.round(k.pop0 * factor); });
+    let residual = 8300000000 - W.countries.reduce((s, k) => s + k.pop0, 0);
+    if (residual !== 0) {
+      const biggest = W.countries.reduce((b, k) => (k.pop0 > b.pop0 ? k : b), W.countries[0]);
+      biggest.pop0 += residual;
+    }
+  }
   src.cities.forEach(d => {
     const k = W.byA3[d.c];
     const c = { id: W.cities.length, name: d.n, code: d.code, a3: d.c, lat: d.lat, lon: d.lon, x: projX(d.lon), y: projY(d.lat), pop: Math.max(5000, d.pop), port: !!d.port };

@@ -129,6 +129,18 @@ async function idbDel(key) {
 }
 function migrateSave(s) {
   if (!s || !s.co) return s;
+  // Old saves were built on the old ~7.68B world population. Rescale
+  // their country populations to the new 8.3B world, preserving any
+  // growth since the game started.
+  if (s.countries && typeof W !== 'undefined' && W.byA3) {
+    Object.keys(s.countries).forEach(a3 => {
+      const cs = s.countries[a3], k = W.byA3[a3];
+      if (cs && k && cs.pop0 && cs.pop0 !== k.pop0) {
+        cs.pop = Math.round(cs.pop * (k.pop0 / cs.pop0));
+        cs.pop0 = k.pop0;
+      }
+    });
+  }
   if (!Array.isArray(s.stores)) s.stores = [];
   if (!Array.isArray(s.loans)) s.loans = [];
   if (!s.sports) s.sports = null;
