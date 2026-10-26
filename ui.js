@@ -825,11 +825,11 @@ function renderPopup() {
     const myProps = S.props.filter(x => x.city === c.id).length;
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${k.flag} ${esc(k.name)} · ${esc(st.t)}</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(c.pop)}</b></div><div><span>Your locations</span><b>${myLocs}</b></div><div><span>Your buildings</span><b>${myProps}</b></div></div>
       <h5>Businesses here</h5>
       ${businessesInCity(c.id).map(({ c: bc, l }) => `<div class="kv"><span>🏢 ${esc(bc.name)} · ${SECTORS[bc.sector].loc.name} here · ★ ${l.sat.toFixed(1)}</span><b class="${upCls(l.profit)}">${fmtMoney(l.profit, true)}/week</b></div>`).join('') || `<p class="muted small">No businesses here yet. ${esc(co.name)} is this country's main business — see it in Markets if you want its stock.</p>`}
       ${(() => { try { const tm = teamForCity(c.id); return tm ? `<div class="kv"><span>🏟️ ${esc(tm.stadium.name)} · ${esc(tm.name)}</span><button class="btn" data-a="openStadium" data-x="${tm.id}">OPEN TEAM</button></div>` : ''; } catch (e) { return ''; } })()}
-      <div class="row"><button class="btn3d orange flex" data-a="enterCity" data-x="${c.id}">ENTER CITY</button><button class="btn flex" data-a="countryMarkets" data-x="${c.a3}">BUSINESSES IN MARKETS</button></div>
       ${W.byA3[c.a3].capital === c.id && c.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${c.a3}">INVADE</button></div>` : ''}
     </div>`;
   } else if (p.type === 'country') {
@@ -837,11 +837,11 @@ function renderPopup() {
     const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(p.a3) : [co];
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${k.flag} ${esc(cname(p.a3))}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+      <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
       <h5>Businesses</h5>
       ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || '🏢'} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
       <p class="muted small">A country can have more than one business, so this is the country, not one stock. Trade a business's stock in Markets.</p>
-      <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
       ${p.a3 !== S.home ? `<div class="row"><button class="btn3d orange wide" data-a="warPlan" data-x="${p.a3}">INVADE</button></div>` : ''}
     </div>`;
   } else if (p.type === 'pin') {
@@ -872,6 +872,15 @@ function renderPopup() {
         <div class="stats3 box"><div><span>Estimated value</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Weekly rent income</span><b>${fmtMoney(wkRent)}</b></div><div><span>ROI</span><b>${(roi * 100).toFixed(2)}%</b></div></div>
         <div class="kv"><span>Annual rent / unit</span><b>${fmtMoney(lot.mrent * 12)}</b></div><div class="kv"><span>Occupancy</span><b>62.2%</b></div><div class="kv"><span>Asking price</span><b>${fmtMoney(Math.round(lot.price * 1.17), true)}</b></div>
         <button class="btn3d orange wide" data-a="buyBld" data-x="${lot.t}">OFFER PURCHASE</button></div>`;
+    } else if (p.pin.type === 'building') {
+      // Any building in the city, tapped directly: buy it like a
+      // property. Same rent math as a FOR SALE building.
+      const lot = p.pin.lot, wkRent = Math.round(lot.units * lot.mrent * 0.622 / 4.33), roi = lot.price ? wkRent * 52 / lot.price : 0;
+      $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>${buildingIcon(lot.arch)} ${esc(buildingName(lot.arch))}</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
+        <p class="muted small">${esc(city.name)} · ${lot.floors} floors · ${lot.units} units · Condition ${Math.round(lot.cond * 100)}%</p>
+        <div class="stats3 box"><div><span>Price</span><b>${fmtMoney(lot.price, true)}</b></div><div><span>Weekly rent income</span><b>${fmtMoney(wkRent)}</b></div><div><span>ROI</span><b>${(roi * 100).toFixed(2)}%</b></div></div>
+        <div class="kv"><span>Annual rent / unit</span><b>${fmtMoney(lot.mrent * 12)}</b></div><div class="kv"><span>Foot traffic</span><b>${lot.traffic.toLocaleString()}/week</b></div>
+        <button class="btn3d orange wide" data-a="buyAnyBld" data-x="${lot.t}">BUY BUILDING · ${fmtMoney(lot.price, true)}</button></div>`;
     } else if (p.pin.type === 'prop') {
       const pr = S.props.find(x => x.city === city.id && x.t === lot.t);
       $('popup').innerHTML = `<div class="popup card"><div class="row between"><b>Your building</b><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
@@ -1798,6 +1807,11 @@ const A = {
   },
   buyBld: x => {
     const err = buyBuilding(CityView.city.id, +x);
+    if (err) return toast(err, 'bad');
+    closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Building bought. Rent arrives every week.', 'good'); save(); refreshAll();
+  },
+  buyAnyBld: x => {
+    const err = buyAnyBuilding(CityView.city.id, +x);
     if (err) return toast(err, 'bad');
     closeModal(); closePopup(); CityView.refresh(); renderCityHUD(); toast('Building bought. Rent arrives every week.', 'good'); save(); refreshAll();
   },

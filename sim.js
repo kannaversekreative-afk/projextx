@@ -551,6 +551,38 @@ function buyBuilding(cityId, t) {
   S.xp += 80; news('Property', `You bought a ${lot.units}-unit building in ${W.cities[cityId].name}.`, W.cities[cityId].a3);
   return null;
 }
+function buildingName(arch) { return { house: 'House', rowhouse: 'Row house', apartment: 'Apartment building', office: 'Office building', glass: 'Office tower', skyscraper: 'Skyscraper', warehouse: 'Warehouse', gas: 'Gas station', shop: 'Shop' }[arch] || 'Building'; }
+function buildingIcon(arch) { return { house: '🏠', rowhouse: '🏠', apartment: '🏢', office: '🏢', glass: '🏙️', skyscraper: '🏙️', warehouse: '🏭', gas: '⛽', shop: '🏪' }[arch] || '🏢'; }
+// Every building in a city, not just the ones marked FOR SALE or FOR
+// LEASE: price, units and rent from the tile itself, so tapping any
+// building in the city can buy it.
+function buildingLotForTile(cityId, tIdx) {
+  const city = W.cities[cityId], L = cityLayout(city), t = L.tiles[tIdx];
+  if (!t || t.kind !== 'lot') return null;
+  const w = city.wealth;
+  const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' ? 2 : t.arch === 'warehouse' ? 1 : t.arch === 'gas' ? 1 : Math.max(4, Math.round(t.floors * 1.8));
+  const mrent = Math.round(70 + 380 * Math.pow(w, 1.05));
+  const cap = 0.05 + (1 - Math.min(1, w)) * 0.04;
+  const mult = t.arch === 'skyscraper' ? 2.5 : t.arch === 'warehouse' ? 1.4 : t.arch === 'gas' ? 1.2 : 1;
+  const price = Math.round(units * mrent * 52 / cap * mult / 1000) * 1000;
+  const size = t.arch === 'warehouse' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
+  return { t: tIdx, kind: 'building', traffic: t.traffic || 0, size, arch: t.arch, units, mrent, cond: 0.75, price, floors: t.floors, zone: t.zone };
+}
+function buyAnyBuilding(cityId, tIdx) {
+  const existing = cityLots(cityId).find(l => l.t === tIdx);
+  if (existing && existing.kind === 'sale') return buyBuilding(cityId, tIdx);
+  if (existing && existing.kind === 'prop') return 'You already own this building.';
+  if (existing && existing.kind === 'lease') return 'This lot is for lease — use BUILD STORE or LEASE instead.';
+  const owner = S.co[W.cities[cityId].a3];
+  if (owner && owner.locs.some(l => (l.city || owner.city) === cityId && l.t === tIdx)) return 'This is a company location, not for sale.';
+  if (S.props.some(p => p.city === cityId && p.t === tIdx)) return 'You already own this building.';
+  const lot = buildingLotForTile(cityId, tIdx); if (!lot) return 'Nothing to buy here.';
+  if (S.cash < lot.price) return 'Not enough cash.';
+  S.cash -= lot.price; setLot(cityId, tIdx, 'prop');
+  S.props.push({ id: uid(), city: cityId, t: tIdx, units: lot.units, mrent: lot.mrent, rentLv: 1, cond: lot.cond, value: lot.price, paid: lot.price, occ: 0.7, income: 0, traffic: lot.traffic, size: lot.size });
+  S.xp += 80; news('Property', `You bought a ${buildingName(lot.arch).toLowerCase()} in ${W.cities[cityId].name}.`, W.cities[cityId].a3);
+  return null;
+}
 function sellBuilding(id) {
   const p = S.props.find(x => x.id === id); if (!p) return;
   if (p.loc) return 'Close the location in this building first.';

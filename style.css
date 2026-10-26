@@ -304,7 +304,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .ppage { font-weight: 900; font-size: 13px; letter-spacing: 1px; }
 .paper-return { max-width: 720px; margin: 0 auto max(16px, env(safe-area-inset-bottom)); border: 2px solid #f8f1dc !important; background: #1a1a1a !important; color: #f8f1dc !important; font-family: Georgia, serif; letter-spacing: 1px; }
 
-body.in-city #hud, body.in-city #popup { display: none; }
+body.in-city #hud { display: none; }
 @media (max-width: 760px) {
   #panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 72vh; border-radius: 24px; }
   @keyframes slidein { from { transform: translateY(40px); opacity: 0; } }

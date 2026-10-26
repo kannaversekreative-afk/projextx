@@ -333,8 +333,12 @@ function cityLayout(city) {
   blocks.forEach((b, i) => {
     const r = rng();
     let zone;
-    if (front(b)) zone = r < 0.35 ? 'park' : 'commercial';
-    else if (b.d < 0.3) zone = r < 0.1 ? 'park' : 'downtown';
+    // Downtown is the core around the capitol, but never in front of
+    // it (tall towers there would hide the dome). The old order put
+    // front first, so every centre block became commercial and no
+    // city ever had a downtown at all.
+    if (b.d < 0.55 && !front(b)) zone = r < 0.1 ? 'park' : 'downtown';
+    else if (front(b)) zone = r < 0.35 ? 'park' : 'commercial';
     else if (b.d < 0.6) zone = r < 0.12 ? 'park' : r < 0.2 ? 'commercial' : 'midtown';
     else zone = r < 0.14 ? 'park' : r < 0.22 ? 'industrial' : r < 0.3 ? 'commercial' : 'suburb';
     b.zone = zone;
@@ -343,9 +347,12 @@ function cityLayout(city) {
       if (zone === 'park') { t.kind = 'park'; return; }
       const q = rng();
       const down = Math.max(0, 1 - t.d * 1.4);
-      if (zone === 'downtown') { t.arch = q < 0.5 ? 'glass' : q < 0.85 ? 'office' : 'apartment'; t.floors = Math.round(8 + city.size * 26 * (0.35 + rng() * 0.9) * (0.5 + down)); }
+      if (zone === 'downtown') {
+        if (city.size >= 0.9 && q < 0.3) { t.arch = 'skyscraper'; t.floors = Math.round(30 + city.size * 18 + rng() * 14); }
+        else { t.arch = q < 0.5 ? 'glass' : q < 0.85 ? 'office' : 'apartment'; t.floors = Math.round(8 + city.size * 26 * (0.35 + rng() * 0.9) * (0.5 + down)); }
+      }
       else if (zone === 'midtown') { t.arch = q < 0.45 ? 'apartment' : q < 0.7 ? 'office' : q < 0.88 ? 'shop' : 'rowhouse'; t.floors = t.arch === 'shop' ? 1 + Math.round(rng()) : t.arch === 'rowhouse' ? 3 : Math.round(3 + rng() * 6 + city.size * 4); }
-      else if (zone === 'commercial') { t.arch = q < 0.65 ? 'shop' : 'office'; t.floors = t.arch === 'shop' ? 1 + Math.round(rng()) : Math.round(3 + rng() * 4); }
+      else if (zone === 'commercial') { t.arch = q < 0.15 ? 'gas' : q < 0.65 ? 'shop' : 'office'; t.floors = t.arch === 'gas' ? 1 : t.arch === 'shop' ? 1 + Math.round(rng()) : Math.round(3 + rng() * 4); }
       else if (zone === 'industrial') { t.arch = 'warehouse'; t.floors = 2; }
       else { t.arch = q < 0.55 ? 'house' : q < 0.85 ? 'rowhouse' : 'shop'; t.floors = t.arch === 'house' ? 1 : t.arch === 'shop' ? 1 : 2 + Math.round(rng()); }
       t.color = pickColor(t.arch, rng);
@@ -362,6 +369,8 @@ function cityLayout(city) {
 function pickColor(arch, rng) {
   const P = {
     glass: ['#8fb3d1', '#6f97ba', '#a9c3d6', '#5b7f9e', '#7fa0b8', '#9ab8c9', '#4f6d88'],
+    skyscraper: ['#7fa8c9', '#5b8fb5', '#9ab8c9', '#6f97ba', '#8fb3d1', '#4f7aa0'],
+    gas: ['#e8e8e8', '#f0e4d0', '#d7e1e6'],
     office: ['#d9d4c7', '#c9ced6', '#e6dccb', '#b9c2cc', '#d6c8b4', '#ece6da'],
     apartment: ['#c96f5a', '#d8b39a', '#e9d8c4', '#b9806a', '#d4c3b0', '#a8644f', '#e7ddd0'],
     rowhouse: ['#f2c6b6', '#c8dbe8', '#f6e2a9', '#d5e8cf', '#e8cfe0', '#f1d9c4', '#c9d3ee', '#fbe7d0'],

@@ -17,12 +17,16 @@ const CityView = (() => {
   // ---------- ground ----------
   function diamond(c, x, y, fill, k) { k = k || 0; poly(c, [P(x + k, y + k), P(x + 1 - k, y + k), P(x + 1 - k, y + 1 - k), P(x + k, y + 1 - k)], fill); }
   function road(c, t, T) {
-    diamond(c, t.x, t.y, '#8b9198');
+    diamond(c, t.x, t.y, '#5b6470');
     const N = layout.N, isR = (x, y) => { const q = T[y * N + x]; return q && q.kind === 'road'; };
     const h = isR(t.x - 1, t.y) || isR(t.x + 1, t.y), v = isR(t.x, t.y - 1) || isR(t.x, t.y + 1);
-    if (h && v) { // intersection: crosswalk stripes
+    if (h && v) { // intersection: crosswalk stripes + streetlights
       c.fillStyle = 'rgba(255,255,255,0.78)';
       for (let i = 0; i < 5; i++) { const f = 0.15 + i * 0.16; [[[f, 0.04], [f + 0.08, 0.04], [f + 0.08, 0.18], [f, 0.18]], [[f, 0.82], [f + 0.08, 0.82], [f + 0.08, 0.96], [f, 0.96]], [[0.04, f], [0.18, f], [0.18, f + 0.08], [0.04, f + 0.08]], [[0.82, f], [0.96, f], [0.96, f + 0.08], [0.82, f + 0.08]]].forEach(q => poly(c, q.map(([a, b]) => P(t.x + a, t.y + b)), c.fillStyle)); }
+      c.fillStyle = '#ffe9a3'; const l1 = P(t.x + 0.08, t.y + 0.08), l2 = P(t.x + 0.92, t.y + 0.92); c.beginPath(); c.arc(l1[0], l1[1], 2.2, 0, 7); c.arc(l2[0], l2[1], 2.2, 0, 7); c.fill();
+      // Traffic light pole at the corner.
+      const [tx, ty] = P(t.x + 0.95, t.y + 0.05); c.fillStyle = '#333'; c.fillRect(tx - 1, ty - 12, 2, 12);
+      ['#e5484d', '#ffd166', '#12a150'].forEach((col, i) => { c.fillStyle = col; c.beginPath(); c.arc(tx, ty - 16 - i * 3, 1.6, 0, 7); c.fill(); });
       return;
     }
     c.strokeStyle = '#f2d36b'; c.lineWidth = 1.4; c.setLineDash([7, 6]);
@@ -32,9 +36,9 @@ const CityView = (() => {
     [0.12, 0.88].forEach(o => { const p = h ? [P(t.x, t.y + o), P(t.x + 1, t.y + o)] : [P(t.x + o, t.y), P(t.x + o, t.y + 1)]; c.beginPath(); c.moveTo(p[0][0], p[0][1]); c.lineTo(p[1][0], p[1][1]); c.stroke(); });
   }
   function lotGround(c, t) {
-    diamond(c, t.x, t.y, '#d9ddd4');
+    diamond(c, t.x, t.y, '#e8e2d0');
     const green = t.arch === 'house' || t.arch === 'rowhouse' || t.kind === 'park';
-    diamond(c, t.x, t.y, t.kind === 'park' ? '#97cf62' : green ? '#b9df84' : t.zone === 'downtown' ? '#c9cec6' : '#cdd5c3', 0.07);
+    diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
     if (t.arch === 'warehouse' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
       diamond(c, t.x, t.y, '#a4aab0', 0.1);
       c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.8;
@@ -44,10 +48,17 @@ const CityView = (() => {
   function plazaGround(c, t) {
     diamond(c, t.x, t.y, '#ebe5d6');
     diamond(c, t.x, t.y, (t.x + t.y) % 2 ? '#a8d877' : '#e4dccb', 0.18);
+    // People dots on the plaza.
+    const cols = ['#e5484d', '#2f7cf6', '#f5b301', '#12a150', '#7c4dff'];
+    for (let i = 0; i < 3; i++) { const [px, py] = P(t.x + 0.2 + (i * 0.3) % 0.7, t.y + 0.3 + (i * 0.2) % 0.5); c.fillStyle = cols[(t.x + t.y + i) % cols.length]; c.beginPath(); c.arc(px, py, 2, 0, 7); c.fill(); }
   }
   function water(c, t) {
-    diamond(c, t.x, t.y, '#24a0cc');
-    if (t.seed > 0.6) { c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 1; const a = P(t.x + 0.25, t.y + 0.5), b = P(t.x + 0.6, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, a[1] - 3, b[0], b[1]); c.stroke(); }
+    diamond(c, t.x, t.y, '#2aa8d8');
+    diamond(c, t.x, t.y, '#3db5e0', 0.12);
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1; const a = P(t.x + 0.25, t.y + 0.5), b = P(t.x + 0.6, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, a[1] - 3, b[0], b[1]); c.stroke();
+    if (t.seed > 0.85) { // a little boat on the water
+      const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(mx, my, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e5484d'; c.fillRect(mx - 1, my - 9, 2, 9);
+    }
   }
   function beach(c, t) { diamond(c, t.x, t.y, '#f0e1b2'); diamond(c, t.x, t.y, '#ecd9a0', 0.3); }
 
@@ -85,11 +96,13 @@ const CityView = (() => {
   }
   function building(c, t) {
     const r = mulberry(Math.floor(t.seed * 1e9)), x = t.x, y = t.y;
-    const k = t.arch === 'warehouse' ? 0.08 : t.arch === 'glass' ? 0.13 : 0.15;
+    const k = t.arch === 'warehouse' ? 0.08 : t.arch === 'glass' || t.arch === 'skyscraper' ? 0.13 : 0.15;
     const x0 = x + k, y0 = y + k, x1 = x + 1 - k, y1 = y + 1 - k;
     if (t.arch === 'house') return house(c, t, r);
     if (t.arch === 'rowhouse') return rowhouse(c, t, r);
     if (t.arch === 'warehouse') return warehouse(c, t, x0, y0, x1, y1);
+    if (t.arch === 'gas') return gasStation(c, t, r);
+    if (t.arch === 'skyscraper') return skyscraper(c, t, r, x0, y0, x1, y1);
     const floorH = t.arch === 'shop' ? 11 : 8.2;
     const h = Math.min(300, 6 + t.floors * floorH);
     let g;
@@ -99,8 +112,8 @@ const CityView = (() => {
     } else {
       g = box(c, x0, y0, x1, y1, h, t.color);
       if (t.arch === 'glass') glassFaces(c, g, t.color, h);
-      else if (t.arch === 'office') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } }); }
-      else if (t.arch === 'apartment') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.12 ? 'rgba(255,232,170,0.85)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
+      else if (t.arch === 'office') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } }); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
+      else if (t.arch === 'apartment') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
         c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.1), b = lerp(g.D, g.C, 0.9); c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1.5); c.lineTo(b[0], b[1] - i * floorH - 1.5); c.stroke(); } }
       else if (t.arch === 'shop') shopFront(c, g, t, h);
     }
@@ -108,6 +121,7 @@ const CityView = (() => {
       poly(c, [lerp(g.D, g.C, 0.3), lerp(g.D, g.C, 0.7), up(lerp(g.D, g.C, 0.7), 6), up(lerp(g.D, g.C, 0.3), 6)].map(p => [p[0], p[1] - (g.base || 0)]), 'rgba(30,50,70,0.75)');
     }
     roofDetails(c, g, t, r);
+    if ((t.arch === 'office' || t.arch === 'apartment' || t.arch === 'glass') && r() < 0.6) tree(c, x + 0.9, y + 0.9, 0.6);
     const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - h];
   }
   function glassFaces(c, g, col, h) {
@@ -119,7 +133,7 @@ const CityView = (() => {
       for (let i = 1; i < 6; i++) { const p = lerp(a, b, i / 6); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(p[0], p[1] - h); c.stroke(); }
       c.strokeStyle = 'rgba(20,40,60,0.18)';
       for (let yy = 7; yy < h; yy += 7) { c.beginPath(); c.moveTo(a[0], a[1] - yy); c.lineTo(b[0], b[1] - yy); c.stroke(); }
-      poly(c, [lerp(a, b, 0.15), lerp(a, b, 0.32), up(lerp(a, b, 0.62), h * 0.95), up(lerp(a, b, 0.45), h * 0.95)], 'rgba(255,255,255,0.12)');
+      poly(c, [lerp(a, b, 0.15), lerp(a, b, 0.32), up(lerp(a, b, 0.62), h * 0.95), up(lerp(a, b, 0.45), h * 0.95)], 'rgba(255,255,255,0.18)');
     });
   }
   function shopFront(c, g, t, h) {
@@ -130,6 +144,8 @@ const CityView = (() => {
       if (h > 16) faceGrid(c, a, b, h, Math.round(h / 11), 3, 'rgba(55,70,85,0.5)', { skipGround: true });
     });
     poly(c, [up(lerp(g.D, g.C, 0.2), h - 2), up(lerp(g.D, g.C, 0.8), h - 2), up(lerp(g.D, g.C, 0.8), h + 3), up(lerp(g.D, g.C, 0.2), h + 3)], aw);
+    // Shop sign board on the roof, in the awning colour.
+    const sm = lerp(g.D, g.C, 0.5); c.fillStyle = '#ffffff'; c.fillRect(sm[0] - 15, sm[1] - h - 14, 30, 12); c.fillStyle = aw; c.fillRect(sm[0] - 15, sm[1] - h - 14, 30, 3);
   }
   function house(c, t, r) {
     const x = t.x, y = t.y, x0 = x + 0.22, y0 = y + 0.18, x1 = x + 0.8, y1 = y + 0.72, h = 13;
@@ -142,6 +158,8 @@ const CityView = (() => {
     faceGrid(c, g.D, g.C, h, 1, 3, 'rgba(70,95,120,0.6)', { bottom: 0.35, top: 0.75 });
     if (r() < 0.7) tree(c, x + 0.86, y + 0.86, 0.75);
     c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1; const f0 = P(x + 0.06, y + 0.94), f1 = P(x + 0.94, y + 0.94); c.beginPath(); c.moveTo(f0[0], f0[1]); c.lineTo(f1[0], f1[1]); c.stroke();
+    // Flower dots in the front garden.
+    for (let i = 0; i < 4; i++) { const [fx, fy] = P(x + 0.1 + r() * 0.8, y + 0.75 + r() * 0.2); c.fillStyle = ['#ff8fa3', '#ffd166', '#ffffff', '#c084fc'][i % 4]; c.beginPath(); c.arc(fx, fy, 1.8, 0, 7); c.fill(); }
     const top = P(x + 0.5, y + 0.45); return [top[0], top[1] - h - ridgeH];
   }
   function rowhouse(c, t, r) {
@@ -158,6 +176,46 @@ const CityView = (() => {
     }
     const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - topY];
   }
+  function skyscraper(c, t, r, x0, y0, x1, y1) {
+    // Tall tower with setbacks, an antenna and a lit billboard — only
+    // in big cities, so a skyline reads as a skyline.
+    const h = Math.min(300, 6 + t.floors * 8.2);
+    const h1 = h * 0.6, h2 = h * 0.85;
+    let g = box(c, x0, y0, x1, y1, h1, t.color); glassFaces(c, g, t.color, h1);
+    const m1 = 0.12; g = box(c, x0 + m1, y0 + m1, x1 - m1, y1 - m1, h2 - h1, t.color, h1); glassFaces(c, g, t.color, h2 - h1, h1);
+    const m2 = 0.24; g = box(c, x0 + m2, y0 + m2, x1 - m2, y1 - m2, h - h2, t.color, h2); glassFaces(c, g, t.color, h - h2, h2);
+    // Antenna.
+    const [ax, ay] = P((x0 + x1) / 2, (y0 + y1) / 2);
+    c.strokeStyle = '#555'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(ax, ay - h); c.lineTo(ax, ay - h - 22); c.stroke();
+    c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(ax, ay - h - 24, 2.5, 0, 7); c.fill();
+    // Billboard on the front face, upper third.
+    const bm = lerp(g.D, g.C, 0.5); const bb = ['#ff6b2c', '#e5484d', '#2f7cf6', '#f5b301'][Math.floor(r() * 4)];
+    c.fillStyle = bb; c.fillRect(bm[0] - 13, bm[1] - h * 0.72, 26, 14); c.fillStyle = '#ffffff'; c.fillRect(bm[0] - 13, bm[1] - h * 0.72, 26, 2.5);
+    // A tree on the sidewalk corner, so towers don't sit on bare concrete.
+    if (r() < 0.7) tree(c, t.x + 0.9, t.y + 0.9, 0.6);
+    const top = P(t.x + 0.5, t.y + 0.5); return [top[0], top[1] - h - 24];
+  }
+  function gasStation(c, t, r) {
+    // Canopy on pillars, pumps underneath, a small shop behind, and a
+    // tall price sign by the road.
+    const x = t.x, y = t.y;
+    const g = box(c, x + 0.15, y + 0.35, x + 0.85, y + 0.65, 9, '#f2f2f2');
+    c.fillStyle = ['#e5484d', '#2f7cf6', '#12a150', '#f5b301'][Math.floor(r() * 4)];
+    c.fillRect(g.A[0], g.A[1] - 9, g.C[0] - g.A[0], 3);
+    // Canopy: a flat roof on four thin pillars over the pumps.
+    const cy = P(x + 0.5, y + 0.35)[1] - 22;
+    const can = [P(x + 0.2, y + 0.15), P(x + 0.8, y + 0.15), P(x + 0.8, y + 0.55), P(x + 0.2, y + 0.55)];
+    poly(c, can, '#ffffff'); c.strokeStyle = '#d0d0d0'; c.lineWidth = 1; c.beginPath(); c.moveTo(can[0][0], can[0][1]); c.lineTo(can[1][0], can[1][1]); c.lineTo(can[2][0], can[2][1]); c.lineTo(can[3][0], can[3][1]); c.closePath(); c.stroke();
+    for (let i = 0; i < 2; i++) {
+      const px = P(x + 0.35 + i * 0.3, y + 0.35);
+      c.fillStyle = '#e5484d'; c.fillRect(px[0] - 3, px[1] - 10, 6, 10); c.fillStyle = '#ffffff'; c.fillRect(px[0] - 3, px[1] - 8, 6, 2);
+    }
+    // Price sign by the road.
+    const [sx, sy] = P(x + 0.9, y + 0.1);
+    c.fillStyle = '#333'; c.fillRect(sx - 1, sy - 18, 2, 18);
+    c.fillStyle = '#1f5fd0'; c.fillRect(sx - 8, sy - 30, 16, 12); c.fillStyle = '#ffffff'; c.font = 'bold 7px sans-serif'; c.textAlign = 'center'; c.fillText('⛽', sx, sy - 21);
+    const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - 30];
+  }
   function warehouse(c, t, x0, y0, x1, y1) {
     const h = 18, g = box(c, x0, y0, x1, y1, h, t.color);
     for (let i = 0; i < 4; i++) { // sawtooth roof
@@ -166,6 +224,9 @@ const CityView = (() => {
       poly(c, [up(a, 7), up(d, 7), cc, b], shade(t.color, 1.12));
     }
     [0.2, 0.5, 0.8].forEach(f => { const p = lerp(g.D, g.C, f); poly(c, [[p[0] - 5, p[1]], [p[0] + 5, p[1] + 2.5], [p[0] + 5, p[1] - 8], [p[0] - 5, p[1] - 10.5]], '#7d858d'); });
+    // Shipping containers stacked beside the warehouse.
+    const cols = ['#e5484d', '#2f7cf6', '#12a150', '#f5b301'];
+    for (let i = 0; i < 3; i++) { const cx = t.x + 0.12 + i * 0.28, cy = t.y + 0.85; box(c, cx, cy, cx + 0.22, cy + 0.12, 6, cols[i % 4]); }
     const top = P(t.x + 0.5, t.y + 0.5); return [top[0], top[1] - h - 7];
   }
   function tree(c, x, y, s) {
@@ -185,6 +246,8 @@ const CityView = (() => {
     if (t.seed > 0.75) { const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#4fb6d8'; c.beginPath(); c.ellipse(mx, my, TW * 0.25, TH * 0.22, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1; c.stroke(); }
     c.strokeStyle = '#efe6cf'; c.lineWidth = 3; const a = P(t.x, t.y + 0.5), b = P(t.x + 1, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 6, b[0], b[1]); c.stroke();
     for (let i = 0; i < 3; i++) tree(c, t.x + 0.15 + r() * 0.7, t.y + 0.15 + r() * 0.7, 0.85 + r() * 0.45);
+    for (let i = 0; i < 5; i++) { const [fx, fy] = P(t.x + 0.1 + r() * 0.8, t.y + 0.1 + r() * 0.8); c.fillStyle = ['#ff8fa3', '#ffd166', '#ffffff'][i % 3]; c.beginPath(); c.arc(fx, fy, 1.8, 0, 7); c.fill(); }
+    const [bx, by] = P(t.x + 0.5, t.y + 0.2); c.fillStyle = '#7a5a3c'; c.fillRect(bx - 7, by - 2, 14, 3);
   }
   function capitol(c) {
     const L = layout.landmark, x0 = L.x + 0.35, y0 = L.y + 0.75, x1 = L.x + 2.65, y1 = L.y + 2.25;
@@ -212,7 +275,17 @@ const CityView = (() => {
     const dpr = Math.min(1.6, window.devicePixelRatio || 1);
     img = document.createElement('canvas'); img.width = W2 * dpr; img.height = H2 * dpr;
     const c = img.getContext('2d'); c.scale(dpr, dpr);
-    c.fillStyle = city.port ? '#1f97c2' : '#b7d98a'; c.fillRect(0, 0, W2, H2);
+    // Sky above the city, not flat green: a blue-to-pale gradient with
+    // a few clouds, so the city sits in a sky instead of a green void.
+    const sky = c.createLinearGradient(0, 0, 0, H2);
+    sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#cfeef7'); sky.addColorStop(1, '#d7ecd0');
+    c.fillStyle = sky; c.fillRect(0, 0, W2, H2);
+    const cr = mulberry(hashStr('clouds:' + city.code + city.name));
+    for (let i = 0; i < 6; i++) {
+      const cx = cr() * W2, cy = 30 + cr() * Math.max(60, oy - 100);
+      c.fillStyle = 'rgba(255,255,255,0.85)';
+      c.beginPath(); c.ellipse(cx, cy, 46, 14, 0, 0, 7); c.ellipse(cx - 28, cy + 5, 30, 10, 0, 0, 7); c.ellipse(cx + 30, cy + 5, 32, 11, 0, 0, 7); c.fill();
+    }
     // pass 1: ground
     T.forEach(t => {
       if (t.kind === 'water') water(c, t); else if (t.kind === 'beach') beach(c, t); else if (t.kind === 'road') road(c, t, T);
@@ -252,6 +325,12 @@ const CityView = (() => {
           c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 1.2; c.beginPath(); c.ellipse(cx, cy, TW * 0.30, TH * 0.30, 0, 0, 7); c.stroke();
           c.beginPath(); c.moveTo(cx - TW * 0.62, cy); c.lineTo(cx + TW * 0.62, cy); c.stroke();
           c.fillStyle = '#ffffff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.fillText(team.mascot || 'TEAM', cx, cy - TH * 0.85);
+          // Floodlights at the four corners of the bowl.
+          [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+            const fx = cx + sx * TW * 0.95, fy = cy + sy * TH * 0.95;
+            c.strokeStyle = '#5b6470'; c.lineWidth = 2; c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx, fy - 18); c.stroke();
+            c.fillStyle = '#ffe9a3'; c.beginPath(); c.arc(fx, fy - 20, 5, 0, 7); c.fill();
+          });
           roofs.stadium = [cx, cy - TH * 1.1];
           roofs.stadiumTeam = team;
         }
@@ -272,6 +351,9 @@ const CityView = (() => {
       else if (l.kind === 'lease' && show('lease')) add(l.t, 'pin-lease', '<span class="sign">FOR<br>LEASE</span>', () => onPin({ type: 'lease', lot: l }));
       else if (l.kind === 'sale' && show('sale')) add(l.t, 'pin-sale', '<span class="bld">\u{1F3E2}</span><span class="tag">FOR SALE</span>', () => onPin({ type: 'sale', lot: l }));
     });
+    // Buildings bought by tapping them (not FOR SALE lots) still get
+    // an owned pin, so you can open, renovate or sell them again.
+    if (show('prop')) S.props.filter(p => p.city === city.id && !lots.some(l => l.t === p.t)).forEach(pr => add(pr.t, 'pin-prop', '<span class="logo own">\u{1F3E0}</span>', () => onPin({ type: 'prop', lot: { t: pr.t } })));
     if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('div'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} Capitol</span>`; layer.appendChild(p); }
     if (roofs.stadium && roofs.stadiumTeam) { const r = roofs.stadium, tm = roofs.stadiumTeam; const p = document.createElement('button'); p.className = 'pin pin-stadium'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = '<span class="logo">🏟️</span>'; p.title = tm.name; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'stadium', team: tm }); }); layer.appendChild(p); }
   }
@@ -284,26 +366,56 @@ const CityView = (() => {
     if (W2 * view.s < vw) view.x = (vw - W2 * view.s) / 2; if (H2 * view.s < vh) view.y = (vh - H2 * view.s) / 2;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     if (canvas.width !== vw * dpr || canvas.height !== vh * dpr) { canvas.width = vw * dpr; canvas.height = vh * dpr; canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px'; }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = city.port ? '#1f97c2' : '#b7d98a'; ctx.fillRect(0, 0, vw, vh);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#cfe8f5'; ctx.fillRect(0, 0, vw, vh);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, view.x, view.y, W2 * view.s, H2 * view.s);
     layer.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
     layer.style.setProperty('--inv', Math.min(1, 0.85 / view.s));
   }
-  const pts = new Map(); let pinch = null;
+  const pts = new Map(); let pinch = null, downPos = null;
   function bind() {
-    el.addEventListener('pointerdown', e => { if (e.target.closest('.pin, button')) return; el.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s }; } });
+    el.addEventListener('pointerdown', e => { if (e.target.closest('.pin, button')) return; el.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 1) downPos = [e.clientX, e.clientY]; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s }; } });
     el.addEventListener('pointermove', e => {
       if (!pts.has(e.pointerId)) return; const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
       if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; zoomAt(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); return; }
       view.x += e.clientX - prev[0]; view.y += e.clientY - prev[1]; apply();
     });
     const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
-    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+    el.addEventListener('pointerup', e => {
+      const wasTap = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 8 && !e.target.closest('.pin, button');
+      end(e); downPos = null;
+      if (wasTap && city) tapTile(e);
+    });
+    el.addEventListener('pointercancel', end);
     el.addEventListener('wheel', e => { e.preventDefault(); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
     window.addEventListener('resize', () => { if (city) apply(); });
   }
   function zoomAt(s, sx, sy) { const mx = (sx - view.x) / view.s, my = (sy - view.y) / view.s; view.s = s; apply(); view.x = sx - mx * view.s; view.y = sy - my * view.s; apply(); }
+  // Tapping a building itself — not just its pin — opens its card, so
+  // every building in the city is buyable. Screen point -> canvas
+  // point -> isometric tile, using the inverse of P().
+  function tapTile(e) {
+    try {
+      const rect = el.getBoundingClientRect();
+      const sx = (e.clientX - rect.left - view.x) / view.s, sy = (e.clientY - rect.top - view.y) / view.s;
+      const dx = sx - ox, dy = sy - oy;
+      const tx = Math.floor(dx / TW + dy / TH), ty = Math.floor(dy / TH - dx / TW);
+      if (tx < 0 || ty < 0 || tx >= layout.N || ty >= layout.N) return;
+      const tIdx = ty * layout.N + tx, tile = layout.tiles[tIdx];
+      if (!tile || tile.kind !== 'lot') return;
+      const owner = S.co[city.a3];
+      const loc = owner.locs.find(l => (l.city || owner.city) === city.id && l.t === tIdx);
+      if (loc) { onPin({ type: 'loc', loc, lot: { t: tIdx } }); return; }
+      const prop = S.props.find(p => p.city === city.id && p.t === tIdx);
+      if (prop) { onPin({ type: 'prop', lot: { t: tIdx } }); return; }
+      const lot = cityLots(city.id).find(l => l.t === tIdx);
+      if (lot && lot.kind === 'lease') { onPin({ type: 'lease', lot }); return; }
+      if (lot && lot.kind === 'sale') { onPin({ type: 'sale', lot }); return; }
+      if (lot && lot.kind === 'prop') { onPin({ type: 'prop', lot }); return; }
+      const b = buildingLotForTile(city.id, tIdx);
+      if (b) onPin({ type: 'building', lot: b });
+    } catch (err) {}
+  }
 
   return {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind(); },
