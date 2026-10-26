@@ -212,7 +212,7 @@ const LEADER_SPECIAL = {
   LBY: ['Oil Extraction'],
   DZA: ['Natural Gas', 'Oil Extraction'],
   AZE: ['Oil Extraction', 'Natural Gas'],
-  KAZ: ['Oil Extraction', 'Mining – Metals'],
+  KAZ: ['Oil Extraction', 'Mining – Metals', 'Coal & Peat'],
   ZAF: ['Mining – Metals', 'Crop Farming'],
   THA: ['Tourism Services', 'Food Processing'],
   MYS: ['Consumer Electronics', 'Semiconductors'],

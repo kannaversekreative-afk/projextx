@@ -362,6 +362,29 @@ function companyWeek(c, quiet) {
   c._staff = null; c.book = bookValue(c);
   return c.week;
 }
+// CPU expansion, like a player would: first cover every city in the
+// country (biggest uncovered city first, best lease lot there, same
+// rent/staff economics as a player's location via addLocation), then
+// keep densifying the big cities (aiOpenLocation). Coverage opens
+// bypass the 14-location cap; densifying does not. Capitals are never
+// covered — they have no lease lots (government-only), so they are
+// skipped automatically, as are cities with no leasable lot.
+function aiCoverOrOpen(c) {
+  const covered = new Set(c.locs.map(l => l.city || c.city));
+  const cities = W.cities.filter(x => x.a3 === c.a3).sort((a, b) => b.pop - a.pop);
+  for (const city of cities) {
+    if (covered.has(city.id)) continue;
+    const lots = cityLots(city.id).filter(l => l.kind === 'lease');
+    if (!lots.length) continue;
+    const score = locMode(c) === 'size' ? l => l.size * 10000 - l.srent : l => l.traffic / (l.rent + 300);
+    lots.sort((a, b) => score(b) - score(a));
+    const lot = lots[Math.floor(rand() * Math.min(3, lots.length))];
+    addLocation(c, lot, 1, city.id);
+    return true;
+  }
+  if (c.locs.length < 14) return aiOpenLocation(c);
+  return false;
+}
 // AI management: grow when profitable, trim when losing.
 function aiWeek(c) {
   if (!c.ai || controlled(c.a3) || rand() > 1 / 10) return;
@@ -369,10 +392,15 @@ function aiWeek(c) {
   if (c.avg > 0) {
     const r = rand();
     if (F && c.fleet < 6 && r < 0.3 && yearly * 2.5 > F.levels[c.fleet + 1].cost && fleetDemand(c) > 0.75) c.fleet++;
-    else if (r < 0.7 && c.locs.length < 14) aiOpenLocation(c);
+    else if (r < 0.7) aiCoverOrOpen(c);
     else if (c.web.tier < 4 && yearly > WEB_TIERS[c.web.tier + 1].cost * 3) c.web.tier++;
   } else if (c.avg < 0 && c.locs.length > 1) {
-    const worst = c.locs.slice().sort((a, b) => a.avg - b.avg)[0]; if (worst.avg < 0) closeLoc(c, worst.id);
+    // Trim never closes a company's only location in a city — coverage,
+    // once gained, sticks. Only densified (duplicate-city) locations
+    // are closable.
+    const byCity = {}; c.locs.forEach(l => { const k = l.city || c.city; byCity[k] = (byCity[k] || 0) + 1; });
+    const closable = c.locs.filter(l => byCity[l.city || c.city] > 1);
+    const worst = closable.slice().sort((a, b) => a.avg - b.avg)[0]; if (worst && worst.avg < 0) closeLoc(c, worst.id);
   }
 }
 function aiOpenLocation(c) {
