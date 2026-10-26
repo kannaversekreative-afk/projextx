@@ -355,6 +355,137 @@ function roadPath(a3, s, t) {
 // The block nearest the centre is the capitol plaza.
 const CITY_N = 25;
 const ARCH = ['glass', 'office', 'apartment', 'rowhouse', 'house', 'shop', 'warehouse'];
+// ---------- district design ----------
+// Which districts a country's cities get comes from its sector pool:
+// the same realism table the company game uses (must-have sectors,
+// specialisations, coastal/GDP tiers), grouped into finance, tech,
+// manufacturing, energy, food, transport and services. Every city
+// still gets homes and shops whatever its country does.
+// Famous cities get a hand-written signature on top of that.
+function countryDistrictProfile(a3) {
+  const g = { fin: 0, tech: 0, mfg: 0, energy: 0, food: 0, trans: 0, serv: 0 };
+  let pool = [];
+  try {
+    if (typeof sectorPoolForCountry === 'function' && W.byA3 && W.byA3[a3]) pool = sectorPoolForCountry(W.byA3[a3]) || [];
+  } catch (e) { pool = []; }
+  if (!pool.length) {
+    const sp = (typeof LEADER_SPECIAL !== 'undefined' && LEADER_SPECIAL[a3]) || [];
+    const mu = (typeof LEADER_MUST !== 'undefined' && LEADER_MUST[a3]) || [];
+    pool = sp.concat(mu);
+  }
+  const byName = (typeof LEADER_SECTOR_BY_NAME !== 'undefined') ? LEADER_SECTOR_BY_NAME : {};
+  pool.forEach(n => {
+    const grp = byName[n] ? byName[n].g : null;
+    if (grp === 'finance') g.fin++;
+    else if (grp === 'tech') g.tech++;
+    else if (grp === 'mfg') g.mfg++;
+    else if (grp === 'energy') g.energy++;
+    else if (grp === 'food') g.food++;
+    else if (grp === 'transport') g.trans++;
+    else if (grp === 'service') g.serv++;
+  });
+  return g;
+}
+// Hand-written signatures, keyed a3:name for major cities. Fields:
+// core = core district ('financial'|'tech'|'downtown'|'uniform'|'civic'),
+// tower = tallest skyscraper floors (0 = none), coreH/midH = floor
+// ranges, res = residential arch, hotel = waterfront hotel strip,
+// industry = 'big'|'small', uniform = uniform mid-rise everywhere,
+// civicH = civic-district height cap.
+const CITY_SIGNATURES = {
+  'USA:New York': { core: 'financial', tower: 38, coreH: [14, 30], res: 'brownstone', industry: 'small' },
+  'USA:Los Angeles': { core: 'downtown', tower: 30, coreH: [8, 20], industry: 'small' },
+  'USA:Chicago': { core: 'financial', tower: 36, coreH: [12, 28], res: 'brownstone' },
+  'USA:Houston': { core: 'downtown', tower: 32, coreH: [10, 24], industry: 'big' },
+  'USA:San Francisco': { core: 'tech', tower: 30, coreH: [8, 22] },
+  'USA:Miami': { core: 'downtown', tower: 34, coreH: [10, 26], hotel: true },
+  'USA:Seattle': { core: 'tech', tower: 30, coreH: [8, 22] },
+  'USA:Boston': { core: 'downtown', tower: 26, coreH: [8, 18], res: 'brownstone' },
+  'USA:Atlanta': { core: 'downtown', tower: 30, coreH: [8, 22] },
+  'USA:Dallas': { core: 'downtown', tower: 30, coreH: [8, 22] },
+  'CAN:Toronto': { core: 'financial', tower: 34, coreH: [10, 26] },
+  'AUS:Sydney': { core: 'financial', tower: 32, coreH: [10, 24], hotel: true },
+  'IND:Mumbai': { core: 'downtown', tower: 36, coreH: [10, 28] },
+  'CHN:Shanghai': { core: 'financial', tower: 38, coreH: [14, 32] },
+  'JPN:Osaka': { core: 'downtown', tower: 30, coreH: [10, 24] },
+};
+const CAPITAL_SIGNATURES = {
+  USA: { core: 'civic', civicH: 12, tower: 0 },
+  GBR: { core: 'financial', tower: 30, coreH: [10, 24] },
+  FRA: { core: 'uniform', uniform: true, tower: 0, industry: 'small' },
+  JPN: { core: 'tech', tower: 34, coreH: [10, 28] },
+  CHN: { core: 'downtown', tower: 28, coreH: [8, 20] },
+  DEU: { core: 'downtown', tower: 24, coreH: [8, 18], industry: 'big' },
+  ITA: { core: 'uniform', uniform: true, tower: 0, industry: 'small' },
+  ESP: { core: 'downtown', tower: 22, coreH: [6, 16] },
+  MEX: { core: 'downtown', tower: 28, coreH: [8, 22] },
+  EGY: { core: 'downtown', tower: 20, coreH: [6, 16], industry: 'small' },
+  NLD: { core: 'downtown', tower: 22, coreH: [6, 16] },
+  RUS: { core: 'downtown', tower: 30, coreH: [10, 24], industry: 'big' },
+  SGP: { core: 'financial', tower: 36, coreH: [12, 30], hotel: true },
+  ARE: { core: 'downtown', tower: 36, coreH: [12, 30] },
+  KOR: { core: 'tech', tower: 34, coreH: [10, 28] },
+};
+function cityDesign(city) {
+  const prof = countryDistrictProfile(city.a3);
+  let sig = CITY_SIGNATURES[city.a3 + ':' + city.name] || null;
+  if (!sig && typeof isGovCity === 'function') {
+    try { if (isGovCity(city)) sig = CAPITAL_SIGNATURES[city.a3] || null; } catch (e) {}
+  }
+  const size = city.size || 0.7;
+  const tower = sig && sig.tower != null ? sig.tower : size >= 0.85 ? 34 : 0;
+  const coreH = sig && sig.coreH ? sig.coreH : size >= 0.9 ? [10, 24] : size >= 0.6 ? [6, 16] : [4, 10];
+  const midH = sig && sig.midH ? sig.midH : size >= 0.6 ? [5, 13] : [3, 8];
+  const res = sig && sig.res ? sig.res : 'rowhouse';
+  let pal = null;
+  if (typeof CAPITAL_STYLES !== 'undefined' && CAPITAL_STYLES[city.a3]) {
+    const s = CAPITAL_STYLES[city.a3];
+    pal = { w: s.w, r: s.r, cap: s.cap };
+  }
+  return { prof, sig, tower, coreH, midH, res, palette: pal };
+}
+// One lot's new look. NEVER crosses class: houses stay houses,
+// rowhouses/brownstones stay residential, warehouses/factories stay
+// industrial, gas stays gas, and office/glass/apartment/shop/
+// skyscraper/bank/hotel stay commercial. That keeps the lease/sale
+// tile set and every owned tile exactly where it was.
+function districtLot(dist, city, D, r, oldArch) {
+  const R = (a, b) => Math.round(a + r() * (b - a));
+  if (oldArch === 'house') return { arch: 'house', floors: 1 };
+  if (oldArch === 'rowhouse' || oldArch === 'brownstone')
+    return { arch: D.res === 'brownstone' && r() < 0.6 ? 'brownstone' : 'rowhouse', floors: R(2, 4) };
+  if (oldArch === 'warehouse' || oldArch === 'factory')
+    return { arch: r() < 0.5 ? 'factory' : 'warehouse', floors: 2 };
+  if (oldArch === 'gas') return { arch: 'gas', floors: 1 };
+  const sig = D.sig || {};
+  if (sig.uniform && dist !== 'hotel' && dist !== 'industrial')
+    return { arch: r() < 0.65 ? 'apartment' : 'office', floors: R(5, 7) };
+  switch (dist) {
+    case 'financial': {
+      const q = r();
+      if (D.tower > 0 && city.size >= 0.85 && q < 0.08) return { arch: 'skyscraper', floors: R(26, D.tower) };
+      if (q < 0.42) return { arch: 'bank', floors: R(D.coreH[0], D.coreH[1]) };
+      return { arch: r() < 0.5 ? 'glass' : 'office', floors: R(D.coreH[0], D.coreH[1]) };
+    }
+    case 'tech': {
+      if (D.tower > 0 && city.size >= 0.85 && r() < 0.06) return { arch: 'skyscraper', floors: R(24, D.tower) };
+      return { arch: r() < 0.6 ? 'glass' : 'office', floors: R(D.midH[0], D.midH[1]) };
+    }
+    case 'downtown': {
+      if (D.tower > 0 && city.size >= 0.9 && r() < 0.04) return { arch: 'skyscraper', floors: R(24, D.tower) };
+      const q = r();
+      return { arch: q < 0.4 ? 'glass' : q < 0.75 ? 'office' : 'apartment', floors: R(8, D.coreH[1]) };
+    }
+    case 'uniform': return { arch: r() < 0.6 ? 'apartment' : 'office', floors: R(5, 7) };
+    case 'commercial': { const q = r(); return { arch: q < 0.55 ? 'shop' : q < 0.8 ? 'office' : 'apartment', floors: q < 0.55 ? R(1, 2) : R(2, 5) }; }
+    case 'hotel': return { arch: r() < 0.6 ? 'hotel' : 'apartment', floors: R(6, 16) };
+    case 'industrial': return { arch: r() < 0.6 ? 'office' : 'shop', floors: R(1, 3) };
+    case 'residential': return { arch: 'apartment', floors: R(2, 5) };
+    case 'suburb': { const q = r(); return { arch: q < 0.6 ? 'shop' : 'office', floors: R(1, 3) }; }
+    case 'civic': return { arch: r() < 0.7 ? 'office' : 'apartment', floors: R(2, (sig.civicH || 6)) };
+    default: return { arch: 'office', floors: R(3, 8) };
+  }
+}
 function cityLayout(city) {
   if (W.layouts[city.id]) return W.layouts[city.id];
   const rng = mulberry(hashStr('city2:' + city.code + city.name));
@@ -408,9 +539,70 @@ function cityLayout(city) {
       t.traffic = Math.round((2400 + 15500 * Math.pow(down, 1.2) * (0.45 + city.size * 0.75)) * (0.75 + rng() * 0.5) * (zone === 'commercial' ? 1.25 : zone === 'industrial' ? 0.6 : 1));
     });
   });
+  // ---------- district redesign (second pass) ----------
+  // Pass 1 above is untouched on purpose: grid, roads, water, capitol
+  // plaza, park blocks, lot kinds and traffic are exactly as before,
+  // so every owned building, store and company location keeps its
+  // tile and the lease/sale tile set is unchanged. This pass only
+  // redesigns what each lot looks like and how tall it is, by
+  // district: residential streets, store blocks, industrial edges, a
+  // financial core, a tech campus, hotels. The mix comes from the
+  // country's sector pool (its real economy); famous cities get a
+  // hand-written signature. A separate rng stream, so pass 1's
+  // decisions are never disturbed.
+  const design = cityDesign(city);
+  const drng = mulberry(hashStr('citydesign:' + city.code + city.name));
+  const wpick = pairs => {
+    let tot = 0; pairs.forEach(p => { tot += Math.max(0, p[1]); });
+    if (tot <= 0) return pairs[0][0];
+    let rr = drng() * tot;
+    for (const p of pairs) { rr -= Math.max(0, p[1]); if (rr <= 0) return p[0]; }
+    return pairs[pairs.length - 1][0];
+  };
+  // Only the blocks in FRONT of the capitol stay low (the old front()
+  // rule): towers behind it draw before the landmark, so the dome
+  // stays visible, but the core around it can still be financial.
+  const nearCap = b => b.bx + b.by > capitol.bx + capitol.by && Math.abs(b.bx - capitol.bx) <= 4 && Math.abs(b.by - capitol.by) <= 4;
+  // First full block row/col inside the beach+road: top/left edges
+  // sit at 5, right/bottom edges at 17 (the 21 row is beach/water).
+  const waterAdj = b => waterSide === 0 ? b.by === 5 : waterSide === 1 ? b.bx === 17 : waterSide === 2 ? b.by === 17 : waterSide === 3 ? b.bx === 5 : false;
+  blocks.forEach(b => {
+    if (b.zone === 'park') return;
+    let dist;
+    const sig = design.sig;
+    if (nearCap(b)) dist = drng() < 0.45 ? 'civic' : 'commercial';
+    else if (waterAdj(b)) {
+      if (sig && sig.hotel) dist = 'hotel';
+      else dist = wpick([['hotel', design.prof.serv], ['industrial', design.prof.trans + design.prof.mfg], ['commercial', 2]]);
+    }
+    // Pass 1's zone already encodes centrality (downtown core,
+    // midtown ring, industrial/suburb edge), so districts follow it
+    // and the sector profile shapes the mix inside each ring.
+    else if (b.zone === 'downtown') {
+      if (sig && sig.core) dist = sig.core;
+      else dist = wpick([['financial', design.prof.fin * 2 + 0.4], ['tech', design.prof.tech * 1.5 + 0.4], ['downtown', 2]]);
+    }
+    else if (b.zone === 'industrial') {
+      let p = 0.4 + Math.min(0.5, (design.prof.mfg + design.prof.energy + design.prof.trans) * 0.08);
+      if (sig && sig.industry === 'big') p = Math.min(0.95, p + 0.3);
+      else if (sig && sig.industry === 'small') p *= 0.4;
+      dist = drng() < p ? 'industrial' : 'commercial';
+    }
+    else if (b.zone === 'suburb') dist = wpick([['suburb', 4], ['residential', 2], ['commercial', 1.5]]);
+    else if (b.zone === 'midtown') dist = wpick([['commercial', design.prof.serv + design.prof.food + 1], ['residential', 3], ['tech', design.prof.tech * 0.7]]);
+    else dist = wpick([['commercial', 3], ['residential', 2]]);
+    b.district = dist;
+    b.cells.forEach(t => {
+      if (t.kind !== 'lot') return;
+      const lot = districtLot(dist, city, design, drng, t.arch);
+      t.arch = lot.arch; t.floors = lot.floors; t.district = dist;
+      t.color = pickColor(t.arch, drng);
+      t.roof = ['#c4674f', '#7d6352', '#5f6e7e', '#a35a3c', '#4f5b66', '#8b3f3a'][Math.floor(drng() * 6)];
+    });
+  });
   // Main avenues through the centre carry more people.
   tiles.forEach(t => { if (t.traffic && (Math.abs(t.x - c) < 2.5 || Math.abs(t.y - c) < 2.5)) t.traffic = Math.round(t.traffic * 1.2); });
-  const L = { N, tiles, landmark, waterSide };
+  const L = { N, tiles, landmark, waterSide, design: design.palette };
   W.layouts[city.id] = L;
   return L;
 }
@@ -425,6 +617,10 @@ function pickColor(arch, rng) {
     house: ['#f4ead8', '#dfe8ee', '#f2dcd0', '#e4ecd6', '#efe2c8', '#d9dfe9'],
     shop: ['#f0e4d0', '#e3d2bd', '#d7e1e6', '#efd9c9', '#e8e2d2'],
     warehouse: ['#b8a58f', '#a99886', '#c7b9a6', '#9fa7ad'],
+    bank: ['#d9d4c7', '#c9bfa8', '#e6dccb', '#b9c2cc', '#d6c8b4'],
+    hotel: ['#e9d8c4', '#d8b39a', '#f2e2c4', '#c9ced6', '#e7ddd0'],
+    factory: ['#b8a58f', '#a99886', '#9fa7ad', '#c7b9a6'],
+    brownstone: ['#8a4a3a', '#a65a44', '#7a3a2e', '#9a5a40', '#6b3a2e'],
   };
   const a = P[arch]; return a[Math.floor(rng() * a.length)];
 }

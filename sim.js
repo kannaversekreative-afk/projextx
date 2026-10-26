@@ -204,11 +204,11 @@ function baseLots(cityId) {
   L.tiles.forEach(t => {
     if (t.kind !== 'lot') return;
     const roll = r(), idx = t.y * L.N + t.x, traffic = Math.round(t.traffic * tFac);
-    const size = t.arch === 'warehouse' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
-    if (t.arch !== 'house' && t.arch !== 'rowhouse' && roll < 0.11) {
+    const size = t.arch === 'warehouse' || t.arch === 'factory' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
+    if (t.arch !== 'house' && t.arch !== 'rowhouse' && t.arch !== 'brownstone' && roll < 0.11) {
       lots.push({ t: idx, kind: 'lease', traffic, size, arch: t.arch, rent: Math.round(traffic * 0.09 * Math.pow(w, 0.9) * (0.85 + r() * 0.3) / 10) * 10, srent: Math.round(size * 1500 * Math.pow(w, 0.9) * (0.85 + r() * 0.3) / 10) * 10 });
-    } else if (roll > 0.93 && t.arch !== 'warehouse') {
-      const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' ? 2 + Math.floor(r() * 2) : Math.max(4, Math.round(t.floors * (1.5 + r() * 2)));
+    } else if (roll > 0.93 && t.arch !== 'warehouse' && t.arch !== 'factory') {
+      const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' || t.arch === 'brownstone' ? 2 + Math.floor(r() * 2) : Math.max(4, Math.round(t.floors * (1.5 + r() * 2)));
       const mrent = Math.round(70 + 380 * Math.pow(w, 1.05)), cap = 0.05 + (1 - Math.min(1, w)) * 0.04;
       lots.push({ t: idx, kind: 'sale', traffic, size, arch: t.arch, units, mrent, cond: +(0.5 + r() * 0.45).toFixed(2), price: Math.round(units * mrent * 52 / cap * (0.85 + r() * 0.3) / 1000) * 1000 });
     }
@@ -566,8 +566,8 @@ function buyBuilding(cityId, t) {
   S.xp += 80; news('Property', `You bought a ${lot.units}-unit building in ${W.cities[cityId].name}.`, W.cities[cityId].a3);
   return null;
 }
-function buildingName(arch) { return { house: 'House', rowhouse: 'Row house', apartment: 'Apartment building', office: 'Office building', glass: 'Office tower', skyscraper: 'Skyscraper', warehouse: 'Warehouse', gas: 'Gas station', shop: 'Shop' }[arch] || 'Building'; }
-function buildingIcon(arch) { return { house: '🏠', rowhouse: '🏠', apartment: '🏢', office: '🏢', glass: '🏙️', skyscraper: '🏙️', warehouse: '🏭', gas: '⛽', shop: '🏪' }[arch] || '🏢'; }
+function buildingName(arch) { return { house: 'House', rowhouse: 'Row house', brownstone: 'Brownstone', apartment: 'Apartment building', office: 'Office building', glass: 'Office tower', skyscraper: 'Skyscraper', warehouse: 'Warehouse', factory: 'Factory', bank: 'Bank', hotel: 'Hotel', gas: 'Gas station', shop: 'Shop' }[arch] || 'Building'; }
+function buildingIcon(arch) { return { house: '🏠', rowhouse: '🏠', brownstone: '🏠', apartment: '🏢', office: '🏢', glass: '🏙️', skyscraper: '🏙️', warehouse: '🏭', factory: '🏭', bank: '🏦', hotel: '🏨', gas: '⛽', shop: '🏪' }[arch] || '🏢'; }
 // Every building in a city, not just the ones marked FOR SALE or FOR
 // LEASE: price, units and rent from the tile itself, so tapping any
 // building in the city can buy it.
@@ -575,12 +575,12 @@ function buildingLotForTile(cityId, tIdx) {
   const city = W.cities[cityId], L = cityLayout(city), t = L.tiles[tIdx];
   if (!t || t.kind !== 'lot') return null;
   const w = city.wealth;
-  const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' ? 2 : t.arch === 'warehouse' ? 1 : t.arch === 'gas' ? 1 : Math.max(4, Math.round(t.floors * 1.8));
+  const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' || t.arch === 'brownstone' ? 2 : t.arch === 'warehouse' || t.arch === 'factory' ? 1 : t.arch === 'gas' ? 1 : Math.max(4, Math.round(t.floors * 1.8));
   const mrent = Math.round(70 + 380 * Math.pow(w, 1.05));
   const cap = 0.05 + (1 - Math.min(1, w)) * 0.04;
-  const mult = t.arch === 'skyscraper' ? 2.5 : t.arch === 'warehouse' ? 1.4 : t.arch === 'gas' ? 1.2 : 1;
+  const mult = t.arch === 'skyscraper' ? 2.5 : t.arch === 'warehouse' || t.arch === 'factory' ? 1.4 : t.arch === 'gas' ? 1.2 : 1;
   const price = Math.round(units * mrent * 52 / cap * mult / 1000) * 1000;
-  const size = t.arch === 'warehouse' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
+  const size = t.arch === 'warehouse' || t.arch === 'factory' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
   return { t: tIdx, kind: 'building', traffic: t.traffic || 0, size, arch: t.arch, units, mrent, cond: 0.75, price, floors: t.floors, zone: t.zone };
 }
 function buyAnyBuilding(cityId, tIdx) {

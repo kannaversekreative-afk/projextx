@@ -41,7 +41,7 @@ const CityView = (() => {
     diamond(c, t.x, t.y, '#e8e2d0', 0.04);
     const green = t.arch === 'house' || t.arch === 'rowhouse' || t.kind === 'park';
     diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
-    if (t.arch === 'warehouse' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
+    if (t.arch === 'warehouse' || t.arch === 'factory' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
       diamond(c, t.x, t.y, '#a4aab0', 0.1);
       c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.8;
       for (let i = 1; i < 5; i++) { const a = P(t.x + 0.1 + i * 0.16, t.y + 0.62), b = P(t.x + 0.1 + i * 0.16, t.y + 0.9); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
@@ -119,11 +119,15 @@ const CityView = (() => {
     else if (style.cap === 'spire') { poly(c, [[x - 4, y], [x + 4, y], [x, y - 18]], a); }
   }
   function building(c, t) {
-    // Capitals draw in their own country's style, not the generic
-    // palette: wall colours and roof colour come from CAPITAL_STYLES.
+    // Every city draws in its country's style, not the generic
+    // palette: wall colours and roof colour come from the design the
+    // layout computed (the country's CAPITAL_STYLES entry), so all
+    // Russian cities are red brick, all French cities cream, and so
+    // on. Cities with no country style keep their own colours.
     let style = null;
-    if (typeof isGovCity === 'function' && isGovCity(city) && typeof CAPITAL_STYLES !== 'undefined' && CAPITAL_STYLES[city.a3]) {
-      style = CAPITAL_STYLES[city.a3];
+    if (layout && layout.design) style = layout.design;
+    else if (typeof isGovCity === 'function' && isGovCity(city) && typeof CAPITAL_STYLES !== 'undefined' && CAPITAL_STYLES[city.a3]) style = CAPITAL_STYLES[city.a3];
+    if (style) {
       const rr = mulberry(Math.floor(t.seed * 1e9) + 77);
       t = Object.assign({}, t, { color: style.w[Math.floor(rr() * style.w.length)], roof: style.r });
     }
@@ -132,6 +136,7 @@ const CityView = (() => {
     const x0 = x + k, y0 = y + k, x1 = x + 1 - k, y1 = y + 1 - k;
     if (t.arch === 'house') return house(c, t, r);
     if (t.arch === 'rowhouse') return rowhouse(c, t, r);
+    if (t.arch === 'brownstone') return brownstone(c, t, r);
     if (t.arch === 'warehouse') return warehouse(c, t, x0, y0, x1, y1);
     if (t.arch === 'gas') return gasStation(c, t, r);
     if (t.arch === 'skyscraper') return skyscraper(c, t, r, x0, y0, x1, y1);
@@ -144,15 +149,35 @@ const CityView = (() => {
     } else {
       g = box(c, x0, y0, x1, y1, h, t.color);
       if (t.arch === 'glass') glassFaces(c, g, t.color, h);
-      else if (t.arch === 'office') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } });
+      else if (t.arch === 'office' || t.arch === 'bank') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } });
         const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
-      else if (t.arch === 'apartment') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
+      else if (t.arch === 'apartment' || t.arch === 'hotel') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
         for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.25), b = lerp(g.D, g.C, 0.75); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1; c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1); c.lineTo(b[0], b[1] - i * floorH - 1); c.stroke(); }
         c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.1), b = lerp(g.D, g.C, 0.9); c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1.5); c.lineTo(b[0], b[1] - i * floorH - 1.5); c.stroke(); } }
       else if (t.arch === 'shop') shopFront(c, g, t, h);
     }
-    if (t.arch !== 'shop') { // ground-floor lobby glass
+    if (t.arch !== 'shop' && t.arch !== 'factory') { // ground-floor lobby glass
       poly(c, [lerp(g.D, g.C, 0.3), lerp(g.D, g.C, 0.7), up(lerp(g.D, g.C, 0.7), 6), up(lerp(g.D, g.C, 0.3), 6)].map(p => [p[0], p[1] - (g.base || 0)]), 'rgba(30,50,70,0.75)');
+    }
+    if (t.arch === 'bank') { // ground-floor colonnade + entablature band
+      c.fillStyle = '#f0ead8';
+      for (let i = 0; i < 5; i++) { const p = lerp(g.D, g.C, 0.18 + i * 0.16); c.fillRect(p[0] - 2, p[1] - 16, 4, 16); }
+      poly(c, [lerp(g.D, g.C, 0.12), lerp(g.D, g.C, 0.88), up(lerp(g.D, g.C, 0.88), 18), up(lerp(g.D, g.C, 0.12), 18)], 'rgba(240,234,216,0.35)');
+    }
+    if (t.arch === 'hotel') { // balcony rails on every floor
+      const rows = Math.max(1, Math.round(h / floorH));
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1;
+      for (let i = 1; i < rows; i++) {
+        const a = lerp(g.D, g.C, 0.12), b = lerp(g.D, g.C, 0.88);
+        c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1); c.lineTo(b[0], b[1] - i * floorH - 1); c.stroke();
+      }
+    }
+    if (t.arch === 'factory') { // chimney + smoke at the back corner
+      const cx = (g.A[0] + g.C[0]) / 2, cy = (g.A[1] + g.C[1]) / 2 - h;
+      c.fillStyle = '#8a6a5a'; c.fillRect(cx + 8, cy - 28, 7, 28);
+      c.fillStyle = '#6b4f3a'; c.fillRect(cx + 8, cy - 28, 7, 3);
+      c.fillStyle = 'rgba(180,180,180,0.35)'; c.beginPath(); c.arc(cx + 11, cy - 33, 6, 0, 7); c.fill();
+      c.fillStyle = 'rgba(200,200,200,0.25)'; c.beginPath(); c.arc(cx + 14, cy - 40, 4, 0, 7); c.fill();
     }
     roofDetails(c, g, t, r);
     if ((t.arch === 'office' || t.arch === 'apartment' || t.arch === 'glass') && r() < 0.6) tree(c, x + 0.9, y + 0.9, 0.6);
@@ -211,6 +236,18 @@ const CityView = (() => {
       topY = Math.max(topY, h + 3);
     }
     const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - topY];
+  }
+  function brownstone(c, t, r) {
+    // Brick rowhouse with a stoop: New York / Boston streets.
+    const x = t.x, y = t.y, x0 = x + 0.14, y0 = y + 0.16, x1 = x + 0.86, y1 = y + 0.82, h = 8.5 * t.floors + 4;
+    const g = box(c, x0, y0, x1, y1, h, t.color);
+    faceGrid(c, g.D, g.C, h, t.floors, 3, 'rgba(60,80,100,0.6)');
+    poly(c, [up(g.D, h), up(g.C, h), up(g.C, h + 3), up(g.D, h + 3)], shade(t.color, 0.6));
+    const dm = lerp(g.D, g.C, 0.5);
+    c.fillStyle = '#6b4f3a'; c.fillRect(dm[0] - 2, dm[1] - 8, 4, 8);
+    c.fillStyle = shade(t.color, 0.7);
+    for (let i = 0; i < 3; i++) c.fillRect(dm[0] - 6 + i * 1.5, dm[1] - 2 - i * 2, 12 - i * 3, 2);
+    const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - h - 3];
   }
   function skyscraper(c, t, r, x0, y0, x1, y1) {
     // Tall tower with setbacks, an antenna and a lit billboard — only
