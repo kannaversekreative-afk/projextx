@@ -19,6 +19,10 @@ function airportCities(a3) {
     .map(c => ({ id: c.id, name: c.name, kind: c.isCapital ? 'Capital' : (c.isMajor ? 'Major city' : 'City') }));
 }
 function airportFromCity() {
+  // The city the player is standing in wins: opening departures from inside
+  // a city shows that city's airport, not the home capital's.
+  if (typeof CityView !== 'undefined' && CityView.isOpen && CityView.isOpen() && CityView.city
+    && !(typeof MARS_CITY_ID !== 'undefined' && CityView.city.id === MARS_CITY_ID)) return CityView.city;
   if (S.airportFrom != null && W.cities[S.airportFrom]) return W.cities[S.airportFrom];
   return W.cities[W.byA3[S.home].capital];
 }

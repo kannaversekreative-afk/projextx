@@ -426,7 +426,7 @@ function renderCityHUD() {
       // A company's locations are all in its own capital city (co.city), by construction
       // in addLocation(), so the count here is exact, not a filter that happens to work.
       const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
-      html = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
+      html = `<div class="citybar card"><div><button class="citybar-name" data-a="departures" aria-label="Airport departures">${esc(c.name)}</button><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
     }
   }
@@ -2196,16 +2196,46 @@ function openDeparturesModal() {
   const groups = ['Americas', 'Europe', 'Asia', 'Africa', 'Oceania'];
   const sel = UI.depCont || depContGroup(W.byA3[from.a3].cont);
   UI.depCont = sel;
-  const dests = W.playable.filter(k => k.capital !== from.id).map(k => {
-    const ct = W.cities[k.capital];
-    return { ct, k, km: airportDistanceKm(from, ct), grp: depContGroup(k.cont) };
-  }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km).slice(0, 40);
-  openModal(`<div class="dep-head"><h2>${esc(from.name)} Airport</h2><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
-  <p class="muted">Welcome to ${esc(from.name)} Airport. Tap a destination below to catch a flight.</p>
-  <div class="row gap" style="flex-wrap:wrap">${groups.map(g => `<button class="btn${g === sel ? ' primary' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
+  // Every city in the selected region, nearest first — capitals and major
+  // cities alike, so the board is how the player actually travels.
+  const dests = W.cities.filter(c => c.id !== from.id).map(c => {
+    const k = W.byA3[c.a3];
+    return { ct: c, k, km: airportDistanceKm(from, c), grp: k ? depContGroup(k.cont) : 'Oceania' };
+  }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km);
+  openModal(`<div class="dep-head"><span class="dep-plane">✈️</span><h2>${esc(from.name)} Airport</h2><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
+  <p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>
+  <div class="dep-title">✈ DEPARTURES</div>
+  <canvas id="depmap" class="dep-map"></canvas>
+  <div class="dep-grplabel">${sel}</div>
+  <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
-  ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span>${esc(d.ct.name)} · ${esc(d.k.name)}</span><span>${d.km.toLocaleString('en-US')}</span></button>`).join('')}
+  ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km.toLocaleString('en-US')}</span></button>`).join('')}
   </div>`, 'dep');
+  drawDepMap(sel, from);
+}
+// Dotted world map for the departures board: dim dots for every land cell
+// from the game's own map grid, bright dots for the selected region's
+// cities, gold dot for the airport the player is flying out of.
+function drawDepMap(sel, from) {
+  const cv = document.getElementById('depmap');
+  if (!cv || typeof W === 'undefined' || !W.water) return;
+  const w = cv.clientWidth || 600, h = Math.round(w * 0.5);
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const gw = W.ww, gh = W.wh, dx = w / gw, dy = h / gh;
+  ctx.clearRect(0, 0, w, h);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (W.water[y * gw + x]) continue;
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.arc(x * dx + dx / 2, y * dy + dy / 2, Math.max(1, dx * 0.32), 0, 7); ctx.fill();
+  }
+  W.cities.forEach(c => {
+    const k = W.byA3[c.a3]; if (!k || depContGroup(k.cont) !== sel) return;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc((c.lon + 180) / 360 * w, (90 - c.lat) / 180 * h, Math.max(1.6, dx * 0.5), 0, 7); ctx.fill();
+  });
+  ctx.fillStyle = '#ffd166';
+  ctx.beginPath(); ctx.arc((from.lon + 180) / 360 * w, (90 - from.lat) / 180 * h, Math.max(3, dx * 0.9), 0, 7); ctx.fill();
 }
 
 // ---------- actions ----------
