@@ -246,39 +246,26 @@ function renderPanel() {
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
 function renderHUD() {
   if (!S || UI.pick) return;
-  const nw = netWorth(), lv = level();
-  const co = homeCo();
-  // HUD: company card top-left, zoom + locate on the right, a fixed
-  // Age stepper at the bottom (above the bottom bar, thumb-reachable,
-  // always in the same spot), and a bottom bar. The map fills the whole
-  // screen behind all of it. No top-left pill, no Claim button, no Shop
-  // button up here: daily money is added to cash automatically, and Shop
-  // lives only in the More (…) menu. Messages and Settings are also only
-  // in More now — the top-right envelope and gear were duplicates, so
-  // they were removed, and Age moved to the fixed bottom bar instead of
-  // living in the top-right corner where it was easy to miss and hard
-  // to reach on a phone.
-  const hk = W.byA3[S.home], hcs = country(S.home);
-  const cardTop = S.leader
-    ? `<div class="company-card card">
-    <div class="cc-top"><b>${hk.flag} ${esc(cname(S.home))} — Leader</b><span class="muted small">Lv ${lv} · Stability ${Math.round(hcs.stab)} / 100 · ${(typeof modeLabel === 'function' ? modeLabel() : 'World')}</span></div>
-    <div class="cc-line"><span>Treasury <b>${fmtMoney(S.cash, true)}</b></span><span>Debt <b>${fmtMoney(hcs.debt || 0, true)}</b></span><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>💰 GDP <b>${fmtMoney(hcs.gdp * 1e6, true)}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
-  </div>`
-    : `<div class="company-card card">
-    <div class="cc-top"><b>${esc(co.name)}</b><span class="muted small">Lv ${lv} · ${careerName()}</span></div>
-    <div class="cc-line"><span>Net worth <b>${fmtMoney(nw, true)}</b></span><span>Cash <b>${fmtMoney(S.cash, true)}</b></span><span>👥 <b>${fmtPop(nationPop())}</b> <em class="${upCls(popGrowth())}">${fmtPct(popGrowth())}</em></span><span>📈 vs Market <b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></span><span>🗓️ ${fmtDate(S.day)}</span></div>
-  </div>`;
-  $('hud').innerHTML = cardTop + `
-  <div class="rail-bottom">
-    <button class="rail-btn" data-a="locate" aria-label="Go home">⌖</button>
-  </div>
-  <div class="bottombar card">
-    <button class="bb-btn" data-a="panel" data-x="markets"><span>📈</span>Markets</button>
-    <button class="bb-btn" data-a="panel" data-x="portfolio"><span>💼</span>Portfolio</button>
-    <div class="bb-center"><button class="bb-age" data-a="ageUp" aria-label="Age up one year">+</button><button class="bb-week" data-a="ageWeek" aria-label="Advance one week">WEEK</button></div>
-    <button class="bb-btn" data-a="panel" data-x="company"><span>🏢</span>My Companies</button>
-    <button class="bb-btn" data-a="more"><span>•••</span>More</button>
-  </div>`;
+  // New HUD, from the reference design (layout only, original art):
+  // no Go home button, no bottom bar at all.
+  // Top-left: a dark pill with the country flag, the country name and
+  // your money. Top-right: a dark pill with the game date — tap it and
+  // it asks if you are done this week, with a calendar underneath.
+  // Bottom-left: map layers — toggle what shows on the map.
+  // Bottom-middle: your current city — tap it for the airport
+  // departures board and fly somewhere. Bottom-right: a hamburger
+  // that opens every menu item, on the right, scrollable.
+  const hk = W.byA3[S.home];
+  const curCity = airportFromCity();
+  $('hud').innerHTML = `
+  <button class="hud-pill hud-tl" data-a="panel" data-x="nation" aria-label="Nation">
+    <span class="hud-flag">${hk.flag}</span>
+    <span class="hud-tl-text"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)}</small></span>
+  </button>
+  <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
+  <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+  <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
+  <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">☰</button>`;
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
@@ -1537,17 +1524,69 @@ PANELS.help = () => {
     `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
+// Every menu item, shared by the hamburger drawer (right side,
+// scrollable) and the old More sheet. The drawer is the new home for
+// all of these now that the bottom bar is gone.
+const MENU_ITEMS = [
+  ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
+  ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
+  ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
+  ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
+  ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
+  ['leaderboard', '🏆', 'Leaderboard'], ['mode', '🎲', 'Mode'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
+  ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
+];
 function moreSheet() {
-  const items = [
-    ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
-    ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
-    ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
-    ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
-    ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
-    ['leaderboard', '🏆', 'Leaderboard'], ['mode', '🎲', 'Mode'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
-    ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
+  openModal(`<h2>More</h2><div class="more-grid">${MENU_ITEMS.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
+}
+PANELS.drawer = () => panelShell('Menu', '', `<div class="menu-list">${MENU_ITEMS.map(([x, ic, t]) => `<button class="srow" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="avatar">${ic}</span><span class="sname"><b>${t}</b></span><span class="muted">›</span></button>`).join('')}</div><p class="muted small">Everything that used to live in the bottom bar is here now.</p>`);
+// ---------- date modal: Done this week? + calendar ----------
+function openDateModal() {
+  const e = ensureEarnings();
+  const evs = calendarEvents();
+  const recent = e.history.slice(0, 8);
+  openModal(`<h2>DONE THIS WEEK?</h2><p>Are you done with your business this week?</p>
+  <div class="row gap"><button class="btn3d wide" data-a="dateYes">YES</button><button class="btn wide" data-a="dateNo">NO</button></div>
+  <button class="btn wide" data-a="ageYear" style="margin-top:10px">Advance one year instead</button>
+  <h3 style="margin-top:18px">Calendar</h3>
+  <div class="menu-list">${evs.map(v => `<div class="srow" style="cursor:default"><span class="avatar">🗓️</span><span class="sname"><b>${esc(v.title)}</b><span class="muted">${fmtDate(v.day)}${v.day - S.day > 0 ? ` · in ${v.day - S.day} days` : ''}</span></span></div>`).join('')}</div>
+  ${recent.length ? `<h3 style="margin-top:18px">Last earnings reports</h3><div class="menu-list">${recent.map(r => `<div class="srow" style="cursor:default"><span class="avatar">📊</span><span class="sname"><b>${esc(r.name)}</b><span class="muted">${fmtDate(r.day)} · profit ${fmtMoney(r.profit, true)} · ${r.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(Math.round(r.surprise * 100))}%${r.move ? ` · shares ${r.move >= 0 ? '+' : ''}${r.move}%` : ''}</span></span></div>`).join('')}</div>` : `<p class="muted small">No earnings reports yet — the first quarter lands 13 weeks in.</p>`}`, 'sheet');
+}
+// ---------- map layers sheet ----------
+function openLayersModal() {
+  if (!S.mapLayers) S.mapLayers = { vehicles: true, ports: true, labels: true, star: true };
+  const L = S.mapLayers;
+  const rows = [
+    ['vehicles', '🚗', 'Vehicles', 'Cars, planes and boats moving on the map'],
+    ['ports', '⚓', 'Ports and roads', 'Civilian and military ports, and the roads to them'],
+    ['labels', '🏷️', 'City labels', 'Names on the map'],
+    ['star', '⭐', 'Your City star', 'The star marker for your personal city'],
   ];
-  openModal(`<h2>More</h2><div class="more-grid">${items.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
+  openModal(`<h2>Map layers</h2><p class="muted">Choose what shows on the map.</p><div class="menu-list">${rows.map(([k, ic, t, d]) => `<div class="srow" style="cursor:default"><span class="avatar">${ic}</span><span class="sname"><b>${t}</b><span class="muted">${d}</span></span><button class="btn" data-a="layerToggle" data-x="${k}">${L[k] !== false ? 'ON' : 'OFF'}</button></div>`).join('')}</div>`, 'sheet');
+}
+// ---------- airport departures board ----------
+function depContGroup(cont) {
+  if (cont === 'North America' || cont === 'South America') return 'Americas';
+  if (cont === 'Europe') return 'Europe';
+  if (cont === 'Asia') return 'Asia';
+  if (cont === 'Africa') return 'Africa';
+  return 'Oceania';
+}
+function openDeparturesModal() {
+  const from = airportFromCity();
+  const groups = ['Americas', 'Europe', 'Asia', 'Africa', 'Oceania'];
+  const sel = UI.depCont || depContGroup(W.byA3[from.a3].cont);
+  UI.depCont = sel;
+  const dests = W.playable.filter(k => k.capital !== from.id).map(k => {
+    const ct = W.cities[k.capital];
+    return { ct, k, km: airportDistanceKm(from.id, ct.id), grp: depContGroup(k.cont) };
+  }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km).slice(0, 40);
+  openModal(`<div class="dep-head"><h2>${esc(from.name)} Airport</h2><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
+  <p class="muted">Welcome to ${esc(from.name)} Airport. Tap a destination below to catch a flight.</p>
+  <div class="row gap" style="flex-wrap:wrap">${groups.map(g => `<button class="btn${g === sel ? ' primary' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
+  <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
+  ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span>${esc(d.ct.name)} · ${esc(d.k.name)}</span><span>${d.km.toLocaleString('en-US')}</span></button>`).join('')}
+  </div>`, 'dep');
 }
 
 // ---------- actions ----------
@@ -1612,7 +1651,17 @@ const A = {
   skip: x => doSkip(+x),
   zoom: x => MapView.zoom(+x),
   locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
-  more: () => moreSheet(),
+  more: () => openPanel('drawer'),
+  drawer: () => openPanel('drawer'),
+  dateModal: () => openDateModal(),
+  dateYes: () => { closeModal(); A.ageWeek(); },
+  dateNo: () => closeModal(),
+  ageYear: () => { closeModal(); A.ageUp(); },
+  layers: () => openLayersModal(),
+  layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, ports: true, labels: true, star: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
+  departures: () => openDeparturesModal(),
+  depCont: x => { UI.depCont = x; openDeparturesModal(); },
+  depFly: x => { closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
   star: (x, el, e) => {

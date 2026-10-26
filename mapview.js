@@ -376,7 +376,8 @@ const MapView = (() => {
     // scale: they move fast enough that size was never the problem.
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
-    if (st && st.settings.motion) {
+    const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
+    if (st && st.settings.motion && layerOn('vehicles')) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co) return;
         let x, y, a;
@@ -398,7 +399,7 @@ const MapView = (() => {
     // faint blue edge so the white shows on white land and blue sea).
     // Shown for your home country always, and for every country once
     // you zoom in — at world zoom 196 networks would just be clutter.
-    if (st && !pickMode) {
+    if (st && !pickMode && layerOn('ports')) {
       const showFac = v.s > 1.0;
       W.playable.forEach(k => {
         if (k.a3 !== st.home && !showFac) return;
@@ -460,7 +461,7 @@ const MapView = (() => {
     labelRects = [];
     // Your city: a circle with a star in it, in your home country, just
     // beside the capital. Tapping it opens Your City.
-    if (typeof myCityPos === 'function') {
+    if (typeof myCityPos === 'function' && layerOn('star')) {
       try {
         const mc = myCityPos();
         if (mc) {
@@ -479,6 +480,7 @@ const MapView = (() => {
     const order = W.cities.map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
     const maxLabels = Math.round(14 + v.s * v.s * 40);
     let n = 0;
+    if (!layerOn('labels')) n = maxLabels + 1;
     for (const [id, p] of order) {
       if (n >= maxLabels && p < 1e11) break;
       const ct = W.cities[id], [sx, sy] = toScreen(ct.x, ct.y);
@@ -517,7 +519,7 @@ const MapView = (() => {
     if (!pickMode) {
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
-      if (typeof myCityPos === 'function') {
+      if (typeof myCityPos === 'function' && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
         try {
           const mc = myCityPos();
           if (mc) { const [mx, my] = toScreen(mc.x, mc.y); if (Math.hypot(mx - sx, my - sy) < 26) { handlers.mycity && handlers.mycity(); return; } }

@@ -318,7 +318,37 @@ body.in-city #hud, body.in-city #popup { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { #panel.open, .mbox, .toast { animation: none; } }
 
-/* Horizontal on phones: web is wide, so a portrait phone is rotated
+/* New HUD, from the reference design (layout only, original art):
+   dark pills top-left and top-right, small dark buttons bottom-left
+   and bottom-right, and a city pill centred at the bottom. No Go home
+   button, no bottom bar. */
+.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
+.hud-tl { left: max(12px, env(safe-area-inset-left)); text-align: left; }
+.hud-flag { font-size: 26px; line-height: 1; }
+.hud-tl-text { display: flex; flex-direction: column; line-height: 1.2; }
+.hud-tl-text b { font-size: 15px; }
+.hud-tl-text small { font-size: 14px; color: #cfe0ff; font-weight: 700; }
+.hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; }
+.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
+.hud-bl { left: max(12px, env(safe-area-inset-left)); }
+.hud-br { right: max(12px, env(safe-area-inset-right)); }
+.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
+.hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
+/* Departures board modal: dark, like a departures board, not a white card. */
+.mbox.dep { background: #0f172a; color: #fff; width: min(640px, 100%); }
+.mbox.dep .muted { color: #94a3b8; }
+.mbox.dep .btn { background: #1e293b; color: #fff; border-color: #334155; }
+.mbox.dep .btn.primary { background: #2f7cf6; border-color: #2f7cf6; }
+.dep-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.dep-head h2 { margin: 0; }
+.dep-board { margin-top: 14px; border-top: 1px solid #334155; }
+.dep-row { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #1e293b; color: #fff; padding: 12px 4px; font-size: 15px; font-weight: 700; }
+.dep-row span:last-child { color: #cfe0ff; white-space: nowrap; }
+.dep-headrow { font-size: 13px; color: #94a3b8; font-weight: 800; cursor: default; }
+/* Hamburger drawer list: rows with the icon on the left of the label,
+   in a right-side panel that scrolls. */
+.menu-list { display: flex; flex-direction: column; gap: 2px; }
+.menu-list .srow { width: 100%; text-align: left; }
    90 degrees and shown landscape, exactly like web. The whole game
    lives in #game, so rotating that one box rotates map, HUD, panels
    and city view together. Only portrait phones get this — a phone
