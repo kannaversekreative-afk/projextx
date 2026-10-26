@@ -494,6 +494,18 @@ function hqCityId(a3, hq) {
   return inCountry.slice().sort((x, y) => y.pop - x.pop)[0].id;
 }
 
+// Open pool: ANY era-alive sector, for CPU generation. Unlike the
+// realism pool (must-haves, specialisations, wealth/coastal tiers —
+// still used for districts, displays and arrival eligibility), this has
+// no country restrictions: any country may have any sector. Era rules
+// still apply (nothing before its from year, nothing after its to year).
+// Start counts stay small (2–3 businesses); growth comes later, from
+// the diversification pass in sectorEraWeek.
+function openSectorPool(year) {
+  const yr = (year != null) ? year : gameYear();
+  return LEADER_SECTORS.filter(s => (!s.from || s.from <= yr) && (!s.to || s.to >= yr)).map(s => s.n);
+}
+
 function inheritDifficulty(k) {
   const gdpPc = k.gdp0 * 1e6 / Math.max(1, k.pop0);
   if (k.gdp0 > 1e6) return 'Powerful';
@@ -655,6 +667,12 @@ function sectorEraWeek() {
   });
   // Formation: once, on the first week of a new year, in sectors that
   // arrived that year, only in countries whose pool includes them.
+  // Diversification (same yearly pass): each country has a 25% chance to
+  // gain ONE more business in any diversifiable sector it doesn't
+  // already have — so CPU countries start with a few sectors and grow
+  // more over time. Diversifiable = alive, and either established
+  // (from <= 2026 or none) or past its 12-year rich-only window, so new
+  // tech still spreads rich-first. Player companies are never touched.
   if (yr !== S.sectorEraYear) {
     S.sectorEraYear = yr;
     const arrived = LEADER_SECTORS.filter(s => s.from === yr).map(s => s.n);
@@ -666,6 +684,20 @@ function sectorEraWeek() {
       const usedSyms = new Set(Object.values(S.extra).map(b => b.sym));
       const ex = makeExtraBusiness(k, pick(fit), usedNames, usedSyms, 'f' + ((S.extraSeq = (S.extraSeq || 1000) + 1)));
       S.extra[ex.id] = ex;
+    });
+    const usedNames = new Set(Object.values(S.extra).map(b => b.name));
+    const usedSyms = new Set(Object.values(S.extra).map(b => b.sym));
+    Object.values(S.co || {}).forEach(c => { usedNames.add(c.name); usedSyms.add(c.sym); });
+    W.playable.forEach(k => {
+      if (rand() >= 0.25) return;
+      const present = new Set();
+      if (S.co[k.a3]) present.add(S.co[k.a3].sector);
+      Object.values(S.extra).forEach(b => { if (b.a3 === k.a3) present.add(b.sector); });
+      const cands = LEADER_SECTORS.filter(s => (!s.from || s.from <= 2026 || yr >= s.from + 12) && (!s.to || s.to >= yr) && !present.has(s.n)).map(s => s.n);
+      if (!cands.length) return;
+      const ex = makeExtraBusiness(k, pick(cands), usedNames, usedSyms, 'f' + ((S.extraSeq = (S.extraSeq || 1000) + 1)));
+      S.extra[ex.id] = ex;
+      usedNames.add(ex.name); usedSyms.add(ex.sym);
     });
   }
   // Decay + closure for dead sectors.

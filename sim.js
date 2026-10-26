@@ -67,11 +67,12 @@ function newGame(opt) {
   const usedNames = new Set(), usedSyms = new Set();
   if (opt.leader) {
     // Leader game: 2–3 businesses per country. Flagship is a full company,
-    // extras are economic businesses (see leader.js). Flagship sector and
-    // extra sectors come from the realism pool, never a random global sector.
-    // Count is random (2 vs 3), sectors are realism-picked.
+    // extras are economic businesses (see leader.js). Must-haves come
+    // first (guaranteed), the rest come from the OPEN pool — any
+    // era-alive sector, any country. Count stays small at start (2–3);
+    // countries gain more sectors later via diversification.
     W.playable.forEach(k => {
-      const pool = (typeof sectorPoolForCountry === 'function') ? sectorPoolForCountry(k, 2026) : SECTOR_LIST.slice();
+      const pool = (typeof openSectorPool === 'function') ? openSectorPool(2026) : SECTOR_LIST.slice();
       const must = (typeof mustHaveForCountry === 'function') ? mustHaveForCountry(k.a3) : [];
       // MUST-HAVE FIRST, guaranteed, not random: e.g. Russia ALWAYS gets
       // Oil Extraction + Natural Gas, Taiwan ALWAYS gets Semiconductors.
