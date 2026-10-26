@@ -1,0 +1,323 @@
+// ---------- the person ----------
+// You play a person, not a country. You start at 18 with $250,000 of
+// your own money. Age is just a stat: it advances with the years and
+// never kills you or retires you.
+// Three wallets:
+//   personal — your money (person panel),
+//   business — S.cash, the money shown in the top-left pill,
+//   office — the budget of whatever office you hold (the nation
+//     treasury for a president, a city budget for a mayor, and so on).
+// Four meters: visibility (how much you're seen), fame (how widely
+// known), popularity (how liked), public opinion (what people think
+// of your leadership). Elections are won on fame, popularity, and
+// public opinion — three separate scores.
+// The Cabinet is always there: 10 advisor spots, from family and
+// friends up to kings of the world. Advisors have ratings, can be
+// right or wrong, sell inside info for money, and getting caught can
+// mean a fine, an arrest, or impeachment.
+function defaultPerson() {
+  return {
+    cash: 250000,
+    vis: 5, fame: 5, pop: 50, opin: 50,
+    job: { track: 'civilian', rank: 0, weeks: 0 },
+    office: null,
+    cabinet: [],
+    cabCands: null,
+    tips: [],
+    flaggedUntil: 0,
+    runCooldownUntil: 0,
+    ranOnce: false,
+  };
+}
+function clampMeter(v) { return Math.max(0, Math.min(100, Math.round(v || 0))); }
+function ensurePerson() {
+  if (typeof S === 'undefined' || !S) return defaultPerson();
+  if (!S.person) S.person = defaultPerson();
+  const d = defaultPerson(), p = S.person;
+  for (const k in d) if (p[k] == null) p[k] = d[k];
+  if (!p.job) p.job = { track: 'civilian', rank: 0, weeks: 0 };
+  if (!Array.isArray(p.cabinet)) p.cabinet = [];
+  if (!Array.isArray(p.tips)) p.tips = [];
+  p.vis = clampMeter(p.vis); p.fame = clampMeter(p.fame); p.pop = clampMeter(p.pop); p.opin = clampMeter(p.opin);
+  return p;
+}
+function personAge() { return 18 + Math.floor(((typeof S !== 'undefined' && S ? S.day : 0) || 0) / 365); }
+
+// ---------- offices ----------
+const MONARCHY = { GBR: 1, SAU: 1, ESP: 1, SWE: 1, NOR: 1, DNK: 1, NLD: 1, BEL: 1, MAR: 1, JOR: 1, THA: 1, JPN: 1, KWT: 1, QAT: 1, ARE: 1, BHR: 1, OMN: 1, MYS: 1, CAM: 1, BTN: 1, LSO: 1, SWZ: 1, TON: 1, LUX: 1, MCO: 1, LIE: 1 };
+function isMonarchy(a3) { return !!MONARCHY[a3]; }
+function officeList() {
+  const mon = isMonarchy(S.home);
+  const cap = (W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) || null;
+  const list = [
+    { id: 'mayor', title: cap ? `Mayor of ${cap.name}` : 'Mayor', scope: 'city', req: { fame: 15, pop: 40, opin: 40 }, salary: 2000, termDays: 1460, base: 30 },
+    { id: 'governor', title: 'Governor', scope: 'region', req: { fame: 30, pop: 50, opin: 50 }, salary: 3500, termDays: 1460, base: 45 },
+    { id: 'congress', title: mon ? 'Member of Parliament' : 'Member of Congress', scope: 'legislature', req: { fame: 45, pop: 55, opin: 55 }, salary: 5000, termDays: 730, base: 55 },
+  ];
+  if (mon) list.push({ id: 'prince', title: 'Crown Prince', scope: 'royal', req: { fame: 60, pop: 60, opin: 60 }, salary: 8000, termDays: 1460, base: 65 });
+  list.push({ id: 'head', title: mon ? (S.home === 'JPN' ? 'Emperor' : 'King') : 'President', scope: 'nation', req: { fame: 75, pop: 65, opin: 65 }, salary: 15000, termDays: mon ? 3650 : 1460, base: 75 });
+  return list;
+}
+function officeTreasury(o) {
+  if (!o) return 0;
+  if (o.scope === 'nation') { const cs = (typeof country === 'function') ? country(S.home) : null; return cs ? (cs.treasury || 0) : 0; }
+  return o.treasury || 0;
+}
+function officeAddTreasury(o, amt) {
+  if (!o) return;
+  if (o.scope === 'nation') { const cs = (typeof country === 'function') ? country(S.home) : null; if (cs) cs.treasury = Math.max(0, (cs.treasury || 0) + amt); }
+  else o.treasury = Math.max(0, (o.treasury || 0) + amt);
+}
+function officeScopeGdp(o) {
+  const gdp = (W.byA3[S.home] ? W.byA3[S.home].gdp0 * 1e6 : 1e9);
+  if (o.scope === 'city') { const cap = (W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) || null; return (cap && cap.gdpAlloc ? cap.gdpAlloc : gdp * 0.05); }
+  if (o.scope === 'region') return gdp * 0.3;
+  return gdp;
+}
+function officeTreasuryStart(o) {
+  const gdp = (W.byA3[S.home] ? W.byA3[S.home].gdp0 * 1e6 : 1e9);
+  if (o.scope === 'nation') return officeTreasury(o);
+  if (o.scope === 'city') return Math.round(officeScopeGdp(o) * 0.01);
+  if (o.scope === 'region') return Math.round(gdp * 0.02);
+  return Math.round(gdp * 0.01);
+}
+
+// ---------- agencies: every country has its own ----------
+const AGENCIES = { USA: ['FBI', 'CIA'], GBR: ['MI5', 'MI6'], RUS: ['FSB', 'SVR'], CHN: ['MSS', 'MSS'], FRA: ['DGSI', 'DGSE'], DEU: ['BfV', 'BND'], ISR: ['Shin Bet', 'Mossad'], IND: ['IB', 'RAW'], PAK: ['IB', 'ISI'], TUR: ['MIT', 'MIT'], IRN: ['MOIS', 'MOIS'], SAU: ['GIP', 'GIP'], EGY: ['GIS', 'GIS'], KOR: ['NIS', 'NIS'], JPN: ['PSIA', 'CIRO'], AUS: ['ASIO', 'ASIS'], CAN: ['CSIS', 'CSIS'], BRA: ['ABIN', 'ABIN'], ITA: ['AISI', 'AISE'], ESP: ['CNI', 'CNI'] };
+function agencyOf(a3) { return AGENCIES[a3] || ['Domestic Intelligence', 'Foreign Intelligence']; }
+
+// ---------- jobs ----------
+function jobLadder(track) {
+  const ag = agencyOf(S.home);
+  if (track === 'agency-dom') return [{ title: ag[0] + ' Agent', salary: 1500, fame: 10, weeks: 0 }, { title: ag[0] + ' Special Agent', salary: 2500, fame: 25, weeks: 26 }, { title: ag[0] + ' Director', salary: 5000, fame: 45, weeks: 52 }];
+  if (track === 'agency-for') return [{ title: ag[1] + ' Officer', salary: 1500, fame: 10, weeks: 0 }, { title: ag[1] + ' Senior Officer', salary: 2500, fame: 25, weeks: 26 }, { title: ag[1] + ' Director', salary: 5000, fame: 45, weeks: 52 }];
+  if (track === 'military') return [{ title: 'Private', salary: 500, fame: 0, weeks: 0 }, { title: 'Sergeant', salary: 1000, fame: 10, weeks: 26 }, { title: 'Officer', salary: 2000, fame: 20, weeks: 52 }, { title: 'General', salary: 5000, fame: 40, weeks: 104 }];
+  return [{ title: 'Factory worker', salary: 600, fame: 0, weeks: 0 }, { title: 'Shift lead', salary: 900, fame: 10, weeks: 4 }, { title: 'Supervisor', salary: 1400, fame: 15, weeks: 12 }, { title: 'Manager', salary: 2200, fame: 20, weeks: 26 }, { title: 'Executive', salary: 4000, fame: 30, weeks: 52 }];
+}
+function jobTitle(job) { const l = jobLadder(job.track); return (l[job.rank] || l[0]).title; }
+function jobSalary(job) { const l = jobLadder(job.track); return (l[job.rank] || l[0]).salary; }
+function promoteJob() {
+  const P = ensurePerson();
+  const l = jobLadder(P.job.track);
+  if (P.job.rank >= l.length - 1) return 'Already at the top of this career.';
+  const next = l[P.job.rank + 1];
+  if (P.fame < next.fame) return `Need ${next.fame} fame for ${next.title} (you have ${Math.round(P.fame)}).`;
+  if (P.job.weeks < next.weeks) return `Need ${next.weeks} weeks in this career for ${next.title} (you have ${P.job.weeks}).`;
+  P.job.rank++; P.job.weeks = 0;
+  if (typeof news === 'function') news('Person', `You were promoted to ${next.title}.`, S.home);
+  return null;
+}
+function joinAgency(kind) {
+  const P = ensurePerson();
+  if (P.fame < 10) return 'Agencies want known faces: you need 10 fame first.';
+  if (P.flaggedUntil > S.day) return 'Your record is flagged. Agencies will not take you right now.';
+  P.job = { track: kind === 'for' ? 'agency-for' : 'agency-dom', rank: 0, weeks: 0 };
+  return null;
+}
+function enlistMilitary() {
+  const P = ensurePerson();
+  P.job = { track: 'military', rank: 0, weeks: 0 };
+  return null;
+}
+
+// ---------- cabinet: 10 advisor spots, always there ----------
+const CAB_FIRST = ['Alex', 'Sam', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Jamie', 'Robin', 'Avery', 'Quinn', 'Drew', 'Sky', 'Rowan', 'Emerson'];
+const CAB_LAST = ['Marsh', 'Cole', 'Reed', 'Frost', 'Blake', 'Stone', 'Wells', 'Hart', 'Lane', 'Cross', 'Ash', 'Fox', 'Gray', 'Hale', 'Pike'];
+function cabName() { return CAB_FIRST[Math.floor(Math.random() * CAB_FIRST.length)] + ' ' + CAB_LAST[Math.floor(Math.random() * CAB_LAST.length)]; }
+function ownsBusiness() { return (S.stores && S.stores.length > 0) || (typeof mine === 'function' && mine().length > 0); }
+function cabUnlocked(type) {
+  const P = ensurePerson();
+  if (type === 'business') return ownsBusiness();
+  if (type === 'strategist') return !!P.ranOnce || !!P.office;
+  if (type === 'general') { const cs = (typeof country === 'function') ? country(S.home) : null; return (P.job.track === 'military' && P.job.rank >= 2) || (cs && cs.milLv && cs.milLv.army >= 10); }
+  if (type === 'spy') return P.job.track === 'agency-dom' || P.job.track === 'agency-for';
+  if (type === 'leader') return P.fame >= 70;
+  return true;
+}
+function cabUnlockWhy(type) {
+  if (type === 'business') return 'Unlocks when you own a business.';
+  if (type === 'strategist') return 'Unlocks when you run for office.';
+  if (type === 'general') return 'Unlocks as a military Officer, or with Army Lv 10.';
+  if (type === 'spy') return 'Unlocks in an agency career.';
+  if (type === 'leader') return 'Unlocks at 70 fame.';
+  return '';
+}
+const CAB_TYPES = {
+  family: { name: 'Family member', cost: 0 },
+  friend: { name: 'Friend', cost: 0 },
+  financial: { name: 'Financial advisor', cost: 50000 },
+  business: { name: 'Business advisor', cost: 100000 },
+  lawyer: { name: 'Lawyer', cost: 200000 },
+  strategist: { name: 'Political strategist', cost: 500000 },
+  general: { name: 'General', cost: 500000 },
+  spy: { name: 'Agency contact', cost: 1000000 },
+  leader: { name: 'World leader', cost: 5000000 },
+};
+function cabCandidates(type) {
+  const P = ensurePerson();
+  if (!P.cabCands || P.cabCands.type !== type) {
+    const list = [];
+    for (let i = 0; i < 3; i++) list.push({ id: 'cab' + Date.now() + i + Math.floor(Math.random() * 1000), name: cabName(), type, rating: 30 + Math.floor(Math.random() * 66), star: Math.random() < 0.35, starCap: 85 + Math.floor(Math.random() * 14) });
+    P.cabCands = { type, list };
+  }
+  return P.cabCands.list;
+}
+function hireCabinet(type, candId) {
+  const P = ensurePerson();
+  if (P.cabinet.length >= 10) return 'Your cabinet is full (10). Fire someone first.';
+  if (!cabUnlocked(type)) return cabUnlockWhy(type);
+  const c = cabCandidates(type).find(x => x.id === candId);
+  if (!c) return 'Candidate not found.';
+  const cost = CAB_TYPES[type].cost;
+  if (P.cash < cost) return `Costs ${fmtMoney(cost, true)} of your personal money.`;
+  P.cash -= cost;
+  P.cabinet.push({ id: c.id, name: c.name, type, rating: c.rating, star: !!c.star, starCap: c.starCap || 98 });
+  P.cabCands = null;
+  return null;
+}
+function fireCabinet(id) {
+  const P = ensurePerson();
+  const i = P.cabinet.findIndex(x => x.id === id);
+  if (i < 0) return 'Advisor not found.';
+  P.cabinet.splice(i, 1); return null;
+}
+function cabHas(type) { return ensurePerson().cabinet.some(x => x.type === type); }
+function tipStake() { const P = ensurePerson(); return Math.max(10000, Math.min(5000000, Math.round(P.cash * 0.10 / 1000) * 1000)); }
+function tipRisk() { let r = 0.12; if (cabHas('lawyer')) r *= 0.5; if (cabHas('spy')) r *= 0.5; return r; }
+function tipChance(ad) { let c = 0.25 + (ad.rating || 50) / 200; if (cabHas('business')) c += 0.10; if (cabHas('spy')) c += 0.15; return Math.min(0.95, c); }
+function buyCabTip(id) {
+  const P = ensurePerson();
+  const ad = P.cabinet.find(x => x.id === id);
+  if (!ad) return 'Advisor not found.';
+  const stake = tipStake();
+  if (P.cash < stake) return `A tip costs ${fmtMoney(stake, true)} of your personal money.`;
+  P.cash -= stake;
+  P.tips.push({ advisor: ad.name, type: ad.type, stake, due: S.day + 7, chance: tipChance(ad), risk: tipRisk() });
+  return null;
+}
+function resolveTips(P) {
+  const due = P.tips.filter(t => S.day >= t.due);
+  if (!due.length) return;
+  P.tips = P.tips.filter(t => S.day < t.due);
+  due.forEach(t => {
+    const win = Math.random() < t.chance;
+    if (win) {
+      const pay = Math.round(t.stake * 2.5);
+      P.cash += pay;
+      if (typeof news === 'function') news('Person', `Inside tip from ${t.advisor} paid off: +${fmtMoney(pay, true)}.`, S.home);
+    } else if (typeof news === 'function') news('Person', `Inside tip from ${t.advisor} was wrong. Stake lost.`, S.home);
+    if (Math.random() < t.risk) {
+      const fine = t.stake * 2;
+      P.cash = Math.max(0, P.cash - fine);
+      if (P.office) {
+        const title = P.office.title; P.office = null;
+        P.pop = Math.max(0, P.pop - 10); P.opin = Math.max(0, P.opin - 10); P.fame = Math.max(0, P.fame - 5); P.flaggedUntil = S.day + 365;
+        if (typeof news === 'function') news('Person', `Caught taking inside info — impeached from ${title} and fined ${fmtMoney(fine, true)}. You cannot run for office for a year.`, S.home);
+      } else {
+        P.fame = Math.max(0, P.fame - 5); P.pop = Math.max(0, P.pop - 5); P.flaggedUntil = S.day + 365;
+        if (typeof news === 'function') news('Person', `Caught taking inside info — arrested and fined ${fmtMoney(fine, true)}. You cannot run for office for a year.`, S.home);
+      }
+    }
+  });
+}
+
+// ---------- elections: fame + popularity + public opinion ----------
+function runOffice(officeId) {
+  const P = ensurePerson();
+  const o = officeList().find(x => x.id === officeId);
+  if (!o) return 'Office not found.';
+  if (P.flaggedUntil > S.day) return `Your record is flagged for ${Math.ceil((P.flaggedUntil - S.day) / 365)} more year(s). You cannot run yet.`;
+  if (P.runCooldownUntil > S.day && !(P.office && P.office.id === officeId)) return `You can run again in ${Math.ceil((P.runCooldownUntil - S.day) / 365)} year(s).`;
+  const missing = [];
+  if (P.fame < o.req.fame) missing.push(`${o.req.fame} fame`);
+  if (P.pop < o.req.pop) missing.push(`${o.req.pop} popularity`);
+  if (P.opin < o.req.opin) missing.push(`${o.req.opin} public opinion`);
+  if (missing.length) return `To run for ${o.title} you need ${missing.join(', ')}.`;
+  const yourScore = 0.25 * P.fame + 0.40 * P.pop + 0.35 * P.opin;
+  const opp = o.base - 5 + Math.random() * 20;
+  const chaos = (Math.random() - 0.5) * 16;
+  const yours = yourScore + chaos;
+  const share = Math.round(100 * yours / Math.max(1, yours + opp));
+  P.ranOnce = true;
+  if (yours > opp) {
+    const office = { id: o.id, title: o.title, scope: o.scope, salary: o.salary, termEnd: S.day + o.termDays, treasury: 0 };
+    if (o.scope !== 'nation') office.treasury = officeTreasuryStart(o);
+    P.office = office;
+    P.runCooldownUntil = 0;
+    if (typeof news === 'function') news('Person', `You won the election for ${o.title} with ${share}% of the vote!`, S.home);
+    return null;
+  }
+  P.pop = Math.max(0, P.pop - 5); P.opin = Math.max(0, P.opin - 5);
+  P.runCooldownUntil = S.day + 365;
+  if (typeof news === 'function') news('Person', `You lost the race for ${o.title} with ${share}% of the vote.`, S.home);
+  return `You lost with ${share}% of the vote. Popularity and public opinion each fell 5.`;
+}
+function campaignAction(kind) {
+  const P = ensurePerson();
+  const m = cabHas('strategist') ? 1.25 : 1;
+  if (kind === 'rally') {
+    if (P.cash < 25000) return 'A rally costs $25,000 of your personal money.';
+    P.cash -= 25000;
+    P.vis = Math.min(100, P.vis + Math.round(2 * m)); P.fame = Math.min(100, P.fame + Math.round(1 * m)); P.opin = Math.min(100, P.opin + Math.round(1 * m));
+  } else if (kind === 'ads') {
+    if (P.cash < 100000) return 'Campaign ads cost $100,000 of your personal money.';
+    P.cash -= 100000;
+    P.opin = Math.min(100, P.opin + Math.round(3 * m)); P.pop = Math.min(100, P.pop + Math.round(2 * m));
+  } else if (kind === 'donate') {
+    if (P.cash < 50000) return 'A donation costs $50,000 of your personal money.';
+    P.cash -= 50000;
+    P.pop = Math.min(100, P.pop + 3);
+  } else return 'Unknown campaign action.';
+  return null;
+}
+function announcePolicy() {
+  const P = ensurePerson();
+  if (!P.office) return 'You hold no office.';
+  const cost = Math.max(1000000, Math.round(officeTreasury(P.office) * 0.01));
+  if (officeTreasury(P.office) < cost) return `A policy announcement costs ${fmtMoney(cost, true)} from your office budget.`;
+  officeAddTreasury(P.office, -cost);
+  P.opin = Math.min(100, P.opin + 2); P.pop = Math.min(100, P.pop + 1);
+  return null;
+}
+function transferToBusiness(amount) {
+  const P = ensurePerson();
+  const amt = amount === 'all' ? P.cash : Math.min(P.cash, +amount);
+  if (amt <= 0) return 'No personal money to invest.';
+  P.cash -= amt; S.cash += amt; return null;
+}
+function transferToPersonal(amount) {
+  const P = ensurePerson();
+  const amt = amount === 'all' ? S.cash : Math.min(S.cash, +amount);
+  if (amt <= 0) return 'No business money to pay yourself.';
+  S.cash -= amt; P.cash += amt; return null;
+}
+
+// ---------- weekly ----------
+function personWeek() {
+  const P = ensurePerson();
+  const salary = P.office ? P.office.salary : jobSalary(P.job);
+  P.cash += salary;
+  P.job.weeks++;
+  if (P.office) {
+    const o = P.office;
+    officeAddTreasury(o, Math.round(officeScopeGdp(o) * 0.00002));
+    P.fame = Math.min(100, P.fame + 0.1);
+    if (S.day >= o.termEnd) {
+      const title = o.title; P.office = null;
+      if (typeof news === 'function') news('Person', `Your term as ${title} ended.`, S.home);
+    }
+  }
+  P.cabinet.forEach(ad => {
+    if (ad.type === 'family') P.pop = Math.min(100, P.pop + 0.3);
+    else if (ad.type === 'friend') P.fame = Math.min(100, P.fame + 0.3);
+    else if (ad.type === 'financial') P.cash += Math.round(100 * ((ad.rating || 50) / 25));
+    else if (ad.type === 'business') P.vis = Math.min(100, P.vis + 0.3);
+    else if (ad.type === 'strategist') P.opin = Math.min(100, P.opin + 0.5);
+    else if (ad.type === 'general') P.fame = Math.min(100, P.fame + 0.3);
+    else if (ad.type === 'leader') P.opin = Math.min(100, P.opin + 1);
+    if (ad.star && ad.rating < (ad.starCap || 98) && Math.random() < 0.5) ad.rating++;
+  });
+  resolveTips(P);
+  if (S.week && S.week.profit > 0) P.fame = Math.min(100, P.fame + 0.2);
+  P.vis = clampMeter(P.vis); P.fame = clampMeter(P.fame); P.pop = clampMeter(P.pop); P.opin = clampMeter(P.opin);
+}

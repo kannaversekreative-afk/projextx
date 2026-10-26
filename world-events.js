@@ -573,6 +573,7 @@ function businessWeek() {
   if (typeof ensureEarnings === 'function') { try { const e = ensureEarnings(); if (S.day >= e.next) earningsQuarter(); } catch (err) {} }
   if (typeof storesWeek === 'function') { try { storesWeek(); } catch (e) {} }
   if (typeof loansWeek === 'function') { try { loansWeek(); } catch (e) {} }
+  if (typeof personWeek === 'function') { try { personWeek(); } catch (e) {} }
   if (typeof marsWeek === 'function') { try { marsWeek(); } catch (e) {} }
   if (typeof casinoWeek === 'function') { try { casinoWeek(); } catch (e) {} }
   S.stats.bestWeek = Math.max(S.stats.bestWeek, profit);

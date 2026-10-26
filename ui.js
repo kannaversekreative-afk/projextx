@@ -142,6 +142,7 @@ function migrateSave(s) {
     });
   }
   if (!s.milReal && typeof applyRealMilLevels === 'function') { try { applyRealMilLevels(s); } catch (e) {} }
+  if (!s.person && typeof defaultPerson === 'function') s.person = defaultPerson();
   if (!Array.isArray(s.stores)) s.stores = [];
   if (!Array.isArray(s.loans)) s.loans = [];
   if (!s.sports) s.sports = null;
@@ -393,7 +394,7 @@ function renderHUD() {
   $('hud').innerHTML = `
   <div class="hud-pill hud-tl">
     <button class="hud-profile" data-a="panel" data-x="profile" aria-label="User profile">${ICONS.profile}</button>
-    <button class="hud-tl-text" data-a="panel" data-x="country" aria-label="Your country"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)}</small></button>
+    <button class="hud-tl-text" data-a="panel" data-x="country" aria-label="Your country"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)} · 👁 ${Math.round((S.person && S.person.vis) || 0)} · ⭐ ${Math.round((S.person && S.person.fame) || 0)}</small></button>
   </div>
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
@@ -1510,21 +1511,77 @@ function countryAdvisor() {
   if (locCount() === 0) return { title: 'Open your first location', body: 'Lease a storefront in your capital city and your company starts earning there.', btn: 'ENTER CAPITAL', a: 'enterCity', x: String(W.byA3[S.home].capital) };
   return { title: 'You are in good shape', body: 'No urgent move. Grow by building another store, developing its products, or buying a stock in Markets.', btn: 'MY STORES', a: 'panel', x: 'stores' };
 }
-// User profile — entry only, as requested. No new profile features
-// are inferred here; Nicholas said he will get to those himself later.
-// Country logic is untouched: the country panel still opens from the
-// country name/cash part of the same HUD pill.
+// You — the person, not the country. Three wallets (personal, business,
+// office), four meters (visibility, fame, popularity, public opinion),
+// your career and your assets. Country logic is untouched: the country
+// panel still opens from the country name/cash part of the same HUD pill.
 PANELS.profile = () => {
+  const P = ensurePerson();
   const you = (S.you || { name: 'Founder' });
   const mineCount = (typeof mine === 'function') ? mine().length : 0;
-  return panelShell('User profile', 'Your profile',
-    `<div class="card in"><h4>${esc(you.name)}</h4>
+  const job = P.job || { track: 'civilian', rank: 0, weeks: 0 };
+  const ladder = jobLadder(job.track);
+  const cur = ladder[job.rank] || ladder[0];
+  const next = ladder[job.rank + 1];
+  const bar = (label, v) => `<div class="kv"><span>${label}</span><b>${Math.round(v)}/100</b></div><div style="background:#dbeafe;height:10px;border-radius:5px;margin:2px 0 8px"><div style="width:${Math.round(v)}%;background:#2563eb;height:10px;border-radius:5px"></div></div>`;
+  const office = P.office;
+  return panelShell('You', `${esc(you.name)} · Age ${personAge()} · ${office ? esc(office.title) : esc(cur.title)}`,
+    `<div class="card in"><h4>📊 Meters</h4>${bar('👁 Visibility', P.vis)}${bar('⭐ Fame', P.fame)}${bar('❤️ Popularity', P.pop)}${bar('🗳️ Public opinion', P.opin)}<p class="muted small">Elections are won on fame, popularity, and public opinion — three separate scores. Visibility helps fame grow.</p></div>
+    <div class="card in"><h4>💰 Wallets</h4>
+    <div class="kv"><span>Personal money</span><b>${fmtMoney(P.cash, true)}</b></div>
+    <div class="kv"><span>Business money</span><b>${fmtMoney(S.cash, true)}</b></div>
+    ${office ? `<div class="kv"><span>${esc(office.title)} budget</span><b>${fmtMoney(officeTreasury(office), true)} · ${Math.max(0, Math.ceil((office.termEnd - S.day) / 365))}y left</b></div>` : ''}
+    <div class="row wrap"><button class="btn small" data-a="personInvest" data-x="10000">Invest $10K</button><button class="btn small" data-a="personInvest" data-x="100000">Invest $100K</button><button class="btn small" data-a="personInvest" data-x="all">Invest all</button><button class="btn small" data-a="personPay" data-x="10000">Pay self $10K</button><button class="btn small" data-a="personPay" data-x="100000">Pay self $100K</button><button class="btn small" data-a="personPay" data-x="all">Pay self all</button></div>
+    <p class="muted small">Invest moves your money into your business. Pay yourself moves business money to you.</p></div>
+    <div class="card in"><h4>💼 Career</h4>
+    <div class="kv"><span>Job</span><b>${esc(cur.title)} · ${fmtMoney(cur.salary, true)}/week · ${job.weeks} weeks</b></div>
+    ${next ? `<button class="btn" data-a="personPromo">Ask for promotion to ${esc(next.title)} (needs ${next.fame} fame, ${next.weeks} weeks)</button>` : '<p class="muted small">Top of this career.</p>'}
+    <div class="row wrap"><button class="btn small" data-a="personJoinAgency" data-x="dom">Join ${esc(agencyOf(S.home)[0])}</button><button class="btn small" data-a="personJoinAgency" data-x="for">Join ${esc(agencyOf(S.home)[1])}</button><button class="btn small" data-a="personEnlist">Enlist in the military</button></div>
+    ${office ? `<div class="kv"><span>Office</span><b>${esc(office.title)} · ${fmtMoney(office.salary, true)}/week</b></div><button class="btn" data-a="policy">Announce policy (office budget)</button>` : ''}
+    <p class="muted small">Jobs pay you every week. Agencies cut your risk of getting caught. The military opens the General advisor.</p></div>
+    <div class="card in"><h4>🏠 Assets</h4>
     <div class="kv"><span>Country</span><b>${esc(cname(S.home))}</b></div>
-    <div class="kv"><span>Cash</span><b>${fmtMoney(S.cash, true)}</b></div>
-    <div class="kv"><span>Net worth</span><b>${fmtMoney(netWorth(), true)}</b></div>
+    <div class="kv"><span>Buildings</span><b>${(S.props || []).length} · ${fmtMoney(propValue(), true)}</b></div>
+    <div class="kv"><span>Investments</span><b>${fmtMoney(holdingsValue(), true)}</b></div>
     <div class="kv"><span>Companies you control</span><b>${mineCount}</b></div>
     <div class="kv"><span>Rating</span><b>${(S.rating || 0).toFixed(1)} / 5</b></div>
-    <p class="muted small">More profile features come later.</p></div>`);
+    <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">CABINET (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
+};
+PANELS.cabinet = () => {
+  const P = ensurePerson();
+  const slots = P.cabinet.map(ad => `<div class="kv"><span>${esc(ad.name)} · ${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐' : ''}</span><b><button class="btn small" data-a="cabTip" data-x="${ad.id}">BUY TIP · ${fmtMoney(tipStake(), true)}</button> <button class="btn small" data-a="cabFire" data-x="${ad.id}">FIRE</button></b></div>`).join('');
+  let hire = '';
+  if (UI.cabHire) {
+    const type = UI.cabHire.type;
+    hire = `<div class="card in"><h4>Pick a ${esc(CAB_TYPES[type].name)}</h4><p class="muted small">Cost ${fmtMoney(CAB_TYPES[type].cost, true)} of your personal money. ⭐ means developable: their rating grows over time.</p>${cabCandidates(type).map(c => `<div class="kv"><span>${esc(c.name)} · Rating ${c.rating}${c.star ? ' ⭐' : ''}</span><b><button class="btn small" data-a="cabHire" data-x="${type}|${c.id}">HIRE</button></b></div>`).join('')}<button class="btn" data-a="cabCancel">CANCEL</button></div>`;
+  }
+  const types = Object.keys(CAB_TYPES).map(t => {
+    if (!cabUnlocked(t)) return `<div class="kv"><span>${esc(CAB_TYPES[t].name)}</span><b>🔒 ${cabUnlockWhy(t)}</b></div>`;
+    return `<div class="kv"><span>${esc(CAB_TYPES[t].name)} · ${fmtMoney(CAB_TYPES[t].cost, true)}</span><b><button class="btn small" data-a="cabType" data-x="${t}">ADD</button></b></div>`;
+  }).join('');
+  return panelShell('Cabinet', `Your advisors — ${P.cabinet.length}/10 seats. They boost you weekly, and sell inside tips for money. Tips can be wrong, and getting caught means a fine, an arrest, or impeachment.`,
+    `${slots || '<p class="muted small">No advisors yet. Family and friends are free.</p>'}${hire}<div class="card in"><h4>Add an advisor</h4>${types}</div>`);
+};
+PANELS.elections = () => {
+  const P = ensurePerson();
+  const office = P.office;
+  const rows = officeList().map(o => {
+    const holding = office && office.id === o.id;
+    const missing = [];
+    if (P.fame < o.req.fame) missing.push(`${o.req.fame} fame`);
+    if (P.pop < o.req.pop) missing.push(`${o.req.pop} popularity`);
+    if (P.opin < o.req.opin) missing.push(`${o.req.opin} public opinion`);
+    let status = '', btn = '';
+    if (holding) status = `Holding — ${Math.max(0, Math.ceil((office.termEnd - S.day) / 365))}y left`;
+    else if (P.flaggedUntil > S.day) status = `Flagged — ${Math.ceil((P.flaggedUntil - S.day) / 365)}y until you can run`;
+    else if (P.runCooldownUntil > S.day) status = `Cooldown — ${Math.ceil((P.runCooldownUntil - S.day) / 365)}y`;
+    else if (missing.length) status = `Needs ${missing.join(', ')}`;
+    else { status = 'You can run'; btn = `<button class="btn" data-a="runOffice" data-x="${o.id}">RUN</button>`; }
+    return `<div class="kv"><span>${esc(o.title)} · ${fmtMoney(o.salary, true)}/week</span><b>${status} ${btn}</b></div>`;
+  }).join('');
+  return panelShell('Elections', `Fame ${Math.round(P.fame)} · Popularity ${Math.round(P.pop)} · Public opinion ${Math.round(P.opin)} — the vote is 25% fame, 40% popularity, 35% opinion, plus a little chaos. Campaign first, then run.`,
+    `<div class="card in"><h4>📣 Campaign</h4><div class="row wrap"><button class="btn small" data-a="campaign" data-x="rally">Rally · $25K</button><button class="btn small" data-a="campaign" data-x="ads">Campaign ads · $100K</button><button class="btn small" data-a="campaign" data-x="donate">Donate · $50K</button></div><p class="muted small">Rallies raise visibility, fame, and opinion. Ads raise opinion and popularity. Donations raise popularity. A strategist makes campaigning 25% stronger.</p></div>
+    <div class="card in"><h4>🗳️ Offices</h4>${rows}</div>`);
 };
 PANELS.country = () => {
   const cs = country(S.home), k = W.byA3[S.home], cap = W.cities[k.capital];
@@ -2168,6 +2225,7 @@ const MENU_ITEMS = [
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
   ['progress', '🏆', 'Progress'],
+  ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
@@ -2187,6 +2245,7 @@ function openMenuPopup() {
   const unread = (S.mail || []).filter(m => !m.read).length;
   openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="menu-bell" data-a="panel" data-x="inbox" aria-label="Messages">${unread ? `<span class="menu-bell-badge">${unread}</span>` : ''}${ICONS.bell}</button><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
   <div class="menu-pop-body">
+  ${g('You', [['cabinet', 'Your 10 advisors'], ['elections', 'Run for office']])}
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['progress', 'Levels 1-100 and what each unlocks'], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['web', 'Your business websites']])}
   ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mars', 'Mars']])}
@@ -2613,6 +2672,19 @@ const A = {
   warBattleLeave: () => { const plan = UI.pendingWarPlan; if (UI.warBattle) UI.warBattle.resolved = true; UI.warBattle = null; if (plan) { startOngoingWar(plan); closePanel(); openPanel('war'); save(); } else closePanel(); },
   buyBase: () => act(() => buyBase(), 'Military base built'),
   milUp: x => act(() => upgradeMilitary(x), 'Military upgraded'),
+  personInvest: x => act(() => transferToBusiness(x === 'all' ? 'all' : +x), 'Invested in your business'),
+  personPay: x => act(() => transferToPersonal(x === 'all' ? 'all' : +x), 'Paid yourself'),
+  personPromo: () => act(() => promoteJob(), 'Promoted!'),
+  personJoinAgency: x => act(() => joinAgency(x), 'Joined the agency'),
+  personEnlist: () => act(() => enlistMilitary(), 'Enlisted'),
+  cabType: x => { UI.cabHire = { type: x }; if (typeof cabCandidates === 'function') cabCandidates(x); renderPanel(); },
+  cabHire: x => { const [type, id] = x.split('|'); act(() => hireCabinet(type, id), 'Advisor hired'); UI.cabHire = null; renderPanel(); },
+  cabCancel: () => { UI.cabHire = null; renderPanel(); },
+  cabFire: x => act(() => fireCabinet(x), 'Advisor fired'),
+  cabTip: x => act(() => buyCabTip(x), 'Tip bought — it pays off next week'),
+  runOffice: x => act(() => runOffice(x), 'Election won!'),
+  campaign: x => act(() => campaignAction(x), 'Campaign move done'),
+  policy: () => act(() => announcePolicy(), 'Policy announced'),
   fleetUp: x => act(() => upgradeFleet(x), 'Fleet upgraded'),
   fleetSell: x => act(() => sellFleet(x), 'Fleet level sold'),
   borrow: () => act(() => borrow(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4))), 'Loan taken'),
