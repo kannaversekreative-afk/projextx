@@ -401,8 +401,9 @@ const MapView = (() => {
     // world zoom a ~35px ship moved ~2.6px/sec — less than its own length
     // in 10 seconds, which reads as "sitting there". Ships now scale with
     // zoom (smaller when zoomed out, full size when zoomed in), so their
-    // movement is visible relative to their own size. Planes keep the old
-    // scale: they move fast enough that size was never the problem.
+    // movement is visible relative to their own size. Planes used a
+    // near-constant scale too, and at world zoom they dwarfed whole
+    // countries — so planes now use the same zoom scale as ships.
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
@@ -415,9 +416,9 @@ const MapView = (() => {
         if (u.type === 'plane') [x, y, a] = bez(u.from, u.to, u.t);
         else { if (!u.pts) return; [x, y, a] = along(u.pts, u.len, u.t); }
         const [sx, sy] = toScreen(x, y); if (!onScreen(sx, sy)) return;
-        drawSprite(sx, sy, a, u.type === 'plane' ? k * 0.85 : kShip, cc => u.type === 'plane' ? plane(cc, co.fleet, co.color) : u.type === 'container' ? containerShip(cc, co.fleet, co.color) : tanker(cc, co.fleet));
+        drawSprite(sx, sy, a, kShip, cc => u.type === 'plane' ? plane(cc, co.fleet, co.color) : u.type === 'container' ? containerShip(cc, co.fleet, co.color) : tanker(cc, co.fleet));
       });
-      military(now).forEach(([x, y, a, fn, isShip]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, isShip ? kShip : k * 0.85, fn); });
+      military(now).forEach(([x, y, a, fn, isShip]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, kShip, fn); });
     }
     if (!st) return;
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);

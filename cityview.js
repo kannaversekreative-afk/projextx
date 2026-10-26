@@ -6,7 +6,7 @@ const CityView = (() => {
   const TW = 72, TH = 36;
   let el, canvas, ctx, layer, img, layout, city, view = { x: 0, y: 0, s: 1 }, ox = 0, oy = 0, W2 = 0, H2 = 0;
   let marsMode = false;
-  let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], animTimer = null, lastAnim = 0;
+  let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], occluders = [], skyPlanes = [], animTimer = null, lastAnim = 0;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -600,16 +600,17 @@ const CityView = (() => {
   }
 
   function render() {
-    const N = layout.N, T = layout.tiles, maxH = 320;
+    const N = layout.N, T = layout.tiles, maxH = 320; occluders = [];
     W2 = N * TW + 140; H2 = N * TH + maxH + 120; ox = W2 / 2; oy = maxH + 40;
     const dpr = Math.min(1.6, window.devicePixelRatio || 1);
     img = document.createElement('canvas'); img.width = W2 * dpr; img.height = H2 * dpr;
     const c = img.getContext('2d'); c.scale(dpr, dpr);
     if (marsMode) { renderMars(c); return; }
-    // Sky above the city, not flat green: a blue-to-pale gradient with
-    // a few clouds, so the city sits in a sky instead of a green void.
+    // Sky above the city, sea around it: the gradient runs sky blue to
+    // sea blue, so the ground outside the city diamond reads as water
+    // on every side, not a green void. Tiles cover the diamond itself.
     const sky = c.createLinearGradient(0, 0, 0, H2);
-    sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#cfeef7'); sky.addColorStop(1, '#d7ecd0');
+    sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#a8d8e8'); sky.addColorStop(1, '#2e8fc7');
     c.fillStyle = sky; c.fillRect(0, 0, W2, H2);
     const cr = mulberry(hashStr('clouds:' + city.code + city.name));
     for (let i = 0; i < 6; i++) {
@@ -617,19 +618,38 @@ const CityView = (() => {
       c.fillStyle = 'rgba(255,255,255,0.85)';
       c.beginPath(); c.ellipse(cx, cy, 46, 14, 0, 0, 7); c.ellipse(cx - 28, cy + 5, 30, 10, 0, 0, 7); c.ellipse(cx + 30, cy + 5, 32, 11, 0, 0, 7); c.fill();
     }
+    // Sea shimmer in the margins: tiles drawn later cover the diamond,
+    // so these wavy lines only show as water around the city.
+    const wr = mulberry(hashStr('waves:' + city.code + city.name));
+    c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 1.5;
+    const waveLine = (wy) => { c.beginPath(); for (let wx = 0; wx <= W2; wx += 60) { const wv = Math.sin(wx / 55 + wy / 40) * 3; if (wx === 0) c.moveTo(wx, wy + wv); else c.lineTo(wx, wy + wv); } c.stroke(); };
+    for (let i = 0; i < 4; i++) waveLine(H2 - 14 - i * 18 - wr() * 6);
+    waveLine(880 + wr() * 40); waveLine(1030 + wr() * 40);
     // pass 1: ground
     T.forEach(t => {
       if (t.kind === 'water') water(c, t); else if (t.kind === 'beach') beach(c, t); else if (t.kind === 'road') road(c, t, T);
       else if (t.kind === 'plaza') plazaGround(c, t); else lotGround(c, t);
     });
     bridge(c);
+    // Shoreline foam where the city meets the surrounding sea.
+    c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 2;
+    const vL = P(0, N), vB = P(N, N), vR = P(N, 0);
+    c.beginPath(); c.moveTo(vL[0], vL[1]); c.lineTo(vB[0], vB[1]); c.lineTo(vR[0], vR[1]); c.stroke();
     // pass 2: shadows
     T.forEach(t => { if (t.kind === 'lot' && t.arch !== 'house') { const h = Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2)); shadowOf(c, t.x + 0.15, t.y + 0.15, t.x + 0.85, t.y + 0.85, t.arch === 'warehouse' ? 25 : h); } });
     // pass 3: objects back to front
     const objs = [];
     T.forEach(t => {
       const d = t.x + t.y;
-      if (t.kind === 'lot') objs.push([d + 0.9, t.x, () => { roofs[t.y * N + t.x] = building(c, t); }]);
+      if (t.kind === 'lot') {
+        objs.push([d + 0.9, t.x, () => { roofs[t.y * N + t.x] = building(c, t); }]);
+        // Occluder for moving cars: the building's screen silhouette, so
+        // a car driving behind it hides instead of driving over its roof.
+        const kk = (t.arch === 'warehouse' || t.arch === 'factory') ? 0.08 : (t.arch === 'glass' || t.arch === 'skyscraper') ? 0.13 : 0.15;
+        const hh = t.arch === 'house' ? 10 + t.floors * 8.5 : Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2));
+        const A2 = P(t.x + kk, t.y + kk), B2 = P(t.x + 1 - kk, t.y + kk), C2 = P(t.x + 1 - kk, t.y + 1 - kk), D2 = P(t.x + kk, t.y + 1 - kk);
+        occluders.push([D2, C2, B2, up(B2, hh), up(A2, hh), up(D2, hh)]);
+      }
       else if (t.kind === 'park') objs.push([d + 0.9, t.x, () => park(c, t, mulberry(t.x * 97 + t.y * 13))]);
       else if (t.kind === 'road' && t.seed > 0.82) {
         const isR = (x, y) => { const q = T[y * N + x]; return q && q.kind === 'road'; };
@@ -681,6 +701,42 @@ const CityView = (() => {
     segs.sort(() => r() - 0.5);
     segs.slice(0, 18).forEach(sg => vehicles.push({ ...sg, pos: sg.a + r() * (sg.b - sg.a), dir: r() < 0.5 ? 1 : -1, speed: 0.9 + r() * 1.4, col: cols[Math.floor(r() * cols.length)], bus: r() < 0.25 }));
   }
+  // Ambient planes over the city: they fly high, so drawing them on top
+  // is correct (unlike cars, nothing occludes the sky).
+  function buildSkyPlanes() {
+    skyPlanes = [];
+    const r = mulberry(hashStr('skyplanes:' + city.code + city.name));
+    for (let i = 0; i < 2; i++) skyPlanes.push({ lane: 3 + i * 11 + Math.floor(r() * 4), pos: r() * layout.N, dir: i % 2 ? -1 : 1, speed: 1.1 + r() * 0.9, alt: 150 + i * 70, col: ['#e5484d', '#2f7cf6'][i] });
+  }
+  function drawSkyPlanes(c2) {
+    if (marsMode || !skyPlanes.length) return;
+    const sc = view.s;
+    skyPlanes.forEach(p => {
+      const [px, py] = P(p.pos, p.lane);
+      const sx = view.x + px * sc, sy = view.y + py * sc - p.alt * sc;
+      if (sx < -80 || sy < -80 || sx > el.clientWidth + 80 || sy > el.clientHeight + 80) return;
+      const ang = p.dir > 0 ? Math.atan2(TH / 2, TW / 2) : Math.atan2(TH / 2, TW / 2) + Math.PI;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      const grad = c2.createLinearGradient(sx - dx * 70 * sc, sy - dy * 70 * sc, sx, sy);
+      grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, 'rgba(255,255,255,0.55)');
+      c2.strokeStyle = grad; c2.lineWidth = Math.max(1, 1.5 * sc);
+      c2.beginPath(); c2.moveTo(sx - dx * 70 * sc, sy - dy * 70 * sc); c2.lineTo(sx - dx * 8 * sc, sy - dy * 8 * sc); c2.stroke();
+      c2.save(); c2.translate(sx, sy); c2.rotate(ang); c2.scale(sc, sc);
+      c2.fillStyle = '#ffffff';
+      c2.beginPath(); c2.ellipse(0, 0, 15, 2.6, 0, 0, 7); c2.fill();
+      c2.fillRect(-3, -11, 5, 22);
+      c2.fillStyle = p.col; c2.beginPath(); c2.moveTo(-15, 0); c2.lineTo(-19, -4); c2.lineTo(-19, 4); c2.closePath(); c2.fill();
+      c2.restore();
+    });
+  }
+  function pointInPoly(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
   function drawVehicles(c2) {
     if (!vehicles.length) return;
     const sc = view.s;
@@ -689,6 +745,10 @@ const CityView = (() => {
       const [px, py] = v.horiz ? P(v.pos, v.fixed + lane) : P(v.fixed + lane, v.pos);
       const sx = view.x + px * sc, sy = view.y + py * sc;
       if (sx < -40 || sy < -40 || sx > el.clientWidth + 40 || sy > el.clientHeight + 40) return;
+      // Behind a building? Hide: the static city image already drew the
+      // facade, and this car must not paint over it like it is flying.
+      const gx = (sx - view.x) / sc, gy = (sy - view.y) / sc;
+      if (occluders.some(poly => pointInPoly([gx, gy], poly))) return;
       const tv = v.horiz ? [TW / 2 * sc, TH / 2 * sc] : [-TW / 2 * sc, TH / 2 * sc];
       const cv = v.horiz ? [-TW / 2 * sc, TH / 2 * sc] : [TW / 2 * sc, TH / 2 * sc];
       const L = v.bus ? 0.42 : 0.24, Wd = 0.14;
@@ -698,7 +758,7 @@ const CityView = (() => {
       c2.fillStyle = v.bus ? v.col : '#9fc3dd'; c2.beginPath(); cab.forEach((pt, i) => i ? c2.lineTo(pt[0], pt[1]) : c2.moveTo(pt[0], pt[1])); c2.closePath(); c2.fill();
     });
   }
-  function startAnim() { if (animTimer) return; lastAnim = performance.now(); animTimer = setInterval(() => { const now = performance.now(), dt = Math.min(0.1, (now - lastAnim) / 1000); lastAnim = now; vehicles.forEach(v => { v.pos += v.dir * v.speed * dt; if (v.pos > v.b) { v.pos = v.b; v.dir = -1; } if (v.pos < v.a) { v.pos = v.a; v.dir = 1; } }); if (city) apply(); }, 50); }
+  function startAnim() { if (animTimer) return; lastAnim = performance.now(); animTimer = setInterval(() => { const now = performance.now(), dt = Math.min(0.1, (now - lastAnim) / 1000); lastAnim = now; vehicles.forEach(v => { v.pos += v.dir * v.speed * dt; if (v.pos > v.b) { v.pos = v.b; v.dir = -1; } if (v.pos < v.a) { v.pos = v.a; v.dir = 1; } }); if (layout) skyPlanes.forEach(p => { p.pos += p.dir * p.speed * dt; if (p.pos > layout.N + 8) p.pos = -8; if (p.pos < -8) p.pos = layout.N + 8; }); if (city) apply(); }, 50); }
   function stopAnim() { if (animTimer) { clearInterval(animTimer); animTimer = null; } }
 
   function pins() {
@@ -765,6 +825,7 @@ const CityView = (() => {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, view.x, view.y, W2 * view.s, H2 * view.s);
     drawVehicles(ctx);
+    drawSkyPlanes(ctx);
     layer.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
     layer.style.setProperty('--inv', Math.min(1, 0.85 / view.s));
   }
@@ -827,7 +888,7 @@ const CityView = (() => {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind(); },
     open(id) {
       marsMode = false;
-      city = W.cities[id]; layout = cityLayout(city); roofs = {}; render(); buildVehicles(); startAnim();
+      city = W.cities[id]; layout = cityLayout(city); roofs = {}; render(); buildVehicles(); buildSkyPlanes(); startAnim();
       el.classList.add('open');
       const vw = el.clientWidth, vh = el.clientHeight;
       view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
@@ -838,7 +899,7 @@ const CityView = (() => {
     openMars() {
       marsMode = true;
       city = { id: MARS_CITY_ID, name: 'Mars', a3: S.home, code: 'MARS', size: 0.5, port: false, wealth: 1, pop: 0 };
-      layout = (typeof marsLayout === 'function') ? marsLayout() : cityLayout(city); roofs = {}; vehicles = []; render();
+      layout = (typeof marsLayout === 'function') ? marsLayout() : cityLayout(city); roofs = {}; vehicles = []; skyPlanes = []; render();
       el.classList.add('open');
       const vw = el.clientWidth, vh = el.clientHeight;
       view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
