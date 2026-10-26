@@ -173,7 +173,8 @@ function sportWeek() {
     t.rating5 = r.rating; t.value = teamValueFromRating(t, fin, r.rating); t.finance = fin;
     if (t.owner === 'you') {
       const bc = (typeof boardWeeklyCost === 'function') ? boardWeeklyCost(t) : 0;
-      const weeklyNet = Math.round(fin.net / 52 - bc);
+      const boost = (typeof boardBoost === 'function') ? boardBoost(t) : 0;
+      const weeklyNet = Math.round(fin.net / 52 - bc + Math.max(0, fin.net / 52) * boost);
       t.weekNets.push(weeklyNet); if (t.weekNets.length > 4) t.weekNets.shift();
       let streak = 0; for (let i = t.weekNets.length - 1; i >= 0; i--) { if (t.weekNets[i] > 0) streak++; else break; }
       t.weekStreak = streak; total += weeklyNet;

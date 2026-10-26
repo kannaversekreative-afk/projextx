@@ -524,7 +524,8 @@ function businessWeek() {
     const c = S.co[a3], w = companyWeek(c);
     if (controlled(a3)) {
       const bc = (typeof boardWeeklyCost === 'function') ? boardWeeklyCost(c) : 0;
-      const netP = w.profit - bc;
+      const boost = (typeof boardBoost === 'function') ? boardBoost(c) : 0;
+      const netP = w.profit - bc + Math.max(0, w.rev) * boost;
       c.weekProfitStreak = netP > 0 ? (c.weekProfitStreak || 0) + 1 : 0;
       if (!Array.isArray(c.weekNets)) c.weekNets = [];
       c.weekNets.push(Math.round(netP)); if (c.weekNets.length > 4) c.weekNets.shift();

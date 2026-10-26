@@ -5,7 +5,7 @@
 'use strict';
 
 let W = null, S = null;
-const UI = { panel: null, stack: [], modal: null, placing: false, q: '', cat: 'All', starOnly: false,
+const UI = { panel: null, stack: [], modal: null, placing: false, hire: null, q: '', cat: 'All', starOnly: false,
   range: '1Y', tradeRange: '1Y', web: { view: 'home', q: '', a3: null }, pick: null,
   mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0, expandedCompany: null, companyInit: false };
 const $ = id => document.getElementById(id);
@@ -280,7 +280,7 @@ function openPanel(name, args) {
   UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
-function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; $('panel').classList.remove('open'); renderHUD(); }
+function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
 function panelShell(title, sub, body) {
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
@@ -306,6 +306,17 @@ function renderPanel() {
   UI.lastPanel = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
   if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
+  if (UI.panel === 'extraStock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
+  // EXTRA-STOCK BACK FIX: same guard as flagship stocks. A Markets row
+  // click REPLACES the panel (markets -> extraStock) and puts the extra
+  // id itself in the stack — it does NOT push Markets as a history
+  // entry. So the back arrow (shown because stack.length is 1) popped
+  // the id, leaving panel='extraStock' with an empty stack, and
+  // tradeViewExtra(null) rendered the "Business not found." panel.
+  // Closing that panel restored the map, which is why it looked
+  // cosmetic — but the intermediate must never appear. With this
+  // guard, an empty extraStock stack converts back to Markets, just
+  // like an empty stock stack already did.
   // SCROLL FIX (2026-10-26): the frame loop re-rendered the open panel
   // every 1.5s by replacing #panel's whole innerHTML. Two real symptoms:
   // (a) scroll snapped back to top — the new .panel-body starts at 0;
@@ -339,6 +350,16 @@ function renderPanel() {
   if (key === prevKey) {
     const nb = document.querySelector('#panel .panel-body');
     if (nb && prevTop > 0) nb.scrollTop = Math.max(0, Math.min(prevTop, nb.scrollHeight - nb.clientHeight));
+  }
+  // EXTRA-STOCK BACK SCROLL: the Markets scroll position was captured
+  // when the row was clicked (see the stock action). A back navigation
+  // lands on a different panel key, so the prevTop restore above does
+  // not apply — restore the captured Markets position instead, then
+  // consume it so a later Markets open starts fresh.
+  if (UI.panel === 'markets' && UI.marketsScroll != null) {
+    const nb = document.querySelector('#panel .panel-body');
+    if (nb) nb.scrollTop = Math.max(0, Math.min(UI.marketsScroll, nb.scrollHeight - nb.clientHeight));
+    UI.marketsScroll = null;
   }
 }
 
@@ -1976,22 +1997,54 @@ PANELS.offices = () => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
     return BOARD_ROLES.map(r => {
       const m = b.find(x => x.role === r.role);
-      return m ? `<div class="kv"><span>${r.role} · ${esc(m.name)}</span><b>${fmtMoney(m.salary)}/yr <button class="btn small" data-a="fireBoard" data-x="${kind}|${id}|${r.role}">FIRE</button></b></div>`
-               : `<div class="kv"><span>${r.role} · empty</span><b><button class="btn" data-a="hireBoard" data-x="${kind}|${id}|${r.role}">HIRE ${fmtMoney(r.salary, true)}</button></b></div>`;
+      if (m) {
+        const grant = m.grant ? ` · Grant: ${m.grant.shares.toLocaleString()} ${m.grant.type === 'option' ? 'stock options' : 'RSUs'}${m.grant.strike != null ? ` @ ${fmtMoney(m.grant.strike)}` : ''} (4yr vest, 1yr cliff)` : '';
+        return `<div class="kv"><span>${r.role} · ${esc(m.name)} · Lv ${m.level || 1} · L${m.lead} E${m.exp} Y${m.loy}</span><b>${fmtMoney(m.salary)}/yr <button class="btn small" data-a="fireBoard" data-x="${kind}|${id}|${r.role}">FIRE</button></b></div><p class="muted small">${grant}</p>`;
+      }
+      return `<div class="kv"><span>${r.role} · empty</span><b><button class="btn" data-a="findCand" data-x="${kind}|${id}|${r.role}">FIND CANDIDATES</button></b></div>`;
     }).join('');
+  };
+  const hireSection = () => {
+    const h = UI.hire; if (!h) return '';
+    const e = h.kind === 'team' ? sportTeam(h.id) : S.co[h.id];
+    if (!e) { UI.hire = null; return ''; }
+    const cands = boardCandidates(e, h.role);
+    if (!cands.length) return `<div class="card in"><h4>Hire ${h.role} — ${esc(e.name)}</h4><p class="muted small">No candidates left for this seat.</p><button class="btn" data-a="findCandMore" data-x="${h.kind}|${h.id}|${h.role}">FIND MORE CANDIDATES</button> <button class="btn" data-a="hireCancel">CANCEL</button></div>`;
+    if (!h.candId) {
+      const bar = v => `<div style="background:#e2e8f0;border-radius:6px;height:10px"><div style="width:${v}%;background:#22c55e;height:10px;border-radius:6px"></div></div>`;
+      return `<div class="card in"><h4>Hire ${h.role} — ${esc(e.name)}</h4><p class="muted small">Find someone, offer a salary or salary + stock, and they accept or deny. Higher level does more and wants more.</p>
+      ${cands.map(c => `<div class="card in"><b>${esc(c.name)} · Lv ${c.level}</b><div class="muted small">${esc(c.title)}</div>
+        <div class="kv"><span>Leadership</span><b>${c.lead}</b></div>${bar(c.lead)}
+        <div class="kv"><span>Expertise</span><b>${c.exp}</b></div>${bar(c.exp)}
+        <div class="kv"><span>Loyalty</span><b>${c.loy}</b></div>${bar(c.loy)}
+        <div class="kv"><span>Current salary</span><b>${fmtMoney(c.curSalary)}/yr</b></div>
+        <div class="kv"><span>Their ask</span><b>${fmtMoney(c.ask)}/yr</b></div>
+        <button class="btn3d orange wide" data-a="hireSelect" data-x="${h.kind}|${h.id}|${h.role}|${c.id}">OFFER TO ${esc(c.name).toUpperCase()}</button></div>`).join('')}
+      <button class="btn" data-a="hireCancel">CANCEL</button></div>`;
+    }
+    const c = cands.find(x => x.id === h.candId);
+    if (!c) { UI.hire.candId = null; return hireSection(); }
+    const isTeam = h.kind === 'team';
+    const gv = isTeam ? 0 : boardGrantValue(e, h.grant, h.shares);
+    return `<div class="card in"><h4>Offer to ${esc(c.name)} — ${h.role}</h4><p class="muted small">Lv ${c.level} · L${c.lead} E${c.exp} Y${c.loy} · Their ask: ${fmtMoney(c.ask)}/yr. They accept at their ask, or at 85% of ask with a grant covering the gap. Below that, they decline and move on.</p>
+      <div class="kv"><span>Offer salary</span><span><button class="btn small" data-a="hireStep" data-x="-10000">−</button> <b>${fmtMoney(h.salary)}/yr</b> <button class="btn small" data-a="hireStep" data-x="10000">+</button></span></div>
+      ${isTeam ? '<p class="muted small">Teams pay salary only — no stock grants.</p>' : `<div class="kv"><span>Grant</span><span><button class="btn small ${h.grant === 'none' ? 'on' : ''}" data-a="hireGrant" data-x="none">None</button> <button class="btn small ${h.grant === 'option' ? 'on' : ''}" data-a="hireGrant" data-x="option">Stock option</button> <button class="btn small ${h.grant === 'rsu' ? 'on' : ''}" data-a="hireGrant" data-x="rsu">RSU</button></span></div>
+      ${h.grant !== 'none' ? `<div class="kv"><span>Grant shares</span><span><button class="btn small" data-a="hireShares" data-x="-100">−</button> <b>${h.shares.toLocaleString()}</b> <button class="btn small" data-a="hireShares" data-x="100">+</button></span></div><div class="kv"><span>Grant value now</span><b>${fmtMoney(gv, true)}</b></div><p class="muted small">Grants vest over 4 years with a 1-year cliff.</p>` : ''}`}
+      <button class="btn3d orange wide" data-a="offerBoard">OFFER ${fmtMoney(h.salary)}/YR${h.grant !== 'none' && !isTeam ? ` + ${h.shares.toLocaleString()} ${h.grant === 'option' ? 'OPTIONS' : 'RSUs'}` : ''}</button>
+      <button class="btn" data-a="hireCancel">CANCEL</button></div>`;
   };
   const companies = Object.values(S.co).filter(c => controlled(c.a3));
   const teams = (typeof ownedSportTeams === 'function') ? ownedSportTeams() : [];
   const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>
-    <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
+    <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
     ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}</div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
   const teamCards = teams.map(t => `<div class="card in"><b>${esc(t.name)}</b><div class="muted small">${esc(t.cityName)} · Value ${fmtMoney(t.value, true)} · Rating ${(t.rating5 || 3).toFixed(1)} / 5</div>
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
     ${boardRow(t, 'team', t.id)}
     ${t.ipo ? '<p class="muted small">Already public.</p>' : '<p class="muted small">IPO in the team Finance tab, up to 100% at today\'s valuation minus a 7% fee.</p>'}</div>`).join('') || '<p class="muted small">No teams you own yet. Buy one in Sports.</p>';
-  return panelShell('Offices', 'Every business and team needs an office with a full board room before it can go public. Hire all 5 seats, then keep 2 profitable weeks in a row.',
-    `<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
+  return panelShell('Offices', 'Hiring is not just a bill. Find a candidate, make an offer, and they accept or deny. Higher level members boost revenue more — and cost more.',
+    `${hireSection()}<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
 };
 PANELS.bank = () => {
   ensureStores();
@@ -2285,6 +2338,12 @@ const A = {
   tradeRange: x => { UI.tradeRange = x; renderPanel(); },
   stock: x => {
     closePopup(); if (CityView.isOpen()) leaveCity();
+    // Capture the Markets scroll position before leaving it, so a back
+    // navigation from the stock panel can restore it (see renderPanel).
+    if (UI.panel === 'markets' && typeof document !== 'undefined' && document.querySelector) {
+      const be = document.querySelector('#panel .panel-body');
+      UI.marketsScroll = be ? be.scrollTop : 0;
+    }
     if (S.extra && S.extra[x]) { UI.panel = 'extraStock'; UI.stack = [{ id: x }]; }
     else { UI.panel = 'stock'; UI.stack = [{ a3: x }]; }
     renderPanel(); renderHUD();
@@ -2337,7 +2396,23 @@ const A = {
   tradeOut: x => { UI.tradeOut = x; renderPanel(); },
   tradeIn: x => { const [tid, pid] = x.split('|'); UI.tradeTarget = tid; UI.tradeIn = pid; renderPanel(); },
   doSportTrade: x => { const cash = Math.floor(+($('tradeCash') ? $('tradeCash').value : 0)); act(() => tradeSportPlayer(x, UI.tradeOut, UI.tradeTarget, UI.tradeIn, cash), 'Trade done!'); UI.tradeOut = null; UI.tradeIn = null; },
-  hireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => hireBoard(e, role), `${role} hired!`); },
+  hireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
+  findCand: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
+  findCandMore: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; if (e.candPool) delete e.candPool[role]; boardCandidates(e, role); UI.hire = { kind, id, role, candId: null, salary: 0, grant: 'none', shares: 0 }; renderPanel(); },
+  hireSelect: x => { const [kind, id, role, candId] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; const c = boardCandidates(e, role).find(y => y.id === candId); if (!c) return toast('Candidate not found.', 'bad'); UI.hire = { kind, id, role, candId, salary: c.ask, grant: 'none', shares: 0 }; renderPanel(); },
+  hireStep: x => { if (!UI.hire) return; UI.hire.salary = Math.max(1000, UI.hire.salary + (+x)); renderPanel(); },
+  hireGrant: x => { if (!UI.hire) return; UI.hire.grant = x; if (x === 'none') UI.hire.shares = 0; else if (!UI.hire.shares) UI.hire.shares = 1000; renderPanel(); },
+  hireShares: x => { if (!UI.hire) return; UI.hire.shares = Math.max(0, UI.hire.shares + (+x)); renderPanel(); },
+  hireCancel: () => { UI.hire = null; renderPanel(); },
+  offerBoard: () => {
+    const h = UI.hire; if (!h) return;
+    const e = h.kind === 'team' ? sportTeam(h.id) : S.co[h.id];
+    const c = boardCandidates(e, h.role).find(y => y.id === h.candId);
+    const err = offerBoard(e, h.role, c, h.salary, h.kind === 'team' ? 'none' : h.grant, h.kind === 'team' ? 0 : h.shares);
+    UI.hire = null;
+    if (err) toast(err, 'bad'); else toast(`${c.name} accepted as ${h.role}!`, 'good');
+    save(); renderPanel();
+  },
   fireBoard: x => { const [kind, id, role] = x.split('|'); const e = kind === 'team' ? sportTeam(id) : S.co[id]; act(() => fireBoard(e, role), `${role} seat cleared.`); },
   ageWeek: () => { try { stepWeek(); save(); renderHUD(); if (UI.panel) renderPanel(); toast('Advanced one week.', 'good'); } catch (e) { toast('Could not advance a week.', 'bad'); } },
   sportIpo: x => { const el = document.getElementById('ipoPctTeam'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => sportIpo(x, pct), 'Team is now public!'); },
