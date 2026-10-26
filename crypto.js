@@ -113,19 +113,25 @@ function cryptoPanelHTML() {
   const priceLine = price
     ? `<b style="font-size:22px">${fmtMoney(price)}</b><div class="muted small">Last known · ${cr.lastSource} · updated ${new Date(cr.lastAt).toLocaleTimeString()} · free API, lags real time slightly — that lag is part of the game</div>`
     : `<b style="font-size:22px">Price unavailable</b><div class="muted small">The free price API could not be reached. No price is shown rather than an invented one — tap Refresh to try again. Bets stay open until a real price comes back.</div>`;
-  const targetVal = (typeof UI !== 'undefined' && UI.cryptoTargetVal != null) ? UI.cryptoTargetVal : (price ? Math.round(price) : '');
+  // Controlled inputs: render FROM the state the player typed, so a
+  // price refresh or frame-loop re-render preserves edits. The target
+  // follows the live price until the player touches it (typing or a
+  // quick-target button), then it sticks to what they set.
+  const targetVal = (typeof UI !== 'undefined' && UI.cryptoTargetEdited && UI.cryptoTargetVal != null && UI.cryptoTargetVal !== '') ? UI.cryptoTargetVal : (price ? Math.round(price) : '');
+  const stakeVal = (typeof UI !== 'undefined' && UI.cryptoStakeVal != null && UI.cryptoStakeVal !== '') ? UI.cryptoStakeVal : cr.lastStake;
+  const windowVal = (typeof UI !== 'undefined' && UI.cryptoWindowVal != null) ? UI.cryptoWindowVal : 1;
   const pending = cr.bets.filter(b => !b.settled);
   const done = cr.bets.filter(b => b.settled).slice(0, 10);
   const betRow = b => `<div class="kv"><span>${b.dir === 'above' ? '▲' : '▼'} ${b.dir.toUpperCase()} ${fmtMoney(b.target)} · ${fmtMoney(b.stake, true)} · ${b.windowMin} min${b.settled ? ` · settled ${fmtMoney(b.settlePrice)}` : ` · ${cryptoCountdown(b)}`}</span><b>${b.settled ? (b.result === 'win' ? 'WON +'+fmtMoney(b.stake, true) : b.result === 'push' ? 'PUSH refunded' : 'LOST') : 'OPEN'}</b></div>`;
   return panelShell('Crypto', 'In-game cash only · not in Stocks · real live BTC price only',
-    `<div class="card in"><h4>₿ Bitcoin (BTC)</h4>${priceLine}
+    `<div class="card in"><h4>${(typeof ICONS !== 'undefined' && ICONS.crypto) ? ICONS.crypto : ''} Bitcoin (BTC)</h4>${priceLine}
     <p class="muted small">Price is the real live BTC price from a free public API — wars, sanctions, GDP, growth and events never move it. Source: ${cr.lastSource || 'none yet'}.</p>
     <div class="row wrap"><button class="btn" data-a="cryptoRefresh">REFRESH PRICE</button><button class="btn" data-a="cryptoSettle">SETTLE DUE BETS</button></div></div>
     <div class="card in"><h4>Place an above / under bet</h4><p class="muted small">Stake in-game cash. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
     <div class="row"><span class="muted small" style="min-width:90px">Target price $</span><input id="cryptoTarget" class="search" type="number" min="1" step="1" value="${targetVal}" placeholder="e.g. 100000"></div>
     <div class="row wrap"><span class="muted small">Quick target:</span>${[-5, -1, 1, 5].map(p => `<button class="btn small" data-a="cryptoTarget" data-x="${p}">${p > 0 ? '+' : ''}${p}%</button>`).join('')}</div>
-    <div class="row"><span class="muted small" style="min-width:90px">Time window</span><select id="cryptoWindow" class="search">${CRYPTO_WINDOWS.map(w => `<option value="${w}">${w} minute${w === 1 ? '' : 's'}</option>`).join('')}</select></div>
-    <div class="row"><span class="muted small" style="min-width:90px">Stake $</span><input id="cryptoStake" class="search" type="number" min="1" step="1" value="${cr.lastStake}"></div>
+    <div class="row"><span class="muted small" style="min-width:90px">Time window</span><select id="cryptoWindow" class="search">${CRYPTO_WINDOWS.map(w => `<option value="${w}"${w === windowVal ? ' selected' : ''}>${w} minute${w === 1 ? '' : 's'}</option>`).join('')}</select></div>
+    <div class="row"><span class="muted small" style="min-width:90px">Stake $</span><input id="cryptoStake" class="search" type="number" min="1" step="1" value="${stakeVal}"></div>
     <div class="row wrap"><button class="btn3d orange flex" data-a="cryptoPlace" data-x="above">BET ABOVE ▲</button><button class="btn3d orange flex" data-a="cryptoPlace" data-x="below">BET UNDER ▼</button></div></div>
     <div class="card in"><h4>Open bets (${pending.length})</h4>${pending.map(betRow).join('') || '<p class="muted small">No open bets. Bets settle when this panel opens after their window ends, or on Settle.</p>'}</div>
     <div class="card in"><h4>Recent results · Won ${cr.won} · Lost ${cr.lost}</h4>${done.map(betRow).join('') || '<p class="muted small">Nothing settled yet.</p>'}</div>

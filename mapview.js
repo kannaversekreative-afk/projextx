@@ -461,7 +461,7 @@ const MapView = (() => {
             const rr = Math.max(10, r * 2.2);
             c.fillStyle = '#ffffff'; c.strokeStyle = '#2f7cf6'; c.lineWidth = 2.5;
             c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-            c.fillStyle = '#d4a017'; c.font = `bold ${Math.round(rr * 1.3)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
+            c.fillStyle = '#1d6fe0'; c.font = `bold ${Math.round(rr * 1.3)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
             c.fillText('★', sx, sy + 1);
           }
         }

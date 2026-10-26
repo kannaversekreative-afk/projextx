@@ -574,7 +574,11 @@ const CityView = (() => {
     // Buildings bought by tapping them (not FOR SALE lots) still get
     // an owned pin, so you can open, renovate or sell them again.
     if (show('prop')) S.props.filter(p => p.city === city.id && !lots.some(l => l.t === p.t)).forEach(pr => add(pr.t, 'pin-prop', '<span class="logo own">\u{1F3E0}</span>', () => onPin({ type: 'prop', lot: { t: pr.t } })));
-    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('div'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} ${landmarkName}</span>`; layer.appendChild(p); }
+    // Landmark pin (e.g. the Capitol in Washington, D.C.): this used to
+    // be a plain div with no click handler, so the capital inside a
+    // city view could not be pressed at all. It is a button like every
+    // other pin now, and tapping it opens the capital (see onPin).
+    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('button'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.title = landmarkName; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} ${landmarkName}</span>`; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'landmark', city }); }); layer.appendChild(p); }
     if (roofs.stadium && roofs.stadiumTeam) { const r = roofs.stadium, tm = roofs.stadiumTeam; const p = document.createElement('button'); p.className = 'pin pin-stadium'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = '<span class="logo">🏟️</span>'; p.title = tm.name; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'stadium', team: tm }); }); layer.appendChild(p); }
   }
 

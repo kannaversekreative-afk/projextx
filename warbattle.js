@@ -18,26 +18,26 @@
 // are battle credits from the standalone fund below.
 const BATTLE_ITEMS = [
   // Structures: placed on a tile you own. One structure per tile.
-  { id: 'city', name: 'City', icon: '🏙️', kind: 'structure', cost: 25000000, desc: 'Capacity +200 on this tile' },
-  { id: 'port', name: 'Port', icon: '⚓', kind: 'structure', cost: 15000000, desc: 'Generation +1, capacity +50' },
-  { id: 'factory', name: 'Factory', icon: '🏭', kind: 'structure', cost: 20000000, desc: 'Generation +2 on this tile' },
-  { id: 'defense', name: 'Defense', icon: '🛡️', kind: 'structure', cost: 10000000, desc: 'Defenders on this tile count double' },
-  { id: 'sam', name: 'SAM', icon: '🚀', kind: 'structure', cost: 30000000, desc: 'Weapon damage halved on this tile' },
-  { id: 'silo', name: 'Silo', icon: '🏗️', kind: 'structure', cost: 40000000, desc: 'Unlocks Atom, H-Bomb, MIRV, Mega' },
-  { id: 'warship', name: 'Warship', icon: '🚢', kind: 'structure', cost: 35000000, desc: 'Attacks from this tile hit +20' },
-  { id: 'airfield', name: 'Airfield', icon: '✈️', kind: 'structure', cost: 20000000, desc: 'Unlocks Strike' },
+  { id: 'city', name: 'City', icon: 'city', kind: 'structure', cost: 25000000, desc: 'Capacity +200 on this tile' },
+  { id: 'port', name: 'Port', icon: 'port', kind: 'structure', cost: 15000000, desc: 'Generation +1, capacity +50' },
+  { id: 'factory', name: 'Factory', icon: 'factory', kind: 'structure', cost: 20000000, desc: 'Generation +2 on this tile' },
+  { id: 'defense', name: 'Defense', icon: 'defense', kind: 'structure', cost: 10000000, desc: 'Defenders on this tile count double' },
+  { id: 'sam', name: 'SAM', icon: 'sam', kind: 'structure', cost: 30000000, desc: 'Weapon damage halved on this tile' },
+  { id: 'silo', name: 'Silo', icon: 'silo', kind: 'structure', cost: 40000000, desc: 'Unlocks Atom, H-Bomb, MIRV, Mega' },
+  { id: 'warship', name: 'Warship', icon: 'warship', kind: 'structure', cost: 35000000, desc: 'Attacks from this tile hit +20' },
+  { id: 'airfield', name: 'Airfield', icon: 'airfield', kind: 'structure', cost: 20000000, desc: 'Unlocks Strike' },
   // Troops: bought units, placed on a tile you own.
-  { id: 'troops', name: 'Troops', icon: '🪖', kind: 'buy', cost: 2000000, desc: '+50 units on the selected tile' },
+  { id: 'troops', name: 'Troops', icon: 'troops', kind: 'buy', cost: 2000000, desc: '+50 units on the selected tile' },
   // Weapons: fired at an enemy tile. Cost is per shot.
-  { id: 'slug', name: 'Slug', icon: '🔩', kind: 'weapon', cost: 2000000, dmg: 5, range: 'adjacent', desc: '5 damage, adjacent enemy tile' },
-  { id: 'artillery', name: 'Artillery', icon: '💥', kind: 'weapon', cost: 5000000, dmg: 10, range: 'adjacent', desc: '10 damage, adjacent enemy tile' },
-  { id: 'strike', name: 'Strike', icon: '🎯', kind: 'weapon', cost: 15000000, dmg: 25, range: 'any', requires: 'airfield', desc: '25 damage, any enemy tile' },
-  { id: 'railgun', name: 'Railgun', icon: '⚡', kind: 'weapon', cost: 25000000, dmg: 40, range: 'any', desc: '40 damage, any enemy tile' },
-  { id: 'atom', name: 'Atom', icon: '☢️', kind: 'weapon', cost: 50000000, dmg: 50, range: 'any', requires: 'silo', desc: '50 damage, any enemy tile' },
-  { id: 'mirv', name: 'MIRV', icon: '🎆', kind: 'weapon', cost: 80000000, dmg: 30, range: 'any', requires: 'silo', splash: true, desc: '30 damage to target and adjacent enemy tiles' },
-  { id: 'hbomb', name: 'H-Bomb', icon: '💣', kind: 'weapon', cost: 100000000, dmg: 100, range: 'any', requires: 'silo', desc: '100 damage, any enemy tile' },
-  { id: 'mega', name: 'Mega', icon: '🌋', kind: 'weapon', cost: 200000000, dmg: 200, range: 'any', requires: 'silo', desc: '200 damage, any enemy tile' },
-  { id: 'scatter', name: 'Scatter', icon: '✨', kind: 'weapon', cost: 10000000, dmg: 15, range: 'any', splashWeak: true, desc: '15 damage to target, 5 to adjacent enemy tiles' },
+  { id: 'slug', name: 'Slug', icon: 'slug', kind: 'weapon', cost: 2000000, dmg: 5, range: 'adjacent', desc: '5 damage, adjacent enemy tile' },
+  { id: 'artillery', name: 'Artillery', icon: 'artillery', kind: 'weapon', cost: 5000000, dmg: 10, range: 'adjacent', desc: '10 damage, adjacent enemy tile' },
+  { id: 'strike', name: 'Strike', icon: 'strike', kind: 'weapon', cost: 15000000, dmg: 25, range: 'any', requires: 'airfield', desc: '25 damage, any enemy tile' },
+  { id: 'railgun', name: 'Railgun', icon: 'railgun', kind: 'weapon', cost: 25000000, dmg: 40, range: 'any', desc: '40 damage, any enemy tile' },
+  { id: 'atom', name: 'Atom', icon: 'atom', kind: 'weapon', cost: 50000000, dmg: 50, range: 'any', requires: 'silo', desc: '50 damage, any enemy tile' },
+  { id: 'mirv', name: 'MIRV', icon: 'mirv', kind: 'weapon', cost: 80000000, dmg: 30, range: 'any', requires: 'silo', splash: true, desc: '30 damage to target and adjacent enemy tiles' },
+  { id: 'hbomb', name: 'H-Bomb', icon: 'hbomb', kind: 'weapon', cost: 100000000, dmg: 100, range: 'any', requires: 'silo', desc: '100 damage, any enemy tile' },
+  { id: 'mega', name: 'Mega', icon: 'mega', kind: 'weapon', cost: 200000000, dmg: 200, range: 'any', requires: 'silo', desc: '200 damage, any enemy tile' },
+  { id: 'scatter', name: 'Scatter', icon: 'scatter', kind: 'weapon', cost: 10000000, dmg: 15, range: 'any', splashWeak: true, desc: '15 damage to target, 5 to adjacent enemy tiles' },
 ];
 const BATTLE_ITEM_BY_ID = {};
 BATTLE_ITEMS.forEach(i => { BATTLE_ITEM_BY_ID[i.id] = i; });
