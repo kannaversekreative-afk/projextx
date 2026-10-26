@@ -655,7 +655,21 @@ function flipPaper(d) { paperPage = Math.max(0, Math.min(4, paperPage + d)); $('
 function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx + d)); paperPage = 0; $('paper').innerHTML = paperHTML(); }
 
 // ---------- boot / onboarding ----------
+// Horizontal on phones: a portrait phone (narrower than it is tall,
+// phone-sized) shows the whole game rotated 90 degrees, landscape,
+// exactly like web. A phone already sideways, a tablet and a desktop
+// are already horizontal, so they are left alone. After the class
+// changes, the map has a new size, so fire a resize for it.
+function updateGameOrientation() {
+  const portraitPhone = window.innerWidth <= 760 && window.innerHeight > window.innerWidth;
+  const was = document.body.classList.contains('landscape-phone');
+  document.body.classList.toggle('landscape-phone', portraitPhone);
+  if (portraitPhone !== was) setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
 async function boot() {
+  updateGameOrientation();
+  window.addEventListener('resize', updateGameOrientation);
+  window.addEventListener('orientationchange', updateGameOrientation);
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('mycity', () => openPanel('mycity'));

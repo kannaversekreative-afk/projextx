@@ -318,6 +318,18 @@ body.in-city #hud, body.in-city #popup { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { #panel.open, .mbox, .toast { animation: none; } }
 
+/* Horizontal on phones: web is wide, so a portrait phone is rotated
+   90 degrees and shown landscape, exactly like web. The whole game
+   lives in #game, so rotating that one box rotates map, HUD, panels
+   and city view together. Only portrait phones get this — a phone
+   already held sideways, a tablet and a desktop are untouched, because
+   they are already horizontal. When rotated, the panel goes back to
+   the web side sheet on the right, not the phone bottom sheet. */
+body.landscape-phone #game { position: fixed; width: 100dvh; height: 100dvw; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg); overflow: hidden; }
+body.landscape-phone #panel { left: auto; right: 12px; top: 12px; bottom: 12px; width: min(420px, 52%); max-height: none; }
+body.landscape-phone .popup { top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100% - 120px); }
+body.landscape-phone .company-card { max-width: calc(100% - 130px); }
+
 /* Leader inherit screen: white, full screen, above everything else. */
 #inherit { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; background: #000; color: #fff; padding: 24px; text-align: center; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #inherit.open { display: flex; }
