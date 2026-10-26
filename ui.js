@@ -263,7 +263,7 @@ function renderHUD() {
     <span class="hud-flag">${hk.flag}</span>
     <span class="hud-tl-text"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)}</small></span>
   </button>
-  <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
+  <div class="hud-tr-wrap"><button class="hud-bell" data-a="panel" data-x="inbox" aria-label="Messages">${(S.mail || []).filter(m => !m.read).length ? `<span class="hud-bell-badge">${(S.mail || []).filter(m => !m.read).length}</span>` : ''}🔔</button><button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button></div>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">☰</button>
@@ -1316,6 +1316,29 @@ PANELS.estate = () => {
       return `<button class="srow" data-a="propSheet" data-x="${p.id}"><span class="avatar">🏠</span><span class="sname"><b>${esc(city.name)}, ${esc(cname(city.a3))}</b><small>${p.units} units · ${Math.round(p.occ * 100)}% occupied · Condition ${Math.round(p.cond * 100)}%</small></span><span class="sprice"><b>${fmtMoney(p.value, true)}</b><small>${fmtMoney(p.income, true)}/week</small></span></button>`;
     }).join('') || '<p class="muted small">No buildings yet. Buy one from a city FOR SALE pin.</p>'}</div>`);
 };
+PANELS.hq = () => {
+  const hk = W.byA3[S.home];
+  const capCity = hk && W.cities[hk.capital];
+  const mineList = (typeof mine === 'function') ? mine() : [];
+  const placed = Array.isArray(S.placed) ? S.placed : [];
+  const totalValue = mineList.reduce((s, c) => s + companyValue(c), 0);
+  const totalProfit = mineList.reduce((s, c) => s + ((c.week || {}).profit || 0), 0);
+  const totalLocs = mineList.reduce((s, c) => s + (c.locs ? c.locs.length : 0), 0);
+  const companyCards = mineList.map(c => {
+    const wk = c.week || { profit: 0 };
+    const board = (typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full';
+    return `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${c.sym} · ${esc(cname(c.a3))} · ★ ${c.rating.toFixed(1)} · Board ${board} · ${c.weekProfitStreak || 0} / 2 profitable weeks</div>
+    <div class="kv"><span>Value</span><b>${fmtMoney(companyValue(c), true)}</b></div><div class="kv"><span>Week profit</span><b class="${upCls(wk.profit)}">${fmtMoney(wk.profit, true)}</b></div><div class="kv"><span>Locations</span><b>${c.locs.length}</b></div>
+    <div class="row wrap"><button class="btn" data-a="stock" data-x="${c.a3}">VIEW STOCK</button><button class="btn" data-a="webCo" data-x="${c.a3}">OPEN WEBSITE</button><button class="btn" data-a="siteMaker" data-x="${c.a3}">CUSTOMIZE SITE</button><button class="btn" data-a="panel" data-x="offices">BOARD</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO</button>` : '<span class="muted small">Listed</span>'}</div></div>`;
+  }).join('') || '<p class="muted small">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p>';
+  const placedRows = placed.map(b => `<div class="kv"><span>${b.icon || '🏢'} ${esc(b.name)} · ${esc(cname(b.a3))}</span><b>${fmtMoney(b.value, true)} · ${fmtMoney(b.income, true)}/week</b></div>`).join('') || '<p class="muted small">No placed businesses yet. Place one from Create business in More.</p>';
+  return panelShell('HQ', `${hk ? hk.flag : ''} ${esc(cname(S.home))}${capCity ? ` · HQ in ${esc(capCity.name)}` : ''}`,
+    `<div class="stats3 box"><div><span>Companies controlled</span><b>${mineList.length}</b></div><div><span>Total value</span><b>${fmtMoney(totalValue, true)}</b></div><div><span>Week profit</span><b class="${upCls(totalProfit)}">${fmtMoney(totalProfit, true)}</b></div></div>
+    <div class="kv"><span>Locations</span><b>${totalLocs}</b></div><div class="kv"><span>Placed businesses</span><b>${placed.length}</b></div><div class="kv"><span>Buildings owned</span><b>${S.props.length}</b></div>
+    <div class="row wrap"><button class="btn" data-a="panel" data-x="company">MANAGE COMPANIES</button><button class="btn" data-a="panel" data-x="capital">CAPITAL</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="bank">BANK</button><button class="btn" data-a="panel" data-x="estate">BUILDINGS</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button><button class="btn" data-a="createBusiness">CREATE BUSINESS</button></div>
+    <h4>Your companies</h4>${companyCards}
+    <h4>Placed businesses</h4><div class="list">${placedRows}</div>`);
+};
 PANELS.goals = () => {
   const stage = CAREER[S.career];
   return panelShell('Daily goals', `Career: ${careerName()} · Streak ${S.daily.streak} days`,
@@ -1626,12 +1649,13 @@ PANELS.help = () => {
 // sheet. The popup is the new home for all of these now that the
 // bottom bar is gone.
 const MENU_ITEMS = [
-  ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
+  ['leader', '👑', 'Leader'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
   ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
   ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
   ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
-  ['goals', '🎯', 'Daily goals'], ['shop', '🛍️', 'Shop'], ['search', '🔍', 'Search'],
-  ['leaderboard', '🏆', 'Leaderboard'], ['mode', '🎲', 'Mode'], ['offices', '🏛️', 'Offices'], ['sports', '🏟️', 'Sports'], ['stores', '☕', 'Stores'], ['bank', '🏦', 'Bank'],
+  ['hq', '🏭', 'HQ'],
+  ['goals', '🎯', 'Daily goals'],
+  ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['bank', '🏦', 'Bank'],
   ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
 ];
 function moreSheet() {
@@ -1651,9 +1675,9 @@ function openMenuPopup() {
   <div class="menu-pop-body">
   <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">🏢</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
-  ${g('Your business', [['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites'], ['shop', 'Packs and boosts']])}
-  ${g('World', [['news', "What's happening in the world"], ['inbox', 'Your messages'], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city']])}
-  ${g('Play', [['mode', 'Game modes'], ['offices', 'Offices and boards'], ['sports', 'Teams and leagues'], ['stores', 'Stores in your cities'], ['bank', 'Loans and banking'], ['search', 'Find anything'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
+  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city']])}
+  ${g('Play', [['sports', 'Teams and leagues'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
