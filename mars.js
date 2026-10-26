@@ -31,9 +31,18 @@ const MARS_CITY_ID = -9999;
 // it is set, mines stay more expensive than the rocket with no
 // restructuring. In-game cash only, never a new currency.
 const MARS_CONFIG = { rocketCost: null };
-// Mars share by unlock order (every country can unlock, not first
-// only): 1st = 100%, 2nd = 50%, 3rd = 33%, 4th = 25%, i.e. 100/n.
-// The share scales that country's whole Mars mining yield.
+// Mars share — EQUAL split among mine-builders (corrected model,
+// replaces the old unlock-order model). "Getting there" means
+// arriving on Mars AND building a mine: a country that has unlocked
+// /arrived but has NOT built a mine gets no share and does NOT
+// dilute anyone else. The mining yield is split equally among all
+// countries that have arrived and built at least one mine: 1 such
+// country gets 100%, 2 get 50% each, 4 get 25% each — in general
+// 100% / N, where N = number of active mine-building countries.
+// The share scales that country's whole Mars mining yield, and is
+// recomputed each week as countries build their first mine.
+// (unlockOrder is still kept for save compatibility / pool sizing
+// only; it no longer scales yield.)
 // Mars resource pool — END STATE, decided here and kept simple:
 // Mars holds roughly 100 years of the world's resources. The pool is
 // sized once, at the first unlock, to 100 years of that country's
@@ -42,10 +51,21 @@ const MARS_CONFIG = { rocketCost: null };
 // mining ends for everyone: no more mining income, no more Earth
 // cost cut, mine sites stop paying (they stay owned and the city
 // stays visitable). Earth play continues normally.
+function marsHasBuiltMine(a3) {
+  // "Built a mine" = owns at least one buyable mine site on Mars.
+  // The automatically-created base mine record (marsMineFor) does NOT
+  // count: an arrived country with no bought site is not a miner.
+  try { return marsSitesFor(a3).some(s => s.owned); } catch (e) { return false; }
+}
+function marsActiveMiners() {
+  const m = ensureMars(); if (!m) return [];
+  return Object.keys(m.unlocked || {}).filter(a => m.unlocked[a] && marsHasBuiltMine(a));
+}
 function marsShare(a3) {
   const m = ensureMars(); if (!m || !m.unlocked[a3]) return 0;
-  const idx = (m.unlockOrder || []).indexOf(a3);
-  return idx >= 0 ? 1 / (idx + 1) : 1;
+  const active = marsActiveMiners();
+  if (!active.includes(a3)) return 0;
+  return 1 / active.length;
 }
 function marsPoolRemaining() {
   const m = ensureMars(); if (!m || !m.pool) return 0;
@@ -224,13 +244,15 @@ function marsCheckUnlocks() {
   return newly;
 }
 // Weekly Mars work: growth, unlock checks, then mining income for
-// every unlocked country. Mining income scales with the value of that
-// country's businesses and with mine level, then by that country's
-// unlock-order share (1st 100%, 2nd 50%, 3rd 33% …). All miners draw
-// the same shared pool; if a week's total yield exceeds what is left,
-// every miner is paid pro-rata and the pool hits zero — mining ends.
-// It lands in the home player's cash, or in a CPU country's treasury.
-// Nothing here ends the game — Earth play continues after Mars opens.
+// every ACTIVE miner only (arrived + built a mine). Mining income
+// scales with the value of that country's businesses and with mine
+// level, then by the equal active-miner split (100% / N). Arrived
+// countries with no built mine earn nothing and do not dilute the
+// split. All miners draw the same shared pool; if a week's total
+// yield exceeds what is left, every miner is paid pro-rata and the
+// pool hits zero — mining ends. It lands in the home player's cash,
+// or in a CPU country's treasury. Nothing here ends the game —
+// Earth play continues after Mars opens.
 function marsWeek() {
   if (!S) return;
   ensureMars();
@@ -255,11 +277,13 @@ function marsWeek() {
     for (const a3 in m.unlocked) if (m.unlocked[a3]) marsMineFor(a3).lastWeek = 0;
     return;
   }
-  // First pass: compute every miner's full yield (base mine + owned
-  // sites, scaled by unlock-order share), without crediting yet.
+  // First pass: compute every ACTIVE miner's full yield (base mine
+  // + owned sites, scaled by the equal active-miner split), without
+  // crediting yet. Arrived-but-no-mine countries earn nothing here.
   const yields = [];
   for (const a3 in m.unlocked) {
     if (!m.unlocked[a3]) continue;
+    if (!marsHasBuiltMine(a3)) { marsMineFor(a3).lastWeek = 0; continue; }
     const mine = marsMineFor(a3);
     const mult = 1 + 0.5 * (mine.level - 1);
     const base = Math.max(250000, marsBusinessValue(a3) * 0.002) * mult;
