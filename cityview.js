@@ -6,7 +6,7 @@ const CityView = (() => {
   const TW = 72, TH = 36;
   let el, canvas, ctx, layer, img, layout, city, view = { x: 0, y: 0, s: 1 }, ox = 0, oy = 0, W2 = 0, H2 = 0;
   let marsMode = false;
-  let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', vehicles = [], animTimer = null, lastAnim = 0;
+  let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], animTimer = null, lastAnim = 0;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -107,7 +107,26 @@ const CityView = (() => {
     for (let i = 0; i < 2 + Math.floor(r() * 2); i++) { const dx = (r() - 0.5) * 16, dy = (r() - 0.5) * 7; c.fillStyle = '#b9bfc6'; c.fillRect(cx + dx - 3, cy + dy - 4, 6, 4); c.fillStyle = '#d7dbe0'; c.fillRect(cx + dx - 3, cy + dy - 5.5, 6, 1.6); }
     if (t.arch === 'apartment' && t.seed > 0.7) { c.fillStyle = '#7b5a43'; c.fillRect(cx + 6, cy - 12, 6, 9); c.fillStyle = '#5d4332'; c.beginPath(); c.moveTo(cx + 5, cy - 12); c.lineTo(cx + 9, cy - 16); c.lineTo(cx + 13, cy - 12); c.fill(); }
   }
+  // Roof signature for a capital's own style: a small dome, onion,
+  // pagoda tier, mansard, pitched gable or spire on office blocks.
+  function drawRoofCap(c, top, style) {
+    const [x, y] = top, a = style.a || style.r, rc = style.r;
+    if (style.cap === 'dome') { c.fillStyle = a; c.beginPath(); c.arc(x, y, 9, Math.PI, 0); c.fill(); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(x, y - 10, 2, 0, 7); c.fill(); }
+    else if (style.cap === 'onion') { c.fillStyle = a; c.beginPath(); c.arc(x, y, 8, Math.PI, 0); c.fill(); poly(c, [[x - 8, y], [x + 8, y], [x, y - 14]], a); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(x, y - 15, 1.8, 0, 7); c.fill(); }
+    else if (style.cap === 'pagoda') { poly(c, [[x - 13, y], [x + 13, y], [x + 8, y - 6], [x - 8, y - 6]], rc); poly(c, [[x - 9, y - 6], [x + 9, y - 6], [x + 5, y - 11], [x - 5, y - 11]], rc); }
+    else if (style.cap === 'mansard') { poly(c, [[x - 12, y], [x + 12, y], [x + 7, y - 8], [x - 7, y - 8]], rc); }
+    else if (style.cap === 'pitched') { poly(c, [[x - 12, y], [x + 12, y], [x, y - 10]], rc); }
+    else if (style.cap === 'spire') { poly(c, [[x - 4, y], [x + 4, y], [x, y - 18]], a); }
+  }
   function building(c, t) {
+    // Capitals draw in their own country's style, not the generic
+    // palette: wall colours and roof colour come from CAPITAL_STYLES.
+    let style = null;
+    if (typeof isGovCity === 'function' && isGovCity(city) && typeof CAPITAL_STYLES !== 'undefined' && CAPITAL_STYLES[city.a3]) {
+      style = CAPITAL_STYLES[city.a3];
+      const rr = mulberry(Math.floor(t.seed * 1e9) + 77);
+      t = Object.assign({}, t, { color: style.w[Math.floor(rr() * style.w.length)], roof: style.r });
+    }
     const r = mulberry(Math.floor(t.seed * 1e9)), x = t.x, y = t.y;
     const k = t.arch === 'warehouse' ? 0.08 : t.arch === 'glass' || t.arch === 'skyscraper' ? 0.13 : 0.15;
     const x0 = x + k, y0 = y + k, x1 = x + 1 - k, y1 = y + 1 - k;
@@ -137,7 +156,9 @@ const CityView = (() => {
     }
     roofDetails(c, g, t, r);
     if ((t.arch === 'office' || t.arch === 'apartment' || t.arch === 'glass') && r() < 0.6) tree(c, x + 0.9, y + 0.9, 0.6);
-    const top = P(x + 0.5, y + 0.5); return [top[0], top[1] - h];
+    const top = P(x + 0.5, y + 0.5); const out = [top[0], top[1] - h];
+    if (style && style.cap && style.cap !== 'flat') drawRoofCap(c, out, style);
+    return out;
   }
   function glassFaces(c, g, col, h) {
     [[g.D, g.C, 0.95], [g.C, g.B, 0.78]].forEach(([a, b, f]) => {
@@ -289,8 +310,8 @@ const CityView = (() => {
     c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, base - h - 24, 3, 0, 7); c.fill();
     return [cx, base - h - 26];
   }
-  function clockTower(c) {
-    const L = layout.landmark, g = box(c, L.x + 1.0, L.y + 1.0, L.x + 2.0, L.y + 2.0, 120, '#c9a86a');
+  function clockTower(c, s) {
+    const L = layout.landmark, g = box(c, L.x + 1.0, L.y + 1.0, L.x + 2.0, L.y + 2.0, 120, (s && s.c && s.c[0]) || '#c9a86a');
     const fm = lerp(g.D, g.C, 0.5); c.fillStyle = '#fdf6e3'; c.beginPath(); c.arc(fm[0], fm[1] - 100, 13, 0, 7); c.fill(); c.strokeStyle = '#333'; c.lineWidth = 1.5; c.beginPath(); c.arc(fm[0], fm[1] - 100, 13, 0, 7); c.stroke();
     c.beginPath(); c.moveTo(fm[0], fm[1] - 100); c.lineTo(fm[0], fm[1] - 108); c.moveTo(fm[0], fm[1] - 100); c.lineTo(fm[0] + 7, fm[1] - 97); c.stroke();
     poly(c, [up(lerp(g.D, g.C, 0.2), 120), up(lerp(g.D, g.C, 0.8), 120), [fm[0], fm[1] - 150]], '#3a5a40');
@@ -321,21 +342,22 @@ const CityView = (() => {
     c.fillStyle = '#6fbf5a'; c.beginPath(); c.ellipse(cx, cy - 18, 20, 10, 0, 0, 7); c.fill();
     return [cx, cy - 42];
   }
-  function pyramid(c) {
+  function pyramid(c, s) {
     const L = layout.landmark, [cx, cy] = P(L.x + 1.5, L.y + 2.2);
-    poly(c, [[cx - 44, cy], [cx + 44, cy], [cx, cy - 62]], '#d9b878');
+    poly(c, [[cx - 44, cy], [cx + 44, cy], [cx, cy - 62]], (s && s.c && s.c[0]) || '#d9b878');
     poly(c, [[cx, cy - 62], [cx + 44, cy], [cx + 20, cy - 10]], '#c2a05e');
     return [cx, cy - 62];
   }
-  function pagoda(c) {
+  function pagoda(c, s) {
     const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.2); let y = base, w = 30;
-    for (let i = 0; i < 4; i++) { c.fillStyle = '#a63a2e'; c.fillRect(cx - w - 6, y - 8, (w + 6) * 2, 8); c.fillStyle = '#f2e2c4'; c.fillRect(cx - w, y - 22, w * 2, 14); w -= 6; y -= 24; }
+    const roof = (s && s.c && s.c[0]) || '#a63a2e', wall = (s && s.c && s.c[1]) || '#f2e2c4';
+    for (let i = 0; i < 4; i++) { c.fillStyle = roof; c.fillRect(cx - w - 6, y - 8, (w + 6) * 2, 8); c.fillStyle = wall; c.fillRect(cx - w, y - 22, w * 2, 14); w -= 6; y -= 24; }
     poly(c, [[cx - 10, y], [cx + 10, y], [cx, y - 14]], '#3a5a40');
     return [cx, y - 14];
   }
-  function obelisk(c) {
+  function obelisk(c, s) {
     const L = layout.landmark, [cx, base] = P(L.x + 1.5, L.y + 2.2);
-    poly(c, [[cx - 9, base], [cx + 9, base], [cx + 4, base - 110], [cx - 4, base - 110]], '#e8e2d2');
+    poly(c, [[cx - 9, base], [cx + 9, base], [cx + 4, base - 110], [cx - 4, base - 110]], (s && s.c && s.c[0]) || '#e8e2d2');
     poly(c, [[cx - 4, base - 110], [cx + 4, base - 110], [cx, base - 124]], '#c9a86a');
     return [cx, base - 124];
   }
@@ -346,20 +368,112 @@ const CityView = (() => {
     c.fillStyle = 'rgba(255,233,163,0.25)'; poly(c, [[cx + 7, base - 90], [cx + 44, base - 78], [cx + 44, base - 62], [cx + 7, base - 78]], c.fillStyle);
     return [cx, base - 106];
   }
-  function cathedral(c) {
-    const L = layout.landmark, g = box(c, L.x + 0.8, L.y + 0.8, L.x + 2.2, L.y + 2.2, 30, '#d8d2c2');
+  function cathedral(c, s) {
+    const L = layout.landmark, g = box(c, L.x + 0.8, L.y + 0.8, L.x + 2.2, L.y + 2.2, 30, (s && s.c && s.c[0]) || '#d8d2c2');
     const fm = lerp(g.D, g.C, 0.5); c.fillStyle = '#fdf6e3'; c.beginPath(); c.arc(fm[0], fm[1] - 18, 7, 0, 7); c.fill();
     [[-1, 0.25], [1, 0.75]].forEach(([sgn, f]) => { const p = lerp(g.D, g.C, f); poly(c, [[p[0] - 6, p[1] - 30], [p[0] + 6, p[1] - 30], [p[0], p[1] - 78]], '#8a7a5a'); });
     return [fm[0], fm[1] - 78];
   }
-  function onionDomes(c) {
+  function onionDomes(c, s) {
     const L = layout.landmark, g = box(c, L.x + 0.7, L.y + 0.9, L.x + 2.3, L.y + 2.1, 26, '#efe9dc');
-    const cols = ['#e5484d', '#2f7cf6', '#12a150'];
+    const cols = (s && s.c && s.c.length) ? s.c : ['#e5484d', '#2f7cf6', '#12a150'];
     [0.2, 0.5, 0.8].forEach((f, i) => { const p = lerp(g.D, g.C, f); c.fillStyle = cols[i]; c.beginPath(); c.arc(p[0], p[1] - 32, 8, 0, 7); c.fill(); poly(c, [[p[0] - 8, p[1] - 32], [p[0] + 8, p[1] - 32], [p[0], p[1] - 46]], cols[i]); });
     return [lerp(g.D, g.C, 0.5)[0], g.D[1] - 46];
   }
+  // New landmark types, one drawing each, coloured per capital.
+  function temple(c, s) {
+    const L = layout.landmark, wall = (s && s.c && s.c[0]) || '#e8e2d2', roof = (s && s.c && s.c[1]) || '#c9a86a';
+    const g = box(c, L.x + 0.5, L.y + 0.8, L.x + 2.5, L.y + 2.2, 10, wall);
+    for (let i = 0; i < 5; i++) { const p = lerp(g.D, g.C, 0.12 + i * 0.19); c.fillStyle = '#f6f1e4'; c.fillRect(p[0] - 2.5, p[1] - 46, 5, 36); }
+    poly(c, [up(lerp(g.D, g.C, 0.05), 46), up(lerp(g.D, g.C, 0.95), 46), up(lerp(g.D, g.C, 0.5), 62)], roof);
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5); return [cx, cy - 62];
+  }
+  function palace(c, s) {
+    const L = layout.landmark, wall = (s && s.c && s.c[0]) || '#e8e2d2', trim = (s && s.c && s.c[1]) || '#8a7a5a';
+    const g = box(c, L.x + 0.4, L.y + 0.7, L.x + 2.6, L.y + 2.3, 30, wall);
+    box(c, L.x + 1.1, L.y + 0.9, L.x + 1.9, L.y + 2.1, 40, wall);
+    for (let j = 0; j < 5; j++) { const p = lerp(g.D, g.C, 0.15 + j * 0.175); c.fillStyle = trim; c.fillRect(p[0] - 3, p[1] - 12, 6, 10); }
+    poly(c, [up(lerp(g.D, g.C, 0.05), 40), up(lerp(g.D, g.C, 0.95), 40), up(lerp(g.D, g.C, 0.5), 52)], trim);
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5);
+    c.strokeStyle = '#555'; c.lineWidth = 1; c.beginPath(); c.moveTo(cx, cy - 52); c.lineTo(cx, cy - 68); c.stroke();
+    c.font = '15px sans-serif'; c.textAlign = 'left'; c.fillText(W.byA3[city.a3].flag, cx + 1, cy - 58);
+    return [cx, cy - 68];
+  }
+  function mosque(c, s) {
+    const L = layout.landmark, wall = (s && s.c && s.c[0]) || '#e8e2d2', dome = (s && s.c && s.c[1]) || '#c9a86a';
+    box(c, L.x + 0.6, L.y + 0.8, L.x + 2.4, L.y + 2.2, 22, wall);
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5);
+    c.fillStyle = dome; c.beginPath(); c.arc(cx, cy - 22, 16, Math.PI, 0); c.fill();
+    c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, cy - 40, 2.5, 0, 7); c.fill();
+    [-1, 1].forEach(sgn => { const mx = cx + sgn * 30; c.fillStyle = wall; c.fillRect(mx - 2, cy - 66, 4, 66); poly(c, [[mx - 4, cy - 66], [mx + 4, cy - 66], [mx, cy - 76]], dome); });
+    return [cx, cy - 76];
+  }
+  function castle(c, s) {
+    const L = layout.landmark, wall = (s && s.c && s.c[0]) || '#c9b49a', roof = (s && s.c && s.c[1]) || '#7a5a3c';
+    const g = box(c, L.x + 0.7, L.y + 0.9, L.x + 2.3, L.y + 2.1, 30, wall);
+    [-1, 1].forEach(sgn => {
+      const tx = L.x + 1.5 + sgn * 0.8, ty = L.y + 1.5, tc = P(tx, ty);
+      box(c, tx - 0.3, ty - 0.3, tx + 0.3, ty + 0.3, 48, wall);
+      poly(c, [[tc[0] - 12, tc[1] - 48], [tc[0] + 12, tc[1] - 48], [tc[0], tc[1] - 62]], roof);
+    });
+    for (let i = 0; i < 5; i++) { const p = lerp(g.D, g.C, 0.12 + i * 0.19); c.fillStyle = wall; c.fillRect(p[0] - 3, p[1] - 36, 6, 6); }
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5); return [cx, cy - 62];
+  }
+  function sphereTower(c, s) {
+    const L = layout.landmark, tower = (s && s.c && s.c[0]) || '#c9d6e2', sphere = (s && s.c && s.c[1]) || '#e8eaee';
+    box(c, L.x + 1.2, L.y + 1.2, L.x + 1.8, L.y + 1.8, 110, tower);
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5);
+    c.fillStyle = sphere; c.beginPath(); c.arc(cx, cy - 128, 18, 0, 7); c.fill();
+    c.strokeStyle = tower; c.lineWidth = 2; c.beginPath(); c.moveTo(cx, cy - 110); c.lineTo(cx, cy - 148); c.stroke();
+    return [cx, cy - 148];
+  }
+  function tower(c, s) {
+    const L = layout.landmark, glass = (s && s.c && s.c[0]) || '#5f6e7e';
+    const g = box(c, L.x + 0.9, L.y + 0.9, L.x + 2.1, L.y + 2.1, 150, glass);
+    faceGrid(c, g.D, g.C, 150, 10, 4, 'rgba(255,255,255,0.18)');
+    const [cx, cy] = P(L.x + 1.5, L.y + 1.5);
+    c.strokeStyle = glass; c.lineWidth = 2; c.beginPath(); c.moveTo(cx, cy - 150); c.lineTo(cx, cy - 175); c.stroke();
+    c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, cy - 177, 2.5, 0, 7); c.fill();
+    return [cx, cy - 180];
+  }
+  // The Kremlin as it really stands: a long red-brick crenellated wall,
+  // the gold domes of its cathedrals behind it, and its towers with
+  // green spires — the middle one the Spasskaya clock tower.
+  function kremlin(c, s) {
+    const L = layout.landmark, wall = (s && s.c && s.c[0]) || '#a63a2e', roof = (s && s.c && s.c[1]) || '#3a5a40';
+    const g = box(c, L.x + 0.3, L.y + 0.9, L.x + 2.7, L.y + 2.1, 14, wall);
+    [0.3, 0.5, 0.7].forEach(f => { const p = lerp(g.D, g.C, f); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(p[0], p[1] - 26, 7, Math.PI, 0); c.fill(); });
+    for (let i = 0; i < 9; i++) { const p = lerp(g.D, g.C, 0.08 + i * 0.105); c.fillStyle = wall; c.fillRect(p[0] - 3, p[1] - 20, 6, 6); }
+    [[0.18, 40, false], [0.5, 58, true], [0.82, 40, false]].forEach(([f, h, clock]) => {
+      const p = lerp(g.D, g.C, f);
+      c.fillStyle = wall; c.fillRect(p[0] - 7, p[1] - h, 14, h);
+      poly(c, [[p[0] - 9, p[1] - h], [p[0] + 9, p[1] - h], [p[0], p[1] - h - 16]], roof);
+      if (clock) {
+        c.fillStyle = '#fdf6e3'; c.beginPath(); c.arc(p[0], p[1] - h + 12, 6, 0, 7); c.fill();
+        c.strokeStyle = '#333'; c.lineWidth = 1; c.beginPath(); c.arc(p[0], p[1] - h + 12, 6, 0, 7); c.stroke();
+        c.fillStyle = '#e5484d'; c.beginPath(); c.arc(p[0], p[1] - h - 18, 2.5, 0, 7); c.fill();
+      }
+    });
+    const mid = lerp(g.D, g.C, 0.5); return [mid[0], mid[1] - 76];
+  }
+  const LANDMARK_DRAW = {
+    dome: capitol, clock: clockTower, arena: arena, pagoda: pagoda, onion: onionDomes,
+    pyramid: pyramid, obelisk: obelisk, lighthouse: lighthouse, cathedral: cathedral,
+    temple: temple, palace: palace, mosque: mosque, castle: castle, sphere: sphereTower,
+    tower: tower, kremlin: kremlin,
+    lattice: (c, s) => latticeTower(c, (s && s.c && s.c[0]) || '#7a5a3c', (s && s.h) || 180, (s && s.c && s.c[1]) || '#5f6e7e'),
+    gate: (c, s) => gate(c, (s && s.c && s.c[0]) || '#c9b49a'),
+  };
   function landmark(c) {
     const n = city.name;
+    // Capitals use their real landmark from landmarks.js, drawn in
+    // their own colours — never the generic hash pick.
+    if (typeof isGovCity === 'function' && isGovCity(city) && typeof CAPITAL_LANDMARKS !== 'undefined' && CAPITAL_LANDMARKS[city.a3]) {
+      const e = CAPITAL_LANDMARKS[city.a3];
+      landmarkName = e.n; landmarkEmoji = e.e || '';
+      return (LANDMARK_DRAW[e.t] || obelisk)(c, e);
+    }
+    landmarkEmoji = '';
     if (n === 'Paris') { landmarkName = 'Iron Tower'; return latticeTower(c, '#7a5a3c', 190, '#5f6e7e'); }
     if (n === 'Tokyo') { landmarkName = 'Red Tower'; return latticeTower(c, '#d23c2e', 170, '#f2f2f2'); }
     if (n === 'London') { landmarkName = 'Clock Tower'; return clockTower(c); }
@@ -367,7 +481,7 @@ const CityView = (() => {
     if (n === 'Washington, D.C.') { landmarkName = 'Capitol'; return capitol(c); }
     if (n === 'Rome') { landmarkName = 'Grand Arena'; return arena(c); }
     if (n === 'Beijing') { landmarkName = 'Pagoda Tower'; return pagoda(c); }
-    if (n === 'Moscow') { landmarkName = 'Onion Domes'; return onionDomes(c); }
+    if (n === 'Moscow') { landmarkName = 'Moscow Kremlin'; return kremlin(c); }
     if (n === 'Cairo') { landmarkName = 'Great Pyramid'; return pyramid(c); }
     if (n === 'Berlin') { landmarkName = 'Victory Gate'; return gate(c, '#c9b49a'); }
     if (n === 'Athens') { landmarkName = 'Temple'; return gate(c, '#e8e2d2'); }
@@ -376,17 +490,18 @@ const CityView = (() => {
     const [nm, fn] = picks[hashStr('lm:' + n) % picks.length]; landmarkName = nm; return fn(c);
   }
 
-  function capitol(c) {
+  function capitol(c, s) {
     const L = layout.landmark, x0 = L.x + 0.35, y0 = L.y + 0.75, x1 = L.x + 2.65, y1 = L.y + 2.25;
+    const wall = (s && s.c && s.c[0]) || '#f1ece2', domeHi = (s && s.c && s.c[1]) || '#f6f1e4', domeLo = (s && s.c && s.c[2]) || '#b9b0a0';
     shadowOf(c, x0, y0, x1, y1, 40);
-    const g = box(c, x0, y0, x1, y1, 26, '#f1ece2');
+    const g = box(c, x0, y0, x1, y1, 26, wall);
     [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < 14; i++) { const p = lerp(a, b, (i + 0.5) / 14); c.fillStyle = 'rgba(160,150,135,0.55)'; c.fillRect(p[0] - 0.8, p[1] - 22, 1.6, 18); } });
     const pc = lerp(g.D, g.C, 0.5); poly(c, [[pc[0] - 22, pc[1] - 26 + 11], [pc[0] + 22, pc[1] - 26 + 11 + 0], [pc[0], pc[1] - 26 - 4]], '#e6dfd0');
     const [cx, cy] = P((x0 + x1) / 2, (y0 + y1) / 2);
     const top = cy - 26;
     c.fillStyle = '#e9e3d6'; c.fillRect(cx - 18, top - 16, 36, 16); // drum
     c.fillStyle = 'rgba(150,140,125,0.6)'; for (let i = 0; i < 8; i++) c.fillRect(cx - 16 + i * 4.4, top - 14, 1.4, 12);
-    const grd = c.createRadialGradient(cx - 6, top - 28, 2, cx, top - 16, 22); grd.addColorStop(0, '#f6f1e4'); grd.addColorStop(1, '#b9b0a0');
+    const grd = c.createRadialGradient(cx - 6, top - 28, 2, cx, top - 16, 22); grd.addColorStop(0, domeHi); grd.addColorStop(1, domeLo);
     c.fillStyle = grd; c.beginPath(); c.ellipse(cx, top - 16, 18, 20, 0, Math.PI, 0); c.fill();
     c.fillStyle = '#e3dccd'; c.fillRect(cx - 3, top - 44, 6, 8); c.beginPath(); c.arc(cx, top - 45, 3.5, Math.PI, 0); c.fill();
     c.strokeStyle = '#555'; c.lineWidth = 1; c.beginPath(); c.moveTo(cx, top - 48); c.lineTo(cx, top - 70); c.stroke();
@@ -597,7 +712,7 @@ const CityView = (() => {
     // be a plain div with no click handler, so the capital inside a
     // city view could not be pressed at all. It is a button like every
     // other pin now, and tapping it opens the capital (see onPin).
-    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('button'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.title = landmarkName; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} ${landmarkName}</span>`; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'landmark', city }); }); layer.appendChild(p); }
+    if (roofs.capitol && filter === 'all') { const r = roofs.capitol; const p = document.createElement('button'); p.className = 'pin pin-landmark'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.title = landmarkName; p.innerHTML = `<span class="lm">${W.byA3[city.a3].flag} ${landmarkEmoji ? landmarkEmoji + ' ' : ''}${landmarkName}</span>`; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'landmark', city }); }); layer.appendChild(p); }
     if (roofs.stadium && roofs.stadiumTeam) { const r = roofs.stadium, tm = roofs.stadiumTeam; const p = document.createElement('button'); p.className = 'pin pin-stadium'; p.style.left = r[0] + 'px'; p.style.top = r[1] + 'px'; p.innerHTML = '<span class="logo">🏟️</span>'; p.title = tm.name; p.addEventListener('click', e => { e.stopPropagation(); onPin({ type: 'stadium', team: tm }); }); layer.appendChild(p); }
   }
 
