@@ -157,6 +157,34 @@ function ownCoastWater(a3, lon, lat, maxR) {
   }
   return null;
 }
+// Nearest land cell to a lon/lat, and the land cell that touches a given
+// water cell for this country. These were called by facilitiesFor but
+// were missing, which threw in buildUnits and killed the map frame loop.
+function nearestLandCell(lon, lat) {
+  const G = W.ww, x0 = Math.floor((lon + 180) / 2), y0 = Math.floor((90 - lat) / 2);
+  for (let r = 0; r < 25; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const X = (x0 + dx + G) % G, Y = y0 + dy; if (Y < 0 || Y >= W.wh) continue;
+    const c = Y * G + X; if (!W.water[c]) return c;
+  }
+  return null;
+}
+function coastCell(a3, waterCell, cap) {
+  const k = W.byA3[a3]; const G = W.ww, x = waterCell % G, y = (waterCell / G) | 0;
+  if (k && k.path && typeof document !== 'undefined') {
+    if (!FAC_CTX) { try { FAC_CTX = document.createElement('canvas').getContext('2d'); } catch (e) {} }
+    if (FAC_CTX && typeof FAC_CTX.isPointInPath === 'function') {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = x + dx, ny = y + dy; if (nx < 0 || nx >= G || ny < 0 || ny >= W.wh) continue;
+        const c = ny * G + nx; if (W.water[c]) continue;
+        const [mx, my] = cellXY(W, c);
+        try { if (FAC_CTX.isPointInPath(k.path, mx, my)) return c; } catch (e) {}
+      }
+    }
+  }
+  return cap ? nearestLandCell(cap.lon, cap.lat) : null;
+}
 let FAC_CACHE = {};
 function facilitiesFor(a3) {
   if (typeof W === 'undefined' || !W || !W.byA3[a3]) return null;

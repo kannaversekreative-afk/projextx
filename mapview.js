@@ -513,14 +513,16 @@ const MapView = (() => {
     const from = { ...v }, ts = Math.max(Math.max(vw / MAP_W, vh / MAP_H), s || v.s), tx = vw / 2 - x * ts, ty = vh / 2 - y * ts, t0 = performance.now();
     anim = now => { const f = Math.min(1, (now - t0) / 650), e = 1 - Math.pow(1 - f, 3); v.s = from.s + (ts - from.s) * e; v.x = from.x + (tx - from.x) * e; v.y = from.y + (ty - from.y) * e; clampView(); dirty = true; if (f >= 1) anim = null; };
   }
-  let last = performance.now();
-  function frame(now) {
+  let last = performance.now(); let frameCount = 0;
+  function frame(now) { frameCount++;
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (anim) anim(now);
     const st = S_();
-    if (st && !pickMode) step(dt * (st.speed === 0 ? 0 : st.speed === 3 ? 2.5 : st.speed));
-    if (dirty) { drawBase(); dirty = false; }
-    drawTop(now);
+    // Never let one bad step kill the whole frame loop: that froze the
+    // map at world view after a game started, because step() threw.
+    try { if (st && !pickMode) step(dt * (st.speed === 0 ? 0 : st.speed === 3 ? 2.5 : st.speed)); } catch (e) { console.error('map step failed', e); }
+    try { if (dirty) { drawBase(); dirty = false; } } catch (e) { console.error('map draw failed', e); dirty = false; }
+    try { drawTop(now); } catch (e) { console.error('map top draw failed', e); }
     handlers.frame && handlers.frame(now);
     requestAnimationFrame(frame);
   }
@@ -533,6 +535,8 @@ const MapView = (() => {
     setPick(on, a3) { pickMode = on; hoverCountry = a3 || null; dirty = true; },
     reset() { builtFor = null; dirty = true; },
     redraw() { dirty = true; },
+    frameCount() { return frameCount; },
+    drawNow() { drawBase(); dirty = false; },
     flyToCity(id, s) { const c = W.cities[id]; flyTo(c.x, c.y, s || Math.max(v.s, 2.4)); },
     flyToCountry(a3) { const k = W.byA3[a3]; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; flyTo(cx, cy, Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4))))); },
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
