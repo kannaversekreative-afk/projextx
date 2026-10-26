@@ -1204,6 +1204,7 @@ PANELS.country = () => {
     `<div class="country-hero"><div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(cname(S.home))}</h2><div class="muted-light">Based in ${cap ? esc(cap.name) : ''} · Balance ${fmtMoney(S.cash, true)}</div></div></div>
     <div class="stats4"><div><span>Businesses</span><b>${biz.length}</b></div><div><span>Placed</span><b>${(S.placed || []).length}</b></div><div><span>Rating</span><b>★ ${avgRating.toFixed(1)}</b></div><div><span>GDP rank</span><b>#${gdpRank}</b></div></div></div>
     <div class="row wrap" style="margin-top:12px"><span class="chip">Corporate tax ${Math.round(cs.tax * 100)}%</span><span class="chip">Stability ${Math.round(cs.stab)}/100</span><span class="chip">Population ${fmtPop(nationPop())}</span><span class="chip">Level ${level()}</span></div>
+    <div class="row" style="margin-top:12px"><button class="btn flex" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn flex" data-a="panel" data-x="leader">LEADER</button><button class="btn flex" data-a="panel" data-x="military">MILITARY</button></div>
     <div class="card in"><h4>🧭 Advisor — best next decision</h4><p><b>${adv.title}</b></p><p class="muted small">${adv.body}</p><button class="btn3d orange wide" data-a="${adv.a}" data-x="${adv.x}">${adv.btn}</button></div>
     <h4>Country rankings</h4><div class="card in"><p class="muted small">By GDP, against every country in the world.</p>
     ${top3.map((c, i) => `<div class="kv"><span>#${i + 1} ${c.flag} ${esc(c.name)}</span><b>${fmtMoney(c.gdp0 * 1e6, true)}</b></div>`).join('')}
@@ -1213,8 +1214,7 @@ PANELS.country = () => {
     <h4>Ratings</h4><div class="card in"><p class="muted small">You are at ★ ${avgRating.toFixed(1)} on average across your country's businesses.</p>
     ${biz.map(b => `<div class="kv"><span>${(SECTORS[b.sector] && SECTORS[b.sector].icon) || '🏢'} ${esc(b.name)}</span><b>★ ${(b.rating || 0).toFixed(1)}</b></div>`).join('')}
     ${S.rating ? `<div class="kv"><span>Your personal rating</span><b>★ ${S.rating.toFixed(1)}</b></div>` : ''}</div>
-    <h4>History</h4><div class="card in">${hist.map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No history yet — play a week and it lands here.</p>'}</div>
-    <div class="row"><button class="btn flex" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn flex" data-a="panel" data-x="leader">LEADER</button><button class="btn flex" data-a="panel" data-x="military">MILITARY</button></div>`);
+    <h4>History</h4><div class="card in">${hist.map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No history yet — play a week and it lands here.</p>'}</div>`);
 };
 PANELS.nation = () => {
   const cs = country(S.home), k = W.byA3[S.home];
@@ -1720,7 +1720,7 @@ function openDeparturesModal() {
   UI.depCont = sel;
   const dests = W.playable.filter(k => k.capital !== from.id).map(k => {
     const ct = W.cities[k.capital];
-    return { ct, k, km: airportDistanceKm(from.id, ct.id), grp: depContGroup(k.cont) };
+    return { ct, k, km: airportDistanceKm(from, ct), grp: depContGroup(k.cont) };
   }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km).slice(0, 40);
   openModal(`<div class="dep-head"><h2>${esc(from.name)} Airport</h2><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
   <p class="muted">Welcome to ${esc(from.name)} Airport. Tap a destination below to catch a flight.</p>
