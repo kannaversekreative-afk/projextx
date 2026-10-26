@@ -36,7 +36,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 // ---------- new game ----------
 function newGame(opt) {
   const s = {
-    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
+    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
@@ -46,7 +46,7 @@ function newGame(opt) {
     maxDays: NORMAL_DAYS, yearsBought: 0, yearReport: null, homeTaxPrev: null,
     nh: { d: [], w: [], m: [] }, watch: [], stats: { trades: 0, bestWeek: 0, startNet: 0, takeovers: 0, ipos: 0, wars: 0 },
     career: 0, goalsDone: [], daily: { streak: 0, last: null }, shop: {}, tutorial: 0, notified: 0,
-    settings: { vol: 0.5, ui: 0.8, motion: true }, over: null, week: { profit: 0 },
+    settings: { vol: 0.5, ui: 0.8, motion: true, minigames: true, battleSize: '6x6' }, over: null, week: { profit: 0 },
   };
   S = s;
   W.lotCache = {};

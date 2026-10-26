@@ -98,11 +98,15 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 #panel { position: fixed; z-index: 8; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(500px, calc(100vw - 24px)); background: #fff; border-radius: 26px; box-shadow: var(--shadow); display: none; flex-direction: column; overflow: hidden; }
 #panel.open { display: flex; animation: slidein .18s ease-out; }
 @keyframes slidein { from { transform: translateX(30px); opacity: 0; } }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 14px 12px 16px; border-bottom: 1.5px solid var(--line); }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 14px 12px 16px; border-bottom: 1.5px solid var(--line); flex: none; }
 .panel-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pback { width: 36px; height: 36px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; flex: none; }
 .pback svg { width: 20px; height: 20px; }
-.panel-body { flex: 1; overflow-y: auto; padding: 14px 16px 24px; background: #f2f8ff; overscroll-behavior: contain; }
+/* Scrolling: .panel-body is a flex child, so it needs min-height: 0
+   or it refuses to shrink below its content and the panel just clips
+   the bottom instead of scrolling. touch-action: pan-y + momentum
+   scrolling make it work with a finger and with a wheel, everywhere. */
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 14px 16px 24px; background: #f2f8ff; overscroll-behavior: contain; }
 .card.in { box-shadow: none; border: 1.5px solid var(--line); border-radius: 20px; padding: 14px 16px; margin-bottom: 12px; display: block; width: 100%; text-align: left; }
 .seg { display: flex; background: var(--soft); border-radius: 12px; padding: 3px; margin: 8px 0; }
 .seg button { flex: 1; padding: 7px 0; border-radius: 9px; color: var(--muted); font-weight: 900; font-size: 13px; }
@@ -146,22 +150,17 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .urlbar { display: flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 14px; padding: 8px 12px; }
 .urlbar .url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
 .web-hero { border-radius: 16px; padding: 18px; color: #fff; display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-/* Web home grid: dark background, white boxes/text/borders only. */
-#panel.web-dark { background: #111827; }
-#panel.web-dark .panel-head { background: #111827; }
-#panel.web-dark .panel-head h3 { color: #fff; }
-#panel.web-dark .panel-head .muted { color: #d1d5db; }
-#panel.web-dark .panel-body { background: #111827; }
+/* Web home grid: white boxes, blue accents, dark text — the light theme. */
 .webhome { display: flex; flex-direction: column; gap: 14px; }
-.webleave { align-self: flex-start; color: #fff; font-weight: 900; font-size: 14px; padding: 8px 12px; border: 1.5px solid #fff; border-radius: 999px; background: transparent; }
+.webleave { align-self: flex-start; color: var(--blue); font-weight: 900; font-size: 14px; padding: 8px 12px; border: 1.5px solid var(--blue); border-radius: 999px; background: #fff; }
 .webgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.webbox { display: flex; align-items: flex-start; gap: 10px; text-align: left; color: #fff; background: #1f2937; border: 1.5px solid #fff; border-radius: 16px; padding: 14px 12px; min-width: 0; }
+.webbox { display: flex; align-items: flex-start; gap: 10px; text-align: left; color: var(--ink); background: #fff; border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px 12px; min-width: 0; }
 .webbox-ic { font-size: 26px; flex: none; line-height: 1; }
 .webbox-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .webbox-txt b { font-size: 16px; font-weight: 900; }
-.webbox-txt span { font-size: 13px; color: #d1d5db; }
-.webbadge { margin-left: auto; flex: none; background: #fff; color: #111827; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 900; }
-.webhome-note { color: #d1d5db; font-size: 13px; margin: 0; }
+.webbox-txt span { font-size: 13px; color: var(--muted); }
+.webbadge { margin-left: auto; flex: none; background: var(--blue); color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 900; }
+.webhome-note { color: var(--muted); font-size: 13px; margin: 0; }
 .web-hero b { font-size: 22px; } .web-hero span { opacity: 0.9; font-size: 14px; }
 .sponsored { border-color: var(--gold) !important; }
 
@@ -202,9 +201,9 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 
 /* modals, toasts */
 #modal { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
-.scrim { position: absolute; inset: 0; background: rgba(5,10,25,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; pointer-events: auto; }
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(5,10,25,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; pointer-events: auto; }
 .scrim.sheet { align-items: flex-end; }
-.mbox { background: #fff; border-radius: 26px; padding: 24px; width: min(480px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; position: relative; box-shadow: var(--shadow); animation: pop .18s ease-out; }
+.mbox { background: #fff; border-radius: 26px; padding: 24px; width: min(480px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; position: relative; box-shadow: var(--shadow); animation: pop .18s ease-out; }
 .mbox.sheet { width: min(560px, 100%); max-height: 86vh; }
 .mbox > h2 { padding-right: 46px; }
 .mbox .mclose { position: absolute; right: 16px; top: 16px; }
@@ -236,7 +235,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .vprog-icon { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 22px; }
 .btn3d.blue { background: #2f7cf6; box-shadow: 0 4px 0 #1d5bbf; }
 /* Watch view: full-screen flight / voyage view */
-#watch { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; background: #eaf2ff; }
+#watch { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; background: #eaf2ff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #watch.open { display: flex; }
 .watch-top { display: flex; align-items: center; gap: 12px; padding: calc(max(12px, env(safe-area-inset-top)) + 4px) 16px 12px; background: #2f7cf6; color: #fff; }
 .wback { width: 42px; height: 42px; flex: none; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: #fff; border: 0; display: flex; align-items: center; justify-content: center; }
@@ -268,7 +267,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
    proportions as a printed page, with a nameplate, ears, banner, deck,
    byline, dateline, a full-width cut with caption and credit, columns,
    an index, and a folio line — like a real front page. */
-#paper { position: fixed; inset: 0; z-index: 101; display: none; flex-direction: column; background: #eaf2ff; color: #1a1a1a; overflow-y: auto; }
+#paper { position: fixed; inset: 0; z-index: 101; display: none; flex-direction: column; background: #eaf2ff; color: #1a1a1a; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #paper.open { display: flex; }
 .paper-closebar { display: flex; justify-content: flex-end; padding: calc(max(12px, env(safe-area-inset-top)) + 4px) 16px 0; max-width: 720px; width: 100%; margin: 0 auto; }
 .paper-closebtn { background: #f8f1dc; color: #1a1a1a; border: 2px solid #f8f1dc; border-radius: 20px; padding: 8px 14px; font-weight: 900; font-size: 13px; letter-spacing: 1px; }
@@ -326,7 +325,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .paper-flip .btn, .pedition .btn { border: 2px solid #f8f1dc; background: #f8f1dc; color: #1a1a1a; font-family: Georgia, serif; font-weight: 900; letter-spacing: 1px; }
 .paper-flip .ppage, .pedition .ppage { color: #f8f1dc; }
 .ppage { font-weight: 900; font-size: 13px; letter-spacing: 1px; }
-.paper-return { max-width: 720px; margin: 0 auto max(16px, env(safe-area-inset-bottom)); border: 2px solid #f8f1dc !important; background: #1a1a1a !important; color: #f8f1dc !important; font-family: Georgia, serif; letter-spacing: 1px; }
+.paper-return { max-width: 720px; margin: 0 auto max(16px, env(safe-area-inset-bottom)); border: 2px solid #2f7cf6 !important; background: #2f7cf6 !important; color: #fff !important; font-family: Georgia, serif; letter-spacing: 1px; }
 
 body.in-city #hud { display: none; }
 @media (max-width: 760px) {
@@ -349,24 +348,24 @@ body.in-city #hud { display: none; }
 @media (prefers-reduced-motion: reduce) { #panel.open, .mbox, .toast { animation: none; } }
 
 /* New HUD, from the reference design (layout only, original art):
-   dark pills top-left and top-right, small dark buttons bottom-left
+   white pills top-left and top-right, small white buttons bottom-left
    and bottom-right, and a city pill centred at the bottom. No Go home
    button, no bottom bar. */
-.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
+.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
 .hud-tl { left: max(12px, env(safe-area-inset-left)); text-align: left; }
 .hud-flag { font-size: 26px; line-height: 1; }
 .hud-tl-text { display: flex; flex-direction: column; line-height: 1.2; }
 .hud-tl-text b { font-size: 15px; }
-.hud-tl-text small { font-size: 14px; color: #cfe0ff; font-weight: 700; }
+.hud-tl-text small { font-size: 14px; color: var(--muted); font-weight: 700; }
 .hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; }
 /* Bell lives at the top of the More menu, not on the home HUD. */
-.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
+.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }
 .hud-br { right: max(12px, env(safe-area-inset-right)); }
-.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: rgba(20, 30, 50, 0.78); color: #fff; border: 0; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
+.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.92); color: var(--ink); border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
 .hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
-/* Departures board modal: dark, like a departures board, not a white card. */
-.mbox.dep { background: #0f172a; color: #fff; width: min(640px, 100%); }
+/* Departures board modal: white card, blue accents, dark text. */
+.mbox.dep { background: #fff; color: var(--ink); width: min(640px, 100%); }
 /* Menu popup (centred, not a side bar): header + grouped cards. */
 .mbox.menu { width: min(560px, 100%); max-height: 86vh; padding: 0; background: #eef2f7; overflow-y: auto; }
 .menu-pop-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; background: #fff; border-bottom: 1.5px solid var(--line); position: sticky; top: 0; z-index: 1; }
@@ -398,25 +397,28 @@ body.in-city #hud { display: none; }
 .country-hero .stats4 > div { display: flex; flex-direction: column; }
 .country-hero .stats4 span { font-size: 12px; color: rgba(255,255,255,0.8); font-weight: 700; }
 .country-hero .stats4 b { font-size: 16px; }
-.mbox.dep .muted { color: #94a3b8; }
-.mbox.dep .btn { background: #1e293b; color: #fff; border-color: #334155; }
-.mbox.dep .btn.primary { background: #2f7cf6; border-color: #2f7cf6; }
+.mbox.dep .muted { color: var(--muted); }
+.mbox.dep .btn { background: var(--soft); color: var(--ink); border-color: var(--line); }
+.mbox.dep .btn.primary { background: #2f7cf6; border-color: #2f7cf6; color: #fff; }
 .dep-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .dep-head h2 { margin: 0; }
-.dep-board { margin-top: 14px; border-top: 1px solid #334155; }
-.dep-row { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #1e293b; color: #fff; padding: 12px 4px; font-size: 15px; font-weight: 700; }
-.dep-row span:last-child { color: #cfe0ff; white-space: nowrap; }
-.dep-headrow { font-size: 13px; color: #94a3b8; font-weight: 800; cursor: default; }
+.dep-board { margin-top: 14px; border-top: 1px solid var(--line); }
+.dep-row { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); padding: 12px 4px; font-size: 15px; font-weight: 700; }
+.dep-row span:last-child { color: var(--blue); white-space: nowrap; }
+.dep-headrow { font-size: 13px; color: var(--muted); font-weight: 800; cursor: default; }
 /* Hamburger drawer list: rows with the icon on the left of the label,
    in a right-side panel that scrolls. */
 .menu-list { display: flex; flex-direction: column; gap: 2px; }
 .menu-list .srow { width: 100%; text-align: left; }
-   90 degrees and shown landscape, exactly like web. The whole game
-   lives in #game, so rotating that one box rotates map, HUD, panels
-   and city view together. Only portrait phones get this — a phone
-   already held sideways, a tablet and a desktop are untouched, because
-   they are already horizontal. Phone panels stay full-width sheets
-   (see the override below), not the web side sheet on the right. */
+   90 degrees and shown landscape, exactly like web. Only the game
+   itself lives in #game, so rotating that one box rotates map, HUD
+   and city view together. Panels, modals, paper, watch and the intro
+   live OUTSIDE #game (see index.html) on purpose: a rotated ancestor
+   would rotate their scroll axes too, and no page would scroll.
+   Only portrait phones get this — a phone already held sideways, a
+   tablet and a desktop are untouched, because they are already
+   horizontal. Phone panels stay full-width sheets (see the override
+   below), not the web side sheet on the right. */
 body.landscape-phone #game { position: fixed; width: 100dvh; height: 100dvw; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg); overflow: hidden; }
 body.landscape-phone #panel { left: auto; right: 12px; top: 12px; bottom: 12px; width: min(420px, 52%); max-height: none; }
 body.landscape-phone .popup { top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100% - 120px); }
@@ -443,10 +445,12 @@ body.landscape-phone .company-card { max-width: calc(100% - 130px); }
 .intro-mode .later { display: inline-block; margin-top: 10px; font-size: 11px; font-weight: 900; letter-spacing: 1px; color: #f5b301; }
 .intro-step { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(480px, 90vw); }
 .intro-step .inherit-line { font-size: 22px; font-weight: 900; color: #fff; }
-@media (prefers-color-scheme: dark) { html, body { background: #eaf2ff; color: var(--ink); } .card, #panel, .bottombar, .company-card, .popup, .citybar, .tut, .mbox { background: #fff !important; color: var(--ink) !important; } input, select, textarea { background: #fff !important; color: var(--ink) !important; } }
-/* Web home stays dark even on dark-mode devices (overrides the forced-white rule above). */
-@media (prefers-color-scheme: dark) {
-  #panel.web-dark, #panel.web-dark .panel-head, #panel.web-dark .panel-body { background: #111827 !important; }
-  #panel.web-dark .panel-head h3 { color: #fff !important; }
-  #panel.web-dark .panel-head .muted { color: #d1d5db !important; }
-}
+/* Battle grid mini-game: blue = you, red = enemy, white tiles carry the numbers. */
+.mgrid { display: grid; gap: 4px; margin: 10px 0; }
+.mtile { aspect-ratio: 1; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; color: var(--muted); display: grid; place-items: center; font-size: 18px; min-width: 0; }
+.mtile.placed { background: #eef5ff; border-color: var(--blue); color: var(--ink); }
+.btile { aspect-ratio: 1; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 13px; min-width: 0; }
+.btile.player { background: #dbeafe; border-color: var(--blue); }
+.btile.enemy { background: #fee2e2; border-color: #e5484d; }
+.btile.sel { outline: 3px solid var(--blue); outline-offset: 1px; }
+.btile b { font-size: 14px; }

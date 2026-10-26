@@ -223,13 +223,13 @@ function openPanel(name, args) {
   UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
-function closePanel() { UI.panel = null; UI.stack = []; $('panel').classList.remove('open'); renderHUD(); }
+function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; $('panel').classList.remove('open'); renderHUD(); }
 function panelShell(title, sub, body) {
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
 }
 function renderPanel() {
-  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); $('panel').classList.remove('web-dark'); return; }
+  if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); return; }
   const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
   if (UI.panel === 'stock' && !cur) { UI.panel = 'markets'; UI.stack = []; }
   let html = '';
@@ -243,7 +243,6 @@ function renderPanel() {
     html = '<div class="card in"><h3>That screen hit a problem</h3><p class="muted small">Please reload the game and try again. If it keeps happening, this is the error:</p><p class="muted small">' + esc(String(e && e.message || e)) + '</p><button class="btn3d orange wide" data-a="closePanel">CLOSE</button></div>';
   }
   $('panel').innerHTML = html; $('panel').classList.add('open');
-  $('panel').classList.toggle('web-dark', UI.panel === 'web' && (UI.web.view === 'home' || !UI.web.view));
 }
 
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
@@ -476,7 +475,7 @@ function playerSnapshot() {
     const holdings = Object.entries(S.holdings || {}).filter(([, h]) => h.qty > 0 && S.co[h.a3 || '']).map(([a3, h]) => ({ name: S.co[a3] ? S.co[a3].name : a3, sym: S.co[a3] ? S.co[a3].sym : a3, qty: h.qty })).slice(0, 8);
     const projects = (cs.proj || []).filter(p => p.until > S.day).map(p => { const d = (typeof PROJECTS !== 'undefined' ? PROJECTS : []).find(x => x.id === p.id); return d ? d.name : p.id; });
     const mil = cs.milLv ? Object.entries(cs.milLv).map(([b, lv]) => ({ b: (typeof MILITARY !== 'undefined' && MILITARY[b]) ? MILITARY[b].name : b, lv })) : [];
-    const warsHome = (S.wars || []).filter(w => w.a === S.home || w.b === S.home).map(w => `${cname(w.a === S.home ? w.b : w.a)} (front ${Math.round(w.front)}%)`);
+    const warsHome = (S.wars || []).filter(w => w.a === S.home || w.b === S.home).map(w => `${cname(w.a === S.home ? w.b : w.a)} (ongoing, front ${Math.round(w.front)}%)`);
     return {
       netWorth: nw, yearAgo, cash: S.cash, loan: S.loan || 0, holdingsValue: holdingsValue(), propValue: propValue(),
       xp: S.xp || 0, level: (typeof level === 'function' ? level() : 1), career: (typeof careerName === 'function' ? careerName() : ''), goalsDone: (S.goalsDone || []).length,
@@ -722,17 +721,28 @@ function showInherit() {
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); UI.introMode = null;
   $('inherit').innerHTML = `<h1>WORL</h1>
     <div class="intro-modes">
-      <button class="intro-mode" data-a="introMode" data-x="world"><b>World</b><span>Offline. The mode we are working on now. Lead a real country as it is today.</span></button>
-      <button class="intro-mode" data-a="introMode" data-x="worl"><b>Worl Mode</b><span>Random situations, events, a shuffled world and rival leaders. Every run is different. Vs CPU rivals.</span></button>
-      <button class="intro-mode" data-a="introMode" data-x="domination"><b>Domination</b><span>20 players, capture and hold. First to 1000 points, 10 lands, or last standing wins.</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="offline"><b>Offline</b><span>Play on your own. World — the real world as it is today — or Random World, a shuffled world with random economies and companies.</span></button>
+      <button class="intro-mode" data-a="introMode" data-x="online"><b>Online</b><span>Same two worlds, but against real players. PvP comes later — it is not built yet.</span></button>
     </div>
+    <button class="btn" data-a="introMode" data-x="minigames" style="margin-top:4px">🎮 Mini Games — no country needed</button>
     <div id="inheritStep" class="intro-step"></div>`;
   $('inherit').classList.add('open');
 }
 function renderInheritStep() {
   const step = document.getElementById('inheritStep'); if (!step) return;
   document.querySelectorAll('.intro-mode').forEach(b => b.classList.toggle('on', b.dataset.x === UI.introMode));
-  if (UI.introMode === 'world') {
+  if (UI.introMode === 'offline') {
+    step.innerHTML = `<div class="inherit-line">Offline</div>
+      <p style="color:#bbb;font-size:14px;font-weight:800">Play on your own, no other players.</p>
+      <button class="btn3d orange wide" data-a="introMode" data-x="world">🌍 WORLD — the real world as it is today</button>
+      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — shuffled economies, random companies</button>`;
+  } else if (UI.introMode === 'online') {
+    step.innerHTML = `<div class="inherit-line">Online</div>
+      <p style="color:#bbb;font-size:14px;font-weight:800">The same two worlds, against real players. PvP is coming later — it is not built yet, and nothing here pretends otherwise: there are no AI rivals dressed up as online players.</p>
+      <div class="card" style="background:#1a1a1a;color:#fff;text-align:left"><p><b>🌍 World PvP</b></p><p class="muted small" style="color:#bbb">Coming later.</p></div>
+      <div class="card" style="background:#1a1a1a;color:#fff;text-align:left"><p><b>🎲 Random World PvP</b></p><p class="muted small" style="color:#bbb">Coming later.</p></div>
+      <button class="btn wide" data-a="introMode" data-x="offline">← PLAY OFFLINE INSTEAD</button>`;
+  } else if (UI.introMode === 'world') {
     const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
     step.innerHTML = `<div class="inherit-line">You have inherited</div>
       <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
@@ -745,16 +755,22 @@ function renderInheritStep() {
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
     if (sel) sel.addEventListener('change', updateInheritInfo);
     updateInheritInfo();
-  } else if (UI.introMode === 'worl' || UI.introMode === 'domination') {
+  } else if (UI.introMode === 'minigames') {
+    step.innerHTML = `<div class="inherit-line">Mini Games</div>
+      <p style="color:#bbb;font-size:14px;font-weight:800">The battle grid, on its own. No country, no war, no consequences — just you against the enemy, round after round.</p>
+      <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Board — size and shape</label>
+      <select id="miniBoard" aria-label="Choose a battle board">${BATTLE_SIZE_OPTIONS.map(o => `<option value="${o.id}" ${o.id === '6x6' ? 'selected' : ''}>${o.label}${o.shape !== 'grid' ? ' · ' + o.shape : ''}</option>`).join('')}</select>
+      <p style="color:#bbb;font-size:14px;font-weight:800">Each side starts with 50 units in a corner. Every tile you own makes 1 unit per second. Wipe out the enemy's tiles to win.</p>
+      <button class="btn3d orange wide" data-a="minigamesPlay">▶ PLAY BATTLE GRID</button>`;
+  } else if (UI.introMode === 'random') {
     const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
-    const isWorl = UI.introMode === 'worl';
-    step.innerHTML = `<div class="inherit-line">You have inherited</div>
+    step.innerHTML = `<div class="inherit-line">You have inherited — Random World</div>
       <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
       <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
       <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
       <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
-      <p>${isWorl ? 'Worl Mode: random start, a shuffled world, a random goal, and a situation card every year. Rivals compete on the leaderboard.' : 'Domination: you plus 19 rival players. War cooldown is 1 year, not 10. Capture lands, earn points for every land you hold, first to 1000 points, 10 lands, or last standing wins. Your capital is protected.'}</p>
-      <div class="row"><button class="btn flex" data-a="introRandom">🎲 RANDOM COUNTRY</button><button class="btn3d orange flex" data-a="${isWorl ? 'worlContinue' : 'dominationContinue'}">START ${isWorl ? 'WORL MODE' : 'DOMINATION'}</button></div>`;
+      <p>Random World: a shuffled world, not a generated one. Your starting treasury, debt and stability are random, every country's GDP is shuffled, and every company and stock gets a random fictional name. The map, countries and cities stay real Earth — a brand-new random landmass would need a whole new map. No rivals, no win goal, no situation cards: an endless sandbox, like World.</p>
+      <div class="row"><button class="btn flex" data-a="introRandom">🎲 RANDOM COUNTRY</button><button class="btn3d orange flex" data-a="randomContinue">START RANDOM WORLD</button></div>`;
     const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
     if (sel) sel.addEventListener('change', updateInheritInfo);
@@ -1192,8 +1208,8 @@ function webSiteHTML(c) {
     <div class="kv"><span>Website rating</span><b>${(typeof siteRating === 'function' ? siteRating(c) : 0).toFixed(1)}★ · customers rate the site itself</b></div>${controlled(c.a3) ? `<button class="btn wide" data-a="siteMaker" data-x="${c.a3}">✏️ CUSTOMIZE WEBSITE</button>` : ''}
     <button class="btn wide" data-a="stock" data-x="${c.a3}">VIEW ${c.sym} STOCK</button>${admin}</div>`;
 }
-// Web home: a dark grid hub (dark background, white boxes/text/borders
-// only) that routes to Worl's own Web functions. Nothing from any other
+// Web home: a light grid hub (white boxes, blue accents, dark text)
+// that routes to Worl's own Web functions. Nothing from any other
 // game's labels is used here — every box opens a real Worl screen.
 function webHomeHTML() {
   const unread = (S.mail || []).filter(m => !m.read).length;
@@ -1298,7 +1314,7 @@ PANELS.nation = () => {
     <div class="kv"><span>Income tax</span><span><input type="range" min="0" max="40" step="1" value="${Math.round((cs.incTax || 0.20) * 100)}" data-in="taxInc" data-x=""> ${Math.round((cs.incTax || 0.20) * 100)}%</span></div>
     <div class="kv"><span>VAT (sales tax)</span><span><input type="range" min="0" max="20" step="1" value="${Math.round((cs.vat || 0.05) * 100)}" data-in="taxVat" data-x=""> ${Math.round((cs.vat || 0.05) * 100)}%</span></div>
     ${S.yearReport ? `<h4>Last year in review (${S.yearReport.year})</h4>${S.yearReport.entries.map(e => `<div class="kv"><span>${esc(e.name)} · ${e.old.toFixed(1)}★ → ${e.new.toFixed(1)}★</span><b>${esc(e.reasons.join(' '))}</b></div>`).join('')}<p class="muted small">${esc(S.yearReport.taxLines.join(' '))}</p>` : ''}
-    ${S.wars.length ? `<h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('')}<p class="muted small">No buying peace. Your own wars are decided the moment you submit an attack plan.</p>` : ''}
+    ${S.wars.length ? `<h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Ongoing · Front ${Math.round(w.front)}%</b></div>`).join('')}<p class="muted small">Wars are ongoing until they resolve — they are not scored as a win or a loss while they run.</p>` : ''}
     <h4>Projects</h4>${PROJECTS.map(d => {
       const run = cs.proj.find(p => p.id === d.id && p.until > S.day);
       return `<div class="kv"><span>${d.icon} ${d.name} · ${d.desc}</span>${run ? '<span class="tagp green">ACTIVE</span>' : `<button class="btn" data-a="project" data-x="${d.id}">${fmtMoney(projectCost(d), true)}</button>`}</div>`;
@@ -1352,18 +1368,95 @@ PANELS.warplan = () => {
     <div class="kv"><span>They can last</span><b>~${Math.round(def.weeks)} weeks · Treasury ${fmtMoney(def.treasury, true)} · Stability ${Math.round(def.stab)}</b></div>
     <div class="kv"><span>You — people</span><b>${fmtPop(country(S.home).pop)}</b></div><div class="kv"><span>Them — people</span><b>${fmtPop(country(plan.target).pop)}</b></div>
     <button class="btn3d orange wide" data-a="warSubmit" ${err ? 'disabled' : ''}>SUBMIT ATTACK</button>
-    <p class="muted small">No buying peace afterwards. You can declare war only once every 10 years, win or lose.</p>`);
+    <p class="muted small">Attacking may win or lose right there, or start an ongoing war that runs for years. While it runs, money, troops and weapons drain every day, and it can end in treaty, annexation, sanctions, nuclear escalation, or stalemate. The outcome is 70% your real stats and 30% chaos. You can declare war only once every 10 years.</p>`);
+};
+PANELS.war = () => {
+  const w = (S.wars || []).find(x => x.a === S.home || x.b === S.home);
+  if (!w) {
+    const r = S.lastWarResult;
+    return panelShell('War', '', r ? `<p>Your last war ended: <b>${esc(r.outcome || (r.attackerWins ? 'victory' : 'defeat'))}</b> against ${esc(cname(r.target))}.</p><button class="btn wide" data-a="panel" data-x="warresult">VIEW LAST WAR RESULT</button>` : '<p class="muted">No war right now. Pick a country to invade from its city or the Nation panel.</p>');
+  }
+  ensureWarState(w);
+  const other = w.a === S.home ? w.b : w.a, len = S.day - w.start;
+  const s = warStatsRoll(w.a, w.b, w.plan);
+  return panelShell(`Ongoing war — ${cname(other)}`, `NOT a win or a loss yet · ${Math.floor(len / 365)} years, ${len % 365} days in · Front ${Math.round(w.front)}%`,
+    `<p class="muted small">This war is unresolved. Money, troops and weapons drain every day. It can end in treaty, annexation, sanctions, nuclear escalation, or stalemate — 70% real stats, 30% chaos.</p>
+    <div class="stats3 box"><div><span>Front</span><b>${Math.round(w.front)}%</b></div><div><span>Your stats chance</span><b>${Math.round(s.winP * 100)}%</b></div><div><span>Days at war</span><b>${len}</b></div></div>
+    <div class="kv"><span>${esc(cname(w.a))} — troops</span><b>${Math.round(w.troopsA)}%</b></div><div class="kv"><span>${esc(cname(w.a))} — weapons</span><b>${Math.round(w.weaponsA)}%</b></div><div class="kv"><span>${esc(cname(w.a))} — money spent</span><b>${fmtMoney(w.spentA, true)}</b></div>
+    <div class="kv"><span>${esc(cname(w.b))} — troops</span><b>${Math.round(w.troopsB)}%</b></div><div class="kv"><span>${esc(cname(w.b))} — weapons</span><b>${Math.round(w.weaponsB)}%</b></div><div class="kv"><span>${esc(cname(w.b))} — money spent</span><b>${fmtMoney(w.spentB, true)}</b></div>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 PANELS.warresult = () => {
   const r = S.lastWarResult; if (!r) return panelShell('War result', '', '<p class="muted">No war result yet.</p>');
-  const win = r.attackerWins;
-  return panelShell(win ? `VICTORY — ${cname(r.target)} occupied` : `DEFEAT — ${cname(r.target)} held`, `Your win chance was ${Math.round(r.winP * 100)}% · War cost ${fmtMoney(r.cost, true)}`,
+  const titles = { 'instant-win': `VICTORY — ${cname(r.target)} occupied`, 'instant-loss': `DEFEAT — ${cname(r.target)} held`, 'minigame-win': `BATTLE WON — ${cname(r.target)} occupied`, annexation: `ANNEXATION — ${cname(r.target)} taken`, 'treaty-att': `TREATY — peace with reparations from ${cname(r.target)}`, 'treaty-def': `TREATY — peace with reparations from you`, sanctions: `SANCTIONS — war ended by economic pressure`, nuke: `NUCLEAR ESCALATION — war ended in devastation`, stalemate: `STALEMATE — no winner` };
+  const bodies = { 'instant-win': `<p><b>${cname(r.target)} is now occupied by you.</b> Its main company and its people count toward your nation.</p>`, 'instant-loss': `<p><b>Your invasion was driven back on the spot.</b> Your stability fell 15 points and the war cost was paid from your treasury.</p>`, 'minigame-win': `<p><b>You won the battle and ${cname(r.target)} is now occupied by you — with no troops lost in the main game.</b> The battle was the war.</p>`, annexation: `<p><b>${cname(r.target)} was annexed after a long war.</b> It is now under your control.</p>`, 'treaty-att': `<p><b>Peace, on your terms.</b> ${cname(r.target)} paid reparations and no territory changed hands.</p>`, 'treaty-def': `<p><b>Peace, on their terms.</b> You paid reparations and no territory changed hands.</p>`, sanctions: `<p><b>The war ended in sanctions, not conquest.</b> The aggressor is punished economically and both sides paid — no territory changed hands.</p>`, nuke: `<p><b>The war ended in nuclear escalation.</b> Both nations were devastated and the world turned against the side that escalated.</p>`, stalemate: `<p><b>Nobody won.</b> After years of war, neither side could finish it, and no territory changed hands.</p>` };
+  const title = titles[r.outcome] || (r.attackerWins ? `VICTORY — ${cname(r.target)} occupied` : `DEFEAT — ${cname(r.target)} held`);
+  return panelShell(title, `Your stats chance was ${Math.round(r.winP * 100)}% · War cost ${fmtMoney(r.cost, true)}${r.days ? ` · Lasted ${Math.round(r.days / 365 * 10) / 10} years` : ' · Decided on the spot'}`,
     `<div class="stats3 box"><div><span>You — power</span><b>${Math.round(r.att.effective).toLocaleString()}</b></div><div><span>Them — power</span><b>${Math.round(r.def.effective).toLocaleString()}</b></div><div><span>You could last</span><b>~${Math.round(r.att.weeks)} weeks</b></div></div>
     <div class="kv"><span>You</span><b>Army Lv ${r.att.milLv.army} · Navy Lv ${r.att.milLv.navy} · Air Lv ${r.att.milLv.air} · Stability ${Math.round(r.att.stab)} · Debt ${Math.round(r.att.debtRatio * 100)}% of GDP</b></div>
     <div class="kv"><span>Them</span><b>Army Lv ${r.def.milLv.army} · Navy Lv ${r.def.milLv.navy} · Air Lv ${r.def.milLv.air} · Stability ${Math.round(r.def.stab)} · Debt ${Math.round(r.def.debtRatio * 100)}% of GDP</b></div>
-    ${win ? `<p><b>${cname(r.target)} is now occupied by you.</b> Its main company and its people count toward your nation.</p>` : `<p><b>Your invasion was driven back.</b> Your stability fell 15 points and the war cost was paid from your treasury.</p>`}
+    ${bodies[r.outcome] || ''}
     <p class="muted small">Next war: ${S.mode === 'domination' ? 'next year — Domination cooldown is 1 year.' : yearOf(S.day + WAR_COOLDOWN_DAYS) + ' — one declaration every 10 years.'}</p>
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
+// ---------- battle grid mini-game UI (shared engine, war + standalone) ----------
+// One board renderer for both paths: tile buttons, two toolbar rows
+// (structures + troops, then weapons), and the outcome banner. The
+// war path ticks on every panel render (the game loop re-renders the
+// panel every 1.5s); the standalone modal ticks on WAIT and on clicks.
+function battleHTML(b, acts) {
+  const c = battleCounts(b);
+  const sel = b.tiles[b.selected];
+  const funds = battleFunds(b);
+  const tileBtn = (t, i) => `<button class="btile ${t.owner} ${i === b.selected ? 'sel' : ''}" data-a="${acts.tile}" data-x="${i}" aria-label="Tile ${t.x},${t.y}">${t.structure ? BATTLE_ITEM_BY_ID[t.structure].icon : ''}<b>${Math.floor(t.units)}</b></button>`;
+  const toolBtn = (it) => `<button class="btn small ${b.weapon === it.id ? 'on' : ''}" data-a="${acts.tool}" data-x="${it.id}">${it.icon} ${it.name} · ${fmtMoney(it.cost, true)}</button>`;
+  const structs = BATTLE_ITEMS.filter(i => i.kind === 'structure' || i.kind === 'buy');
+  const weapons = BATTLE_ITEMS.filter(i => i.kind === 'weapon');
+  const outcome = b.status === 'won' ? `<div class="card in"><h3>🏆 You won the battle!</h3><p class="muted small">${acts.claim ? 'Claim it to win the war — with no troops lost.' : 'Play again for another round.'}</p><button class="btn3d orange wide" data-a="${acts.claim || acts.again}">${acts.claim ? 'CLAIM VICTORY' : 'PLAY AGAIN'}</button></div>`
+    : b.status === 'lost' ? `<div class="card in"><h3>💥 You lost the battle.</h3><p class="muted small">${acts.claim ? 'The battle is lost, but the war is not over — it continues as an ongoing war.' : 'Play again for another round.'}</p><button class="btn3d orange wide" data-a="${acts.claim || acts.again}">${acts.claim ? 'CONTINUE TO ONGOING WAR' : 'PLAY AGAIN'}</button></div>` : '';
+  return `<p class="muted small">You are blue, the enemy is red. Tap your tile, then a tile next to it to move all its units there — or into an enemy tile to attack. Every tile you own makes 1 unit per second. ${b.weapon ? `Weapon armed: ${BATTLE_ITEM_BY_ID[b.weapon].name} — tap an enemy tile to fire it.` : ''}</p>
+    <div class="kv"><span>Your tiles / units</span><b>${c.playerTiles} · ${Math.floor(c.playerUnits)}</b></div>
+    <div class="kv"><span>Enemy tiles / units</span><b>${c.enemyTiles} · ${Math.floor(c.enemyUnits)}</b></div>
+    <div class="kv"><span>${b.mode === 'war' ? 'Your cash' : 'Battle fund'}</span><b>${fmtMoney(funds, true)}</b></div>
+    <div class="kv"><span>Selected tile</span><b>${sel ? `(${sel.x}, ${sel.y}) · ${Math.floor(sel.units)} units${sel.structure ? ' · ' + BATTLE_ITEM_BY_ID[sel.structure].name : ''}` : '—'}</b></div>
+    <div class="bgrid" style="grid-template-columns:repeat(${b.w},1fr)">${b.tiles.map(tileBtn).join('')}</div>
+    <h4>Build</h4><div class="row wrap">${structs.map(toolBtn).join('')}</div>
+    <h4>Weapons</h4><div class="row wrap">${weapons.map(toolBtn).join('')}</div>
+    <p class="muted small">City raises capacity, Port and Factory raise generation, Defense doubles defenders, SAM halves weapon damage, Silo unlocks Atom / H-Bomb / MIRV / Mega, Airfield unlocks Strike, Warship adds +20 to attacks from its tile.</p>
+    ${outcome}
+    <div class="row wrap" style="margin-top:10px">${acts.wait ? `<button class="btn" data-a="${acts.wait}">⏱ WAIT 5 SECONDS</button>` : ''}<button class="btn" data-a="${acts.leave}">LEAVE BATTLE</button></div>`;
+}
+function battleTickRender(b) {
+  // Advance the battle by real elapsed time (capped, so a backgrounded
+  // tab cannot jump the board), then let the enemy act once.
+  if (!b || b.status !== 'playing') return;
+  const now = Date.now();
+  const dt = b.lastTick ? Math.min(5, Math.max(0, (now - b.lastTick) / 1000)) : 0;
+  b.lastTick = now;
+  if (dt > 0) battleTick(b, dt);
+  battleAITurn(b);
+}
+function miniModalHTML(b) {
+  return `<h2>🎮 Mini Games — battle grid</h2><p class="muted small">Standalone · No country, no consequences · ${b.w} × ${b.h}${b.shape !== 'grid' ? ' · ' + b.shape : ''} board</p>` + battleHTML(b, { tile: 'miniTile', tool: 'miniTool', leave: 'miniLeave', wait: 'miniWait', again: 'miniAgain' });
+}
+PANELS.wartaunt = () => {
+  const plan = UI.pendingWarPlan; if (!plan) return panelShell('War', '', '<p class="muted">Pick a country to invade first.</p>');
+  return panelShell(`Invade ${cname(plan.target)}`, '', `<div class="card in"><h3>💬 ${esc(cname(plan.target))} says it's up for the challenge.</h3><p class="muted small">Fight it out on the battle grid and win the war with no troops lost — or let the war run as an ongoing war instead.</p>
+    <button class="btn3d wide" style="background:#e5484d;box-shadow:0 4px 0 #a82a2e" data-a="warFight">🔴 FIGHT</button>
+    <button class="btn wide" data-a="warBattleLeave" style="margin-top:10px">LET THE WAR RUN INSTEAD</button></div>`);
+};
+PANELS.warbattle = () => {
+  const b = UI.warBattle; if (!b) return panelShell('Battle', '', '<p class="muted">No battle running.</p>');
+  battleTickRender(b);
+  return panelShell(`Battle — ${cname(b.target)}`, 'A generic battle board, not a real city · Win it and the war is yours', battleHTML(b, { tile: 'warBattleTile', tool: 'warBattleTool', leave: 'warBattleLeave', claim: 'warBattleClaim' }));
+};
+PANELS.minigames = () => {
+  const b = UI.miniPanelBattle;
+  if (!b) return panelShell('Mini Games', 'Battle grid, no country needed — no consequences, play again as much as you like.',
+    `<div class="row wrap">${BATTLE_SIZE_OPTIONS.map(o => `<button class="btn" data-a="miniPanelStart" data-x="${o.id}">${o.shape === 'ring' ? '⭕' : '▦'} ${o.label}${o.shape !== 'grid' ? ' · ' + o.shape : ''}</button>`).join('')}</div>
+    <p class="muted small">Pick a board: smaller than 6×6, 6×6, bigger, wide, tall, or a ring. Each side starts with 50 units in a corner, and every tile you own makes 1 unit per second.</p>`);
+  battleTickRender(b);
+  return panelShell('Mini Games — battle grid', 'Standalone · No country, no consequences', battleHTML(b, { tile: 'miniPanelTile', tool: 'miniPanelTool', leave: 'miniPanelLeave', again: 'miniPanelAgain' }));
 };
 PANELS.military = () => {
   const cs = country(S.home);
@@ -1373,7 +1466,7 @@ PANELS.military = () => {
       return `<div class="card in"><h4>${d.icon} ${d.name}</h4><p class="muted small">Now: ${d.levels[lv]}</p>${cost != null ? `<button class="btn" data-a="milUp" data-x="${b}">Upgrade to ${d.levels[lv + 1]} · ${fmtMoney(cost, true)}</button>` : '<span class="tagp green">TOP LEVEL</span>'}</div>`;
     }).join('') +
     `<div class="card in"><h4>🛡️ Military bases</h4><p class="muted small">You start with one base. Each extra base adds +5% to your war power. You have ${facilityCount(S.home)} base${facilityCount(S.home) === 1 ? '' : 's'}.</p><button class="btn" data-a="buyBase">BUY MILITARY BASE · ${fmtMoney(baseCost(), true)}</button></div>
-    <h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${Math.round(w.front)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}`);
+    <h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Ongoing · Front ${Math.round(w.front)}% · Troops ${Math.round(w.troopsA ?? 100)}/${Math.round(w.troopsB ?? 100)}% · Weapons ${Math.round(w.weaponsA ?? 100)}/${Math.round(w.weaponsB ?? 100)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}${(S.wars || []).some(w => w.a === S.home || w.b === S.home) ? '<button class="btn wide" data-a="panel" data-x="war">OPEN ONGOING WAR</button>' : ''}`);
 };
 PANELS.estate = () => {
   return panelShell('My Estate', `${S.props.length} buildings · Value ${fmtMoney(propValue(), true)}`,
@@ -1399,9 +1492,10 @@ PANELS.hq = () => {
   }).join('') || '<p class="muted small">You control no companies yet. Your home company is yours once you open a location, or buy 50% of a listed company in Markets to take control.</p>';
   const placedRows = placed.map(b => `<div class="kv"><span>${b.icon || '🏢'} ${esc(b.name)} · ${esc(cname(b.a3))}</span><b>${fmtMoney(b.value, true)} · ${fmtMoney(b.income, true)}/week</b></div>`).join('') || '<p class="muted small">No placed businesses yet. Place one from Create business in More.</p>';
   return panelShell('HQ', `${hk ? hk.flag : ''} ${esc(cname(S.home))}${capCity ? ` · HQ in ${esc(capCity.name)}` : ''}`,
-    `<div class="stats3 box"><div><span>Companies controlled</span><b>${mineList.length}</b></div><div><span>Total value</span><b>${fmtMoney(totalValue, true)}</b></div><div><span>Week profit</span><b class="${upCls(totalProfit)}">${fmtMoney(totalProfit, true)}</b></div></div>
+    `<div class="card in"><p><b>🏛️ Your HQ is in ${capCity ? esc(capCity.name) : 'your capital'}.</b></p><p class="muted small">HQ is not a separate place — it is your capital city, where the government sits. Open the capital to run it, or manage your companies from here.</p><button class="btn3d orange wide" data-a="panel" data-x="capital">🏛️ OPEN CAPITAL</button></div>
+    <div class="stats3 box"><div><span>Companies controlled</span><b>${mineList.length}</b></div><div><span>Total value</span><b>${fmtMoney(totalValue, true)}</b></div><div><span>Week profit</span><b class="${upCls(totalProfit)}">${fmtMoney(totalProfit, true)}</b></div></div>
     <div class="kv"><span>Locations</span><b>${totalLocs}</b></div><div class="kv"><span>Placed businesses</span><b>${placed.length}</b></div><div class="kv"><span>Buildings owned</span><b>${S.props.length}</b></div>
-    <div class="row wrap"><button class="btn" data-a="panel" data-x="company">MANAGE COMPANIES</button><button class="btn" data-a="panel" data-x="capital">CAPITAL</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="bank">BANK</button><button class="btn" data-a="panel" data-x="estate">BUILDINGS</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button><button class="btn" data-a="createBusiness">CREATE BUSINESS</button></div>
+    <div class="row wrap"><button class="btn" data-a="panel" data-x="company">MANAGE COMPANIES</button><button class="btn" data-a="panel" data-x="capital">OPEN CAPITAL</button><button class="btn" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn" data-a="panel" data-x="bank">BANK</button><button class="btn" data-a="panel" data-x="estate">BUILDINGS</button><button class="btn" data-a="panel" data-x="markets">MARKETS</button><button class="btn" data-a="createBusiness">CREATE BUSINESS</button></div>
     <h4>Your companies</h4>${companyCards}
     <h4>Placed businesses</h4><div class="list">${placedRows}</div>`);
 };
@@ -1442,6 +1536,8 @@ PANELS.settings = () => {
   return panelShell('Settings', '',
     `<div class="kv"><span>Sound volume</span><span><input type="range" min="0" max="1" step="0.1" value="${S.settings.vol}" data-in="vol" data-x=""> ${Math.round(S.settings.vol * 100)}%</span></div>
     <div class="kv"><span>Map motion (vehicles)</span><button class="btn" data-a="toggleMotion">${S.settings.motion ? 'ON' : 'OFF'}</button></div>
+    <div class="kv"><span>Mini-games</span><button class="btn" data-a="toggleMinigames">${minigamesEnabled() ? 'ON' : 'OFF'}</button></div>
+    <div class="kv"><span>War battle board</span><span>${['4x4', '6x6', '8x8', '10x10'].map(s => `<button class="btn small ${(S.settings.battleSize || '6x6') === s ? 'on' : ''}" data-a="setBattleSize" data-x="${s}">${s}</button>`).join(' ')}</span></div>
     <div class="kv"><span>Save</span><b>IndexedDB, full history, no size cap</b></div>
     <button class="btn" data-a="exportSave">COPY SAVE TO CLIPBOARD</button>
     <button class="btn" data-a="restart">RESTART GAME</button>`);
@@ -1575,6 +1671,7 @@ PANELS.capital = () => {
     <h4>Motto</h4><div class="row"><input id="capMotto" class="search" value="${esc(cap.motto || '')}" placeholder="e.g. The city that builds the future"><button class="btn" data-a="capMotto">SAVE</button></div>
     <h4>Theme</h4><div class="row wrap">${CAPITAL_THEMES.map(th => `<button class="btn ${th.id === cap.theme ? 'on' : ''}" data-a="capTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
     <h4>Districts — build your capital, level by level</h4><p class="muted small">Costs scale with your GDP, so every country feels the same pressure. Government starts at level 1, the rest at 0. Prestige is the average district level.</p>
+    <p class="muted small">The capital is for government only — parliament, courts, barracks, trade halls. Your personal mansions and decor live in Your City, not here. Your HQ is this capital: HQ management opens from here.</p>
     <div class="list">${distRows}</div>
     <div class="kv"><span>Prestige</span><b>${prestige.toFixed(1)}★ / 5</b></div>
     <p class="muted small">Bonuses land every week: stability from Government and Green, cash from Commerce and Transport, population from Culture, war power from Defence. At 4.5★ prestige or more, a world-capital bonus pays weekly too.</p>`);
@@ -1624,9 +1721,14 @@ PANELS.mycity = () => {
   }).join('');
   return panelShell('Your City ★', `${esc(m.name)} · in ${esc(cname(S.home))} · worth ${fmtMoney(myCityValue(), true)}`,
     `<div class="card" style="background:${theme.bg}"><p><b>⭐ ${esc(m.name)}</b>${m.motto ? ` — <i>${esc(m.motto)}</i>` : ''}</p><p class="muted small">Your own city, marked on the map with a circle and a star. Theme: ${theme.name}. Prices here are ${mult.toFixed(1)}× the base price, because ${esc(cname(S.home))} is priced at its level — the best countries run into the trillions at the top end.</p></div>
+    <p class="muted small">This city is yours personally — mansions, roads and decor for you. Government functions live in the capital, not here.</p>
     <h4>Rename your city</h4><div class="row"><input id="myCityName" class="search" value="${esc(m.name)}" placeholder="Your city name"><button class="btn" data-a="myCityRename">RENAME</button></div>
     <h4>Motto</h4><div class="row"><input id="myCityMotto" class="search" value="${esc(m.motto || '')}" placeholder="e.g. Built by me"><button class="btn" data-a="myCityMotto">SAVE</button></div>
     <h4>Theme</h4><div class="row wrap">${MYCITY_THEMES.map(th => `<button class="btn ${th.id === m.theme ? 'on' : ''}" data-a="myCityTheme" data-x="${th.id}">${th.name}</button>`).join('')}</div>
+    <h4>Decorate your city — place buildings, roads and decor</h4><p class="muted small">Your own city, for you — not the government. That is what the capital is for. Pick an item, then tap an empty square to buy and place it there. Tap a placed item to sell it back for 80%.</p>
+    <div class="row wrap">${MYCITY_DECOR.map(it => `<button class="btn small ${(UI.myCityDecor || 'house') === it.id ? 'on' : ''}" data-a="myCityDecor" data-x="${it.id}">${it.icon} ${it.name} · ${fmtMoney(myCityPrice(it.base), true)}</button>`).join('')}</div>
+    <div class="mgrid" style="grid-template-columns:repeat(${MYCITY_GRID_W},1fr)">${(() => { const grid = ensureMyCityGrid(m); let h = ''; for (let y = 0; y < MYCITY_GRID_H; y++) for (let x = 0; x < MYCITY_GRID_W; x++) { const g = grid.find(p => p.x === x && p.y === y); const it = g ? myCityDecorItem(g.id) : null; h += `<button class="mtile ${g ? 'placed' : ''}" data-a="myCityCell" data-x="${x}|${y}" aria-label="${it ? it.name : 'Empty square'}">${it ? it.icon : '+'}</button>`; } return h; })()}</div>
+    <p class="muted small">${ensureMyCityGrid(m).length} placed · Decor worth ${fmtMoney(myCityGridValue(m), true)}</p>
     <h4>Houses — end-game prices</h4><div class="list">${row(MYCITY_HOUSES, 'house')}</div>
     <h4>Land and farmland</h4><div class="list">${row(MYCITY_LAND, 'land')}</div>
     <h4>Cars</h4><div class="list">${row(MYCITY_CARS, 'car')}</div>
@@ -1636,6 +1738,16 @@ PANELS.mycity = () => {
 };
 PANELS.mars = () => marsPanelHTML();
 PANELS.casino = () => casinoPanelHTML();
+PANELS.crypto = () => {
+  // Auto-refresh + auto-settle on open, at most once per 15s, so the
+  // re-render these trigger does not loop back into another fetch.
+  if (!UI.cryptoAutoAt || Date.now() - UI.cryptoAutoAt > 15000) {
+    UI.cryptoAutoAt = Date.now();
+    cryptoSettleDue().then(() => { if (UI.panel === 'crypto') renderPanel(); }).catch(() => {});
+    cryptoRefreshPrice().then(() => { if (UI.panel === 'crypto') renderPanel(); }).catch(() => {});
+  }
+  return cryptoPanelHTML();
+};
 PANELS.offices = () => {
   const boardRow = (e, kind, id) => {
     const b = (typeof ensureBoard === 'function') ? ensureBoard(e) : [];
@@ -1673,16 +1785,19 @@ PANELS.markets = () => {
   const mkt = UI.mktTab || 'market';
   const tabs = `<div class="row"><button class="btn flex ${mkt === 'market' ? 'on' : ''}" data-a="mktTab" data-x="market">🏦 Market</button><button class="btn flex ${mkt === 'equity' ? 'on' : ''}" data-a="mktTab" data-x="equity">💳 Equity</button><button class="btn flex ${mkt === 'ma' ? 'on' : ''}" data-a="mktTab" data-x="ma">🧩 M&amp;A</button></div>`;
   if (mkt === 'equity') {
-    const mine = mine();
-    const first = mine[0] || Object.values(S.co).find(c => c.listed);
+    // NOTE: the local must NOT be called `mine` — `const mine = mine()`
+    // used to shadow the global mine() function and throw
+    // "Cannot access 'mine' before initialization" (TDZ) on every open.
+    const mineList = mine();
+    const first = mineList[0] || Object.values(S.co).find(c => c.listed);
     return panelShell('Stock Market', 'Trade stocks, or issue new shares for a company you control.', tabs + `<div class="card in"><h4>TRADE STOCKS</h4><p class="muted small">Available cash: ${fmtMoney(S.cash, true)}</p>
     ${first ? `<div class="kv"><span><b>${esc(first.name)}</b> · ${first.sym}</span><b>${fmtMoney(first.price)}</b></div>
     <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${first.a3}">MAX</button></div>
     <div class="row"><button class="btn3d buy flex" data-a="doTrade" data-x="${first.a3}|buy">BUY</button><button class="btn3d sell flex" data-a="doTrade" data-x="${first.a3}|sell">SELL</button></div>
     <p class="muted small">Pick another stock from the Market tab first, then come back here to trade it.</p>` : '<p class="muted small">No listed companies yet.</p>'}</div>
     <div class="card in"><h4>SECONDARY OFFERING</h4><p class="muted small">Issue new shares for a company you control. Underwriting fee 3.85%.</p>
-    ${mine.map(c => `<div class="kv"><span>${esc(c.name)} · ${c.sym} · ${fmtMoney(c.price)}/share</span><b>${c.shares.toLocaleString()} shares</b></div>`).join('') || '<p class="muted small">You control no companies yet. Buy 50% of a stock to control it.</p>'}
-    ${mine.length ? `<label class="muted small">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="btn3d orange wide" data-a="issueShares" data-x="${mine[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
+    ${mineList.map(c => `<div class="kv"><span>${esc(c.name)} · ${c.sym} · ${fmtMoney(c.price)}/share</span><b>${c.shares.toLocaleString()} shares</b></div>`).join('') || '<p class="muted small">You control no companies yet. Buy 50% of a stock to control it.</p>'}
+    ${mineList.length ? `<label class="muted small">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="btn3d orange wide" data-a="issueShares" data-x="${mineList[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
   }
   if (mkt === 'ma') {
     const rows = marketRows().filter(c => c.listed).slice(0, 30);
@@ -1696,6 +1811,9 @@ PANELS.markets = () => {
     <div class="list">${rows.map(c => { const ch = chgVs(c), closes = (c.h.d || []).slice(-30), cap = companyValue(c), hi = closes.length ? Math.max(...closes) : c.price, lo = closes.length ? Math.min(...closes) : c.price; return `<button class="srow" data-a="stock" data-x="${c.a3}" style="flex-direction:column;align-items:stretch"><span class="row between" style="width:100%"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname" style="flex:1"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span></span>${lineChart(closes, { h: 50 })}<span class="row between muted small" style="width:100%"><span>Market cap ${fmtMoney(cap, true)}</span><span>Dividend ${(SECTORS[c.sector].div * 100).toFixed(1)}%</span><span>52w ${fmtMoney(lo)} - ${fmtMoney(hi)}</span><span>P/E ${c.pe.toFixed(1)}</span></span></button>`; }).join('') || '<div class="card in empty">Nothing here yet.</div>'}</div>`);
 };
 PANELS.mode = () => {
+  if (S.mode === 'random') {
+    return panelShell('Random World', 'Offline · Endless sandbox, shuffled.', '<p class="muted small">Random World shuffles the world: your starting treasury, debt and stability are random, every country\'s GDP is shuffled, and every company and stock gets a random fictional name. The map, countries and cities stay real Earth — this is a shuffled world, not a generated landmass. No rivals, no win goal, no situation cards. Online Random World PvP comes later.</p>');
+  }
   if (S.mode === 'worl' && typeof worlRivals === 'function') {
     const w = ensureWorl(); const rows = worlRivals();
     return panelShell('Worl Mode', `Goal: ${w.goalText} · Twist: ${w.twist} · Shuffled continent: ${w.shuffleCont || '—'} · Years: ${w.years} · Wins: ${w.wins} · Rank: ${worlRank()} / 10`,
@@ -1719,11 +1837,12 @@ PANELS.help = () => {
 const MENU_ITEMS = [
   ['leader', '👑', 'Leader'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
   ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
-  ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'], ['capital', '🏛️', 'Capital'],
+  ['portfolio', '💼', 'Portfolio'], ['web', '🌐', 'Web'], ['nation', '🏳️', 'Nation'],
   ['military', '🪖', 'Military'], ['company', '🏢', 'My Companies'], ['estate', '🏠', 'My Estate'],
   ['hq', '🏭', 'HQ'], ['mars', '🚀', 'Mars'],
   ['goals', '🎯', 'Daily goals'],
-  ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['casino', '🎰', 'Casino'], ['bank', '🏦', 'Bank'],
+  ['leaderboard', '🏆', 'Leaderboard'], ['sports', '🏟️', 'Sports'], ['crypto', '₿', 'Crypto'], ['bank', '🏦', 'Bank'],
+  ['minigames', '🎮', 'Mini Games'],
   ['settings', '⚙️', 'Settings'], ['help', '❓', 'Help'],
 ];
 function moreSheet() {
@@ -1745,8 +1864,8 @@ function openMenuPopup() {
   <div class="menu-sec">Create</div><div class="menu-card"><button class="menu-row" data-a="createBusiness"><span class="menu-ic" style="background:#e2f5e9">🏢</span><span class="menu-txt"><b>Create business</b><span>Place it anywhere on the map${!S.placed || !S.placed.length ? ' · first one free' : ''}</span></span><span class="menu-chev">›</span></button></div>
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites']])}
-  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
-  ${g('Play', [['sports', 'Teams and leagues'], ['casino', 'Play at the casino and run your own'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city'], ['mars', 'Mars']])}
+  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['minigames', 'Battle grid, no country needed'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
@@ -1815,6 +1934,11 @@ const A = {
   },
   introMode: x => { UI.introMode = x; renderInheritStep(); },
   introRandom: () => { const sel = document.getElementById('inheritCountry'); if (!sel) return; const list = W.playable; sel.value = list[Math.floor(Math.random() * list.length)].a3; sel.dispatchEvent(new Event('change')); },
+  randomContinue: () => {
+    const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
+    const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
+    S = newGame({ mode: 'random', home: a3, leader: true, name: 'Leader', countryName }); if (typeof applyRandomStart === 'function') applyRandomStart(); save(); enterGame(false);
+  },
   worlContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
@@ -1893,6 +2017,10 @@ const A = {
   casinoRouletteNumber: () => { const n = $('rouletteNum') ? $('rouletteNum').value : ''; const err = casinoRoulette('number', n); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
   casinoBuild: () => { const el = $('casinoCity'); if (!el) return toast('Pick a city first.', 'bad'); const err = casinoBuild(+el.value); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino opened.', 'good'); },
   casinoSell: x => { const err = casinoSell(x); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino sold.', 'good'); },
+  cryptoRefresh: () => { UI.cryptoAutoAt = 0; renderPanel(); },
+  cryptoSettle: () => { cryptoSettleDue().then(r => { if (r.unavailable) toast('Price unavailable — bets stay open.', 'bad'); else if (r.settled) toast(`Settled ${r.settled}: ${r.won || 0} won, ${r.lost || 0} lost.`, 'good'); save(); if (UI.panel === 'crypto') renderPanel(); }).catch(() => {}); },
+  cryptoTarget: x => { const cr = ensureCrypto(); if (cr.lastPrice) { UI.cryptoTargetVal = Math.round(cr.lastPrice * (1 + (+x) / 100)); renderPanel(); } else toast('Fetch a price first.', 'bad'); },
+  cryptoPlace: x => { const t = $('cryptoTarget') ? +$('cryptoTarget').value : NaN; const w = $('cryptoWindow') ? +$('cryptoWindow').value : NaN; const s = $('cryptoStake') ? +$('cryptoStake').value : NaN; const err = cryptoPlaceBet(x, t, w, s); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Bet placed.', 'good'); },
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
   star: (x, el, e) => {
@@ -1979,6 +2107,8 @@ const A = {
   airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
   airportFly: x => { act(() => airportFly(+x), null); },
   myCityBuy: x => { const [kind, id] = x.split('|'); act(() => myCityBuy(kind, id), 'Bought for your city'); },
+  myCityDecor: x => { UI.myCityDecor = x; renderPanel(); },
+  myCityCell: x => { const [cx, cy] = x.split('|').map(Number); const m = ensureMyCity(); const placed = ensureMyCityGrid(m).some(g => g.x === cx && g.y === cy); if (placed) act(() => myCityRemove(cx, cy), 'Sold back for 80%'); else act(() => myCityPlace(UI.myCityDecor || 'house', cx, cy), 'Placed in your city'); },
   myCityTheme: x => { ensureMyCity().theme = x; renderPanel(); },
   myCityRename: () => { const v = document.getElementById('myCityName'); if (v && v.value.trim()) { ensureMyCity().name = v.value.trim(); toast('City renamed', 'good'); renderPanel(); } },
   myCityMotto: () => { const v = document.getElementById('myCityMotto'); if (v) { ensureMyCity().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
@@ -2001,7 +2131,12 @@ const A = {
   warCommit: x => { const [branch, delta] = x.split('|'); UI.warPlan[branch] = clamp(UI.warPlan[branch] + (+delta), 0, 100); renderPanel(); },
   warResearch: () => { const e = researchWar(UI.warPlan); if (e) toast(e, 'bad'); else toast('War research done: +15% attack power for this attack', 'good'); save(); renderPanel(); },
   warSell: () => { const before = S.cash; const e = sellForWar(); if (e) toast(e, 'bad'); else toast(`Sold stock for ${fmtMoney(S.cash - before, true)} war funds`, 'good'); save(); renderPanel(); },
-  warSubmit: () => { const e = resolveWar(UI.warPlan); if (e) return toast(e, 'bad'); closePanel(); openPanel('warresult'); save(); },
+  warSubmit: () => { const r = beginWar(UI.warPlan); if (r.err) return toast(r.err, 'bad'); closePanel(); if (r.outcome === 'taunt') openPanel('wartaunt'); else if (r.outcome === 'ongoing') openPanel('war'); else openPanel('warresult'); save(); },
+  warFight: () => { const plan = UI.pendingWarPlan; if (!plan) return toast('Pick a country to invade first.', 'bad'); UI.warBattle = makeBattle({ size: (S.settings && S.settings.battleSize) || '6x6', mode: 'war', target: plan.target, plan, enemyFunds: country(plan.target).treasury || BATTLE_STANDALONE_FUND }); UI.warBattle.lastTick = Date.now(); openPanel('warbattle'); },
+  warBattleTile: (x) => { const b = UI.warBattle; if (!b) return; const idx = +x; const t = b.tiles[idx]; if (!t) return; let err = null; if (b.weapon) { if (t.owner === 'enemy') err = battleWeapon(b, b.weapon, idx); b.weapon = null; if (err) return toast(err, 'bad'); } else if (t.owner === 'player') { b.selected = idx; } else if (battleAdjacent(b, b.selected, idx)) { err = battleMove(b, b.selected, idx, b.tiles[b.selected].units); if (err) return toast(err, 'bad'); } renderPanel(); },
+  warBattleTool: (x) => { const b = UI.warBattle; if (!b) return; const item = BATTLE_ITEM_BY_ID[x]; if (!item) return; if (item.kind === 'weapon') { b.weapon = item.id; return renderPanel(); } const err = battleBuy(b, item.id, b.selected); if (err) return toast(err, 'bad'); renderPanel(); },
+  warBattleClaim: () => { const b = UI.warBattle, plan = UI.pendingWarPlan; if (!b || !plan) return; b.resolved = true; if (b.status === 'won') warBattleWin(plan); else startOngoingWar(plan); UI.warBattle = null; closePanel(); openPanel(b.status === 'won' ? 'warresult' : 'war'); save(); },
+  warBattleLeave: () => { const plan = UI.pendingWarPlan; if (UI.warBattle) UI.warBattle.resolved = true; UI.warBattle = null; if (plan) { startOngoingWar(plan); closePanel(); openPanel('war'); save(); } else closePanel(); },
   buyBase: () => act(() => buyBase(), 'Military base built'),
   milUp: x => act(() => upgradeMilitary(x), 'Military upgraded'),
   fleetUp: x => act(() => upgradeFleet(x), 'Fleet upgraded'),
@@ -2088,6 +2223,19 @@ const A = {
     toast(`+${fmtMoney(r.amount, true)} daily reward`, 'good'); save(); refreshAll();
   },
   toggleMotion: () => { S.settings.motion = !S.settings.motion; renderPanel(); },
+  toggleMinigames: () => { S.settings.minigames = !minigamesEnabled(); renderPanel(); },
+  setBattleSize: (x) => { S.settings.battleSize = x; renderPanel(); },
+  miniPanelStart: (x) => { UI.miniPanelBattle = makeBattle({ size: x, mode: 'standalone' }); UI.miniPanelBattle.lastTick = Date.now(); openPanel('minigames'); },
+  miniPanelTile: (x) => { const b = UI.miniPanelBattle; if (!b) return; const idx = +x; const t = b.tiles[idx]; if (!t) return; let err = null; if (b.weapon) { if (t.owner === 'enemy') err = battleWeapon(b, b.weapon, idx); b.weapon = null; if (err) return toast(err, 'bad'); } else if (t.owner === 'player') { b.selected = idx; } else if (battleAdjacent(b, b.selected, idx)) { err = battleMove(b, b.selected, idx, b.tiles[b.selected].units); if (err) return toast(err, 'bad'); } renderPanel(); },
+  miniPanelTool: (x) => { const b = UI.miniPanelBattle; if (!b) return; const item = BATTLE_ITEM_BY_ID[x]; if (!item) return; if (item.kind === 'weapon') { b.weapon = item.id; return renderPanel(); } const err = battleBuy(b, item.id, b.selected); if (err) return toast(err, 'bad'); renderPanel(); },
+  miniPanelLeave: () => { UI.miniPanelBattle = null; renderPanel(); },
+  miniPanelAgain: () => { const old = UI.miniPanelBattle; UI.miniPanelBattle = makeBattle({ size: old ? old.sizeId : '6x6', mode: 'standalone' }); UI.miniPanelBattle.lastTick = Date.now(); renderPanel(); },
+  minigamesPlay: () => { const sel = document.getElementById('miniBoard'); const id = sel ? sel.value : '6x6'; UI.miniBattle = makeBattle({ size: id, mode: 'standalone' }); openModal(miniModalHTML(UI.miniBattle)); },
+  miniTile: (x) => { const b = UI.miniBattle; if (!b) return; const idx = +x; const t = b.tiles[idx]; if (!t) return; let err = null; if (b.weapon) { if (t.owner === 'enemy') err = battleWeapon(b, b.weapon, idx); b.weapon = null; if (err) return toast(err, 'bad'); } else if (t.owner === 'player') { b.selected = idx; } else if (battleAdjacent(b, b.selected, idx)) { err = battleMove(b, b.selected, idx, b.tiles[b.selected].units); if (err) return toast(err, 'bad'); } battleTick(b, 1); battleAITurn(b); openModal(miniModalHTML(b)); },
+  miniTool: (x) => { const b = UI.miniBattle; if (!b) return; const item = BATTLE_ITEM_BY_ID[x]; if (!item) return; if (item.kind === 'weapon') { b.weapon = item.id; return openModal(miniModalHTML(b)); } const err = battleBuy(b, item.id, b.selected); if (err) return toast(err, 'bad'); openModal(miniModalHTML(b)); },
+  miniWait: () => { const b = UI.miniBattle; if (!b) return; battleTick(b, 5); battleAITurn(b); openModal(miniModalHTML(b)); },
+  miniAgain: () => { const old = UI.miniBattle; UI.miniBattle = makeBattle({ size: old ? old.sizeId : '6x6', mode: 'standalone' }); openModal(miniModalHTML(UI.miniBattle)); },
+  miniLeave: () => { UI.miniBattle = null; closeModal(); },
   exportSave: () => {
     const t = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Save copied', 'good'), () => toast('Clipboard unavailable', 'bad'));

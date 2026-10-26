@@ -138,6 +138,31 @@ const MapView = (() => {
       if (alt != null) { nextSea(u, alt); return; }
       // No alternative in this basin: settle for the short route below.
     }
+    // Tiny-basin chaining: if every route here is short, a boat that
+    // just hops start -> to -> start reads as sitting and flashing
+    // between two spots. So sail two legs as ONE voyage (start -> to
+    // -> next port) whenever the second leg is already cached. The
+    // boat then crosses its whole basin instead of shuttling between
+    // two neighbouring ports, and on arrival it starts from the far
+    // port as usual. Only chains cached legs — an uncached second leg
+    // is picked up on a later voyage once pumpRoutes has computed it.
+    if (len < 150) {
+      const list = (portByBasin && portByBasin.get(u.basin)) || [];
+      let best = null, bd = -1;
+      const tx = to % W.ww, ty = (to / W.ww) | 0;
+      for (const c of list) {
+        if (c === to || c === u.start) continue;
+        const leg = seaCache[to + '>' + c];
+        if (!leg || leg.length < 2) continue;
+        const d = Math.hypot(c % W.ww - tx, ((c / W.ww) | 0) - ty);
+        if (d > bd) { bd = d; best = c; }
+      }
+      if (best != null) {
+        u.pts = p.concat(seaCache[to + '>' + best].slice(1)); u.dest = best; u.waiting = false; u.shortRetries = 0;
+        u.len = pathLen(u.pts); u.t = 0; u.dir = 1;
+        return;
+      }
+    }
     u.pts = p; u.dest = to; u.waiting = false; u.shortRetries = 0;
     u.len = len; u.t = 0; u.dir = 1;
   }
@@ -492,8 +517,13 @@ const MapView = (() => {
         const [mx, my] = toMap(sx, sy);
         handlers.place && handlers.place(mx, my); return;
       }
-      const vk = vehicleAt(sx, sy);
-      if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
+      // Tap order matters, and it used to be wrong: vehicles were
+      // checked FIRST with a 34px radius, so a plane or ship flying
+      // near France stole taps meant for France itself. Countries
+      // come first now — name pills, then capital points, then
+      // placed businesses and the star city — and vehicles only win
+      // a tap that is not on any country button. A vehicle in open
+      // sea or sky still opens its card exactly as before.
       if (typeof myCityPos === 'function' && (!S || !S.mapLayers || S.mapLayers.star !== false)) {
         try {
           const mc = myCityPos();
@@ -515,6 +545,8 @@ const MapView = (() => {
       let best = null, bd = 28;
       W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
       if (best != null) { handlers.city && handlers.city(best); return; }
+      const vk = vehicleAt(sx, sy);
+      if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
     }
     const [mx, my] = toMap(sx, sy);
     let k = W.playable.find(c => c.hasShape && mx >= c.box[0] && mx <= c.box[2] && my >= c.box[1] && my <= c.box[3] && hit.isPointInPath(c.path, mx, my));
@@ -555,6 +587,11 @@ const MapView = (() => {
     home() { const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
     world() { flyTo(MAP_W / 2, MAP_H / 2, 0); },
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
+    // Headless test hooks only: advance vehicles one step and read
+    // their positions, so a harness can prove boats actually move.
+    stepTest(dt) { step(dt); return vehicleList(performance.now()).map(vd => ({ key: vd.key, category: vd.category, x: vd.x, y: vd.y, progress: vd.progress })); },
+    unitsTest() { if (builtFor === null || (typeof S !== 'undefined' && S && builtFor !== S.seed)) buildUnits(); return units.map(u => ({ key: u.a3 + ':' + u.type, hasPts: !!u.pts, waiting: !!u.waiting, len: u.len || 0, t: u.t, start: u.start, dest: u.dest, basin: u.basin, queueLen: routeQueue.length })); },
+    vehiclesTest() { return vehicleList(performance.now()).map(vd => ({ key: vd.key, category: vd.category, x: vd.x, y: vd.y, progress: vd.progress })); },
     vehicleAt(sx, sy) { return vehicleAt(sx, sy); },
     flyToXY(x, y, s) { flyTo(x, y, s || Math.max(v.s, 2.4)); },
     nearCity(x, y) { return nearestCityXY(x, y); },

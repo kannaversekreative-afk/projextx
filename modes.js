@@ -69,6 +69,28 @@ function applyWorlStart() {
   if (w.twist === 'Harvest Failure') { cs.stab = Math.max(20, cs.stab - 10); }
   w.startGdp = cs.gdp;
 }
+// Random World (Offline): the same shuffled-world engine as Worl Mode
+// — random start, shuffled economies, random company/stock names —
+// but WITHOUT rivals, a win goal, or situation cards. It is an endless
+// sandbox like World, just shuffled. Honest limit, stated in the panel
+// too: the map, continents, countries and cities stay real Earth.
+// What is truly random: your starting treasury/debt/stability, every
+// country's GDP, and every company name and stock ticker. What is
+// shuffled, not generated: the world itself — a brand-new random
+// landmass would need a whole new map, cities and sea routes.
+function applyRandomStart() {
+  if (typeof S !== 'undefined' && S) S.randomWorld = true;
+  const cs = country(S.home);
+  const trePct = 0.02 + Math.random() * 0.08, debtPct = 0.20 + Math.random() * 0.70;
+  S.cash = cs.gdp * 1e6 * trePct; cs.treasury = S.cash; cs.debt = cs.gdp * 1e6 * debtPct; cs.stab = Math.round(45 + Math.random() * 50);
+  const conts = [...new Set(W.playable.map(k => k.cont))];
+  S.randomCont = conts[Math.floor(Math.random() * conts.length)];
+  W.playable.forEach(k => {
+    const c = country(k.a3); if (!c) return;
+    let m = 0.6 + Math.random() * 1.0; if (k.cont === S.randomCont) m *= 1.2;
+    c.gdp *= m; c.treasury *= m;
+  });
+}
 // Situation cards: data only, so a pending card survives a save.
 var WORL_SITUATIONS = [
   { id: 'border', title: 'Army on the border', text: 'A neighbour masses troops on your border. What do you do?',

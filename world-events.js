@@ -53,6 +53,7 @@ function canAttack(target) {
   const h = country(S.home), t = country(target);
   if (!t) return 'Not a country you can invade.';
   if (h.occ) return 'Your country is occupied.';
+  if (h.war) return 'You are already at war.';
   if (t.occ === S.home) return 'You already occupy it.';
   if (t.war) return `${cname(target)} is already at war.`;
   const left = warCooldownLeft();
@@ -121,39 +122,238 @@ function buyBase() {
   news('Nation', `New military base built in ${cname(S.home)}. It adds +5% to your war power.`, S.home);
   return null;
 }
-// Instant resolution: the player submits a plan, the game decides now.
-function resolveWar(plan) {
-  const err = canAttack(plan.target); if (err) return err;
-  const { att, def, winP } = warPlanScore(plan);
-  const roll = winP + gauss() * 0.12;
-  const attackerWins = roll >= 0.5;
-  S.lastWarDay = S.day; S.stats.wars++;
+// War outcomes, new model: pressing INVADE does NOT always decide the
+// war on the spot. It can win or lose right there (overwhelming cases),
+// or it starts an ongoing war that runs for in-game years, draining
+// money, troops and weapons every day, and later resolves to treaty,
+// annexation, sanctions, a nuclear escalation, or stalemate.
+// Every resolution is weighted 70% by real stats and 30% by chaos —
+// the provisional value, kept in ONE constant so it can be retuned later:
+// roll = WAR_STATS_WEIGHT * winP + (1 - WAR_STATS_WEIGHT) * rand(),
+// where winP comes from warScore
+// (military power, treasury/endurance, supplies from GDP per person,
+// stability, debt and population). A stronger side usually wins, but
+// upsets and long stalemates happen, and an ongoing war is never scored
+// as a win or a loss until it actually resolves.
+// Instant win/loss on invade is kept, but rare: below 5% of invasions.
+const WAR_STATS_WEIGHT = 0.70;
+const WAR_INSTANT_CHANCE = 0.04;
+function warStatsRoll(att, def, plan) {
+  const a = warScore(att, plan && att === S.home ? { army: plan.army, navy: plan.navy, air: plan.air } : null, plan && att === S.home ? 1 + (plan.approachBonus || 0) : 1, plan && att === S.home && plan.research ? 1.15 : 1, 1);
+  const d = warScore(def, null, 1, 1, 1);
+  const winP = a.effective / Math.max(1e-9, a.effective + d.effective);
+  return { att: a, def: d, winP, roll: WAR_STATS_WEIGHT * winP + (1 - WAR_STATS_WEIGHT) * rand() };
+}
+// Mini-games on by default; off means invading skips the taunt/FIGHT
+// path and uses the stats/ongoing path instead. Old saves have no
+// setting yet, and those count as on.
+function minigamesEnabled() {
+  return !(S.settings && S.settings.minigames === false);
+}
+// Submit a War Plan. Returns {err} or {outcome, war}.
+// outcome: 'instant-win' | 'instant-loss' | 'taunt' | 'ongoing'
+// 'taunt' means: show the target's taunt and offer the FIGHT mini-game.
+// The mini-game itself (or closing it) then decides: a mini-game win
+// wins the war with no troops lost, closing or losing it falls back
+// to an ongoing war via startOngoingWar.
+function beginWar(plan) {
+  const err = canAttack(plan.target); if (err) return { err };
+  const { att, def, winP, roll } = warStatsRoll(S.home, plan.target, plan);
   const attCost = Math.min(S.cash, country(S.home).gdp * 1e6 * 0.02 + att.power0 * 10000);
-  const defCs = country(plan.target);
-  S.cash = Math.max(0, S.cash - attCost);
-  defCs.treasury = Math.max(0, (defCs.treasury || 0) * 0.9);
-  setRel(S.home, plan.target, -100);
-  for (const a3 in S.countries) if (a3 !== S.home && a3 !== plan.target && rand() < 0.4) setRel(S.home, a3, getRel(S.home, a3) - 10);
-  if (W.byA3[S.home].gdp0 > 200000 && rand() < 0.6) { country(S.home).fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(S.home, 'sanctions'); news('World', `The world sanctions ${cname(S.home)} over the attack.`, S.home); }
-  const result = { target: plan.target, attackerWins, winP, att, def, cost: attCost };
-  S.lastWarResult = result;
-  if (attackerWins) {
-    shockCountry(plan.target, 'invasion'); shockCountry(S.home, 'peace', 0.5);
-    country(plan.target).occ = S.home; country(plan.target).occSince = S.day;
-    if (S.mode === 'domination' && typeof onDominationCapture === 'function') { try { onDominationCapture(plan.target); } catch (e) {} }
-    occupy(S.home, plan.target);
-    news('War', `Victory. ${cname(S.home)} defeated ${cname(plan.target)} and now occupies it.`, plan.target);
-  } else {
+  // Rare instant branch: under 5% of invasions resolve on the spot,
+  // split by the stats roll — overwhelming wins lose rarely, and
+  // overwhelming defeats win rarely. Everything else goes to the
+  // mini-game (if on) or straight to an ongoing war (if off).
+  if (rand() < WAR_INSTANT_CHANCE) {
+    if (roll >= 0.5) {
+      S.cash = Math.max(0, S.cash - attCost);
+      country(plan.target).treasury = Math.max(0, (country(plan.target).treasury || 0) * 0.9);
+      setRel(S.home, plan.target, -100);
+      for (const a3 in S.countries) if (a3 !== S.home && a3 !== plan.target && rand() < 0.4) setRel(S.home, a3, getRel(S.home, a3) - 10);
+      if (W.byA3[S.home].gdp0 > 200000 && rand() < 0.6) { country(S.home).fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(S.home, 'sanctions'); news('World', `The world sanctions ${cname(S.home)} over the attack.`, S.home); }
+      shockCountry(plan.target, 'invasion'); shockCountry(S.home, 'peace', 0.5);
+      country(plan.target).occ = S.home; country(plan.target).occSince = S.day;
+      if (S.mode === 'domination' && typeof onDominationCapture === 'function') { try { onDominationCapture(plan.target); } catch (e) {} }
+      occupy(S.home, plan.target);
+      news('War', `Victory. ${cname(S.home)} defeated ${cname(plan.target)} and now occupies it.`, plan.target);
+      S.lastWarDay = S.day; S.stats.wars++;
+      S.lastWarResult = { target: plan.target, outcome: 'instant-win', attackerWins: true, winP, roll, att, def, cost: attCost, days: 0 };
+      return { outcome: 'instant-win' };
+    }
+    S.cash = Math.max(0, S.cash - attCost);
+    country(plan.target).treasury = Math.max(0, (country(plan.target).treasury || 0) * 0.9);
+    setRel(S.home, plan.target, -100);
     country(S.home).stab = clamp(country(S.home).stab - 15, 0, 100);
     shockCountry(S.home, 'unrest', 1.2); shockCountry(plan.target, 'peace', 1.5); setRel(S.home, plan.target, -20);
     news('War', `${cname(plan.target)} drove back the invasion from ${cname(S.home)}.`, plan.target);
+    S.lastWarDay = S.day; S.stats.wars++;
+    S.lastWarResult = { target: plan.target, outcome: 'instant-loss', attackerWins: false, winP, roll, att, def, cost: attCost, days: 0 };
+    return { outcome: 'instant-loss' };
   }
+  if (minigamesEnabled()) {
+    if (typeof UI !== 'undefined') UI.pendingWarPlan = plan;
+    return { outcome: 'taunt' };
+  }
+  return startOngoingWar(plan, { att, def, winP, roll });
+}
+// Start an ongoing war for a plan: the war runs for years, draining
+// money, troops and weapons, and is NOT scored as a win or a loss.
+function startOngoingWar(plan) {
+  const w = startWar(S.home, plan.target, true);
+  w.plan = { army: plan.army, navy: plan.navy, air: plan.air, approachBonus: plan.approachBonus || 0, research: !!plan.research };
+  setRel(S.home, plan.target, -100);
+  S.lastWarDay = S.day; S.stats.wars++;
+  news('War', `The invasion of ${cname(plan.target)} has begun — and it is not over. The war is ongoing, and it will drain money, troops and weapons until it ends in treaty, annexation, sanctions, escalation, or stalemate.`, plan.target);
+  return { outcome: 'ongoing', war: w };
+}
+// A mini-game win wins the war: the target is occupied, exactly like
+// an instant win — except NO troops are lost in the main game, because
+// the main-game war never started (no S.wars entry, no war drain, no
+// stability hit). Toolbar cash spent during the battle stays spent.
+function warBattleWin(plan) {
+  const target = plan.target;
+  const { att, def, winP, roll } = warStatsRoll(S.home, target, plan);
+  country(target).treasury = Math.max(0, (country(target).treasury || 0) * 0.9);
+  setRel(S.home, target, -100);
+  shockCountry(target, 'invasion'); shockCountry(S.home, 'peace', 0.5);
+  country(target).occ = S.home; country(target).occSince = S.day;
+  if (S.mode === 'domination' && typeof onDominationCapture === 'function') { try { onDominationCapture(target); } catch (e) {} }
+  occupy(S.home, target);
+  news('War', `Victory on the battlefield. ${cname(S.home)} defeated ${cname(target)} in battle and now occupies it — with no troops lost.`, target);
+  S.lastWarDay = S.day; S.stats.wars++;
+  S.lastWarResult = { target, outcome: 'minigame-win', attackerWins: true, winP, roll, att, def, cost: 0, days: 0 };
+  return { outcome: 'minigame-win' };
+}
+// Backwards-compatible wrapper: old callers only needed err-or-null.
+function resolveWar(plan) {
+  const r = beginWar(plan); return r.err || null;
+}
+
+// ---------- ongoing wars: resources, front, resolution ----------
+function ensureWarState(w) {
+  if (w.troopsA == null) w.troopsA = 100;
+  if (w.troopsB == null) w.troopsB = 100;
+  if (w.weaponsA == null) w.weaponsA = 100;
+  if (w.weaponsB == null) w.weaponsB = 100;
+  if (w.spentA == null) w.spentA = 0;
+  if (w.spentB == null) w.spentB = 0;
+  if (w.status == null) w.status = 'ongoing';
+  return w;
+}
+// Supply factor for one side: troops and weapons on hand, plus whether
+// today's money was actually paid. 1 = fully supplied, 0.2 = spent.
+function warSupply(w, side) {
+  const troops = side === 'a' ? w.troopsA : w.troopsB, weapons = side === 'a' ? w.weaponsA : w.weaponsB;
+  const paid = side === 'a' ? !w.unpaidA : !w.unpaidB;
+  return clamp((troops / 100 * 0.5 + weapons / 100 * 0.5) * (paid ? 1 : 0.7), 0.2, 1);
+}
+function warSideTreasury(a3, amount) {
+  if (a3 === S.home) { const paid = Math.min(S.cash, amount); S.cash -= paid; return paid; }
+  const c = country(a3); const paid = Math.min(c.treasury || 0, amount); c.treasury = Math.max(0, (c.treasury || 0) - paid); return paid;
+}
+// One day of war cost: money, troops and weapons drain for both sides.
+// Money buys weapons back slowly, so a rich side can keep shooting
+// longer — a broke side stalls, then collapses.
+function warDrain(w) {
+  ensureWarState(w);
+  const pa = milPower(w.a), pb = milPower(w.b), tot = Math.max(1, pa + pb);
+  const shareA = pb / tot, shareB = pa / tot; // casualties follow the enemy's share of power
+  [['a', w.a, pa, shareA], ['b', w.b, pb, shareB]].forEach(([side, a3, power, oppShare]) => {
+    const daily = Math.max(1, power * 50000 / 7);
+    const paid = warSideTreasury(a3, daily);
+    if (side === 'a') { w.spentA += paid; w.unpaidA = paid < daily; } else { w.spentB += paid; w.unpaidB = paid < daily; }
+    const replenish = paid >= daily ? 0.04 : 0;
+    if (side === 'a') {
+      w.troopsA = clamp(w.troopsA - (0.06 + 0.10 * oppShare), 0, 100);
+      w.weaponsA = clamp(w.weaponsA - 0.12 + replenish, 0, 100);
+    } else {
+      w.troopsB = clamp(w.troopsB - (0.06 + 0.10 * oppShare), 0, 100);
+      w.weaponsB = clamp(w.weaponsB - 0.12 + replenish, 0, 100);
+    }
+  });
+}
+function warCollapsedSide(w) {
+  if (w.troopsA <= 0 || w.weaponsA <= 0) return 'a';
+  if (w.troopsB <= 0 || w.weaponsB <= 0) return 'b';
   return null;
+}
+// Resolve an ongoing war. outcome: 'annexation' | 'treaty-att' |
+// 'treaty-def' | 'sanctions' | 'nuke' | 'stalemate'. Treaty-att/def are
+// both reported as 'treaty' with different terms.
+function resolveOngoingWar(w, trigger) {
+  ensureWarState(w);
+  const len = S.day - w.start;
+  const plan = (w.a === S.home && w.plan) ? w.plan : null;
+  const s = warStatsRoll(w.a, w.b, plan);
+  let roll = s.roll;
+  if (w.front >= 85) roll += 0.10;
+  if (w.front <= 15) roll -= 0.10;
+  const collapsed = warCollapsedSide(w);
+  if (collapsed === 'a') roll -= 0.20;
+  if (collapsed === 'b') roll += 0.20;
+  if (w.weaponsA <= 0) roll -= 0.10;
+  if (w.weaponsB <= 0) roll += 0.10;
+  roll = clamp(roll, 0, 1);
+  let outcome;
+  if (trigger === 'breakthrough-attacker') outcome = 'annexation';
+  else if (trigger === 'breakthrough-defender') outcome = 'sanctions';
+  else if (len >= 730 && w.front <= 25 && rand() < 0.15) outcome = 'nuke';
+  else if (roll >= 0.85) outcome = 'annexation';
+  else if (roll >= 0.65) outcome = 'treaty-att';
+  else if (roll >= 0.45) outcome = 'stalemate';
+  else if (roll >= 0.30) outcome = 'treaty-def';
+  else outcome = 'sanctions';
+  const A = country(w.a), B = country(w.b);
+  const spent = (w.spentA || 0) + (w.spentB || 0);
+  // Clear the war without posting endWar's own news item — the outcome
+  // news below is the record of how it ended.
+  S.wars = S.wars.filter(x => x !== w); country(w.a).war = null; country(w.b).war = null;
+  S.live = S.live.filter(e => !(e.cat === 'War' && e.title === `War: ${cname(w.a)} vs ${cname(w.b)}`));
+  if (outcome === 'annexation') {
+    B.occ = w.a; B.occSince = S.day; shockCountry(w.b, 'invasion'); shockCountry(w.a, 'peace', 0.5);
+    if (S.mode === 'domination' && w.a === S.home && typeof onDominationCapture === 'function') { try { onDominationCapture(w.b); } catch (e) {} }
+    occupy(w.a, w.b);
+    news('War', `Annexation. After ${Math.round(len / 365 * 10) / 10} years of war, ${cname(w.a)} has taken ${cname(w.b)}.`, w.b);
+    live(`Occupation of ${cname(w.b)}`, 9999, 'War', w.b);
+  } else if (outcome === 'treaty-att' || outcome === 'treaty-def') {
+    const favAtt = outcome === 'treaty-att';
+    const rep = Math.round((favAtt ? B.treasury || 0 : A.treasury || 0) * 0.10);
+    if (favAtt) { if (w.a === S.home) S.cash += rep; else A.treasury = (A.treasury || 0) + rep; B.treasury = Math.max(0, (B.treasury || 0) - rep); }
+    else { if (w.b === S.home) S.cash += rep; else B.treasury = (B.treasury || 0) + rep; A.treasury = Math.max(0, (A.treasury || 0) - rep); }
+    setRel(w.a, w.b, favAtt ? -10 : 0);
+    A.stab = clamp(A.stab + 3, 0, 100); B.stab = clamp(B.stab + 3, 0, 100);
+    shockCountry(w.a, 'peace'); shockCountry(w.b, 'peace');
+    news('War', `Treaty. ${cname(w.a)} and ${cname(w.b)} sign a peace deal${favAtt ? `, with reparations from ${cname(w.b)}` : `, with reparations from ${cname(w.a)}`}. No territory changes hands.`, w.a);
+  } else if (outcome === 'sanctions') {
+    A.fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(w.a, 'sanctions');
+    A.treasury = Math.max(0, (A.treasury || 0) * 0.95); B.treasury = Math.max(0, (B.treasury || 0) * 0.95);
+    if (w.a === S.home) S.cash = Math.max(0, S.cash * 0.95);
+    setRel(w.a, w.b, -80);
+    news('World', `Sanctions end the war between ${cname(w.a)} and ${cname(w.b)}: the world punishes the aggressor, both economies pay, and no territory changes hands.`, w.a);
+  } else if (outcome === 'nuke') {
+    A.stab = clamp(A.stab - 30, 0, 100); B.stab = clamp(B.stab - 30, 0, 100);
+    A.treasury = Math.max(0, (A.treasury || 0) * 0.8); B.treasury = Math.max(0, (B.treasury || 0) * 0.8);
+    if (w.a === S.home) S.cash = Math.max(0, S.cash * 0.8);
+    if (w.b === S.home) S.cash = Math.max(0, S.cash * 0.8);
+    shockCountry(w.a, 'war', 2); shockCountry(w.b, 'war', 2);
+    for (const a3 in S.countries) if (a3 !== w.a && a3 !== w.b) setRel(w.a, a3, getRel(w.a, a3) - 20);
+    setRel(w.a, w.b, -100);
+    news('War', `Nuclear escalation ends the war between ${cname(w.a)} and ${cname(w.b)} in devastation. Both nations are shattered, and the world turns against the side that escalated.`, w.a);
+  } else { // stalemate
+    A.stab = clamp(A.stab - 5, 0, 100); B.stab = clamp(B.stab - 5, 0, 100);
+    setRel(w.a, w.b, -50);
+    news('War', `Stalemate. After ${Math.round(len / 365 * 10) / 10} years, neither ${cname(w.a)} nor ${cname(w.b)} can finish the war. It ends with no winner and no territory gained.`, w.a);
+  }
+  if (w.a === S.home || w.b === S.home) {
+    const other = w.a === S.home ? w.b : w.a;
+    S.lastWarResult = { target: other, outcome, attackerWins: outcome === 'annexation', winP: s.winP, roll, att: s.att, def: s.def, cost: spent, days: len };
+  }
+  return outcome;
 }
 
 // ---------- wars ----------
 function startWar(att, def, byPlayer) {
-  const w = { id: uid(), a: att, b: def, start: S.day, front: 50, player: !!byPlayer };
+  const w = { id: uid(), a: att, b: def, start: S.day, front: 50, player: !!byPlayer, status: 'ongoing', plan: null, troopsA: 100, troopsB: 100, weaponsA: 100, weaponsB: 100, spentA: 0, spentB: 0, unpaidA: false, unpaidB: false };
   S.wars.push(w); country(att).war = w.id; country(def).war = w.id;
   shockCountry(att, 'war', 0.8); shockCountry(def, 'war', 1.3);
   W.byA3[att].nb.concat(W.byA3[def].nb).forEach(n => { if (S.countries[n] && n !== att && n !== def) { shockCountry(n, 'unrest', 0.3); setRel(n, att, getRel(n, att) - 10); } });
@@ -161,6 +361,7 @@ function startWar(att, def, byPlayer) {
   news('War', `WAR: ${cname(att)} attacks ${cname(def)}.${byPlayer ? ' You gave the order.' : ''} Markets in both countries plunge.`, att);
   live(`War: ${cname(att)} vs ${cname(def)}`, 9999, 'War', att);
   if (W.byA3[att].gdp0 > 200000 && rand() < 0.6) { country(att).fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(att, 'sanctions'); news('World', `The world sanctions ${cname(att)} over the attack.`, att); }
+  return w;
 }
 function endWar(w, text, cat) {
   S.wars = S.wars.filter(x => x !== w); country(w.a).war = null; country(w.b).war = null;
@@ -168,22 +369,28 @@ function endWar(w, text, cat) {
   news(cat || 'War', text, w.a);
 }
 function warDay(w) {
+  ensureWarState(w);
   const A = country(w.a), B = country(w.b);
   A.drift = Math.min(A.drift, -0.0008); B.drift = Math.min(B.drift, -0.0018);
   A.pop *= 1 - 0.004 / 365; B.pop *= 1 - 0.015 / 365;
-  w.front += (warOdds(w.a, w.b) - 0.5) * 3.2 + gauss() * 2.4;
+  // Money, troops and weapons drain every day, before the front moves.
+  warDrain(w);
+  // Front moves on supply-adjusted power, not raw power: a side that
+  // has run out of troops, weapons or money stalls, then gets pushed back.
+  const pa = milPower(w.a) * warSupply(w, 'a'), pb = milPower(w.b) * warSupply(w, 'b');
+  const odds = pa / (pa + pb * 1.15);
+  w.front += (odds - 0.5) * 3.2 + gauss() * 1.2;
   const len = S.day - w.start;
-  if (w.front >= 100) {
-    endWar(w, `${cname(w.a)} has defeated and occupied ${cname(w.b)}.`);
-    B.occ = w.a; B.occSince = S.day; shockCountry(w.b, 'invasion'); shockCountry(w.a, 'peace', 0.5);
-    occupy(w.a, w.b);
-    live(`Occupation of ${cname(w.b)}`, 9999, 'War', w.b);
-  } else if (w.front <= 0) {
-    endWar(w, `${cname(w.b)} drives back the invasion. ${cname(w.a)} retreats.`);
-    shockCountry(w.b, 'peace', 1.5); shockCountry(w.a, 'unrest', 1.2); A.stab -= 15; setRel(w.a, w.b, -20);
-  } else if (!w.player && rand() < 0.002 + len / 25000) {
-    endWar(w, `Ceasefire: ${cname(w.a)} and ${cname(w.b)} sign a peace deal. Markets rally.`, 'World');
-    shockCountry(w.a, 'peace'); shockCountry(w.b, 'peace', 1.4); setRel(w.a, w.b, 0);
+  if (w.front >= 100) { resolveOngoingWar(w, 'breakthrough-attacker'); return; }
+  if (w.front <= 0) { resolveOngoingWar(w, 'breakthrough-defender'); return; }
+  if (len >= 365) {
+    // Negotiated endings are slow on purpose: a war should be able to
+    // run for years, like a real unresolved invasion, not end in months.
+    // At 1 year the daily chance is ~1%, rising with duration, and a
+    // collapsed side (no troops/weapons left) forces a quick ending.
+    let chance = 0.0015 + len / 40000;
+    if (warCollapsedSide(w)) chance = Math.max(chance, 0.05);
+    if (rand() < chance) { resolveOngoingWar(w, 'negotiated'); return; }
   }
 }
 // The winner takes the loser's company. If that's you, it's yours.
@@ -284,7 +491,7 @@ function homeBonus(kind) { let v = 0; country(S.home).proj.forEach(p => { if (p.
 function countryStatus(a3) {
   const c = country(a3); if (!c) return { t: 'Not playable', cls: 'grey' };
   if (c.occ) return { t: `Occupied by ${cname(c.occ)}`, cls: 'red' };
-  if (c.war) { const w = S.wars.find(x => x.id === c.war); return { t: `At war with ${cname(w.a === a3 ? w.b : w.a)}`, cls: 'red' }; }
+  if (c.war) { const w = S.wars.find(x => x.id === c.war); return { t: `Ongoing war with ${cname(w.a === a3 ? w.b : w.a)}`, cls: 'red' }; }
   if (c.unrest > S.day) return { t: 'Mass protests', cls: 'orange' };
   const tense = Object.entries(c.rel).filter(([, v]) => v < -35);
   if (tense.length) return { t: `Tension with ${cname(tense[0][0])}`, cls: 'orange' };

@@ -71,6 +71,7 @@ function myCityValue() {
   m.land.forEach(id => { const l = MYCITY_LAND.find(x => x.id === id); if (l) v += myCityPrice(l.base); });
   if (m.bank) v += myCityPrice(500000000) * m.bank;
   if (m.firm) v += myCityPrice(1000000000) * m.firm;
+  v += myCityGridValue(m);
   return v;
 }
 function myCityBuy(kind, id) {
@@ -91,7 +92,63 @@ function myCityBuy(kind, id) {
   S.cash -= cost; owned.push(id);
   return null;
 }
-// Weekly income from your city: bank pays interest on its level,
+// ---------- decorating: placeable buildings, roads and decor ----------
+// A personal grid for Your City: buy an item and place it on a square.
+// This is separate from the houses/cars/land lists above (those are
+// things you own; these are things you place). Placed items are stored
+// in S.myCity.grid, so they persist in the save exactly like the rest
+// of the city. Removing one sells it back for 80% of what it cost.
+var MYCITY_GRID_W = 8, MYCITY_GRID_H = 8;
+var MYCITY_DECOR = [
+  // Personal buildings (same price ladder as the houses list).
+  { id: 'flat', name: 'City flat', icon: '🏠', kind: 'building', base: 250000 },
+  { id: 'house', name: 'Family house', icon: '🏡', kind: 'building', base: 2500000 },
+  { id: 'villa', name: 'Villa', icon: '🏘️', kind: 'building', base: 25000000 },
+  { id: 'mansion', name: 'Mansion', icon: '🏰', kind: 'building', base: 400000000 },
+  { id: 'estate', name: 'Grand estate', icon: '🏯', kind: 'building', base: 8000000000 },
+  { id: 'palace', name: 'Palace', icon: '👑', kind: 'building', base: 500000000000 },
+  // Roads.
+  { id: 'road', name: 'Road', icon: '🛣️', kind: 'road', base: 10000 },
+  { id: 'plaza', name: 'Plaza', icon: '⛲', kind: 'road', base: 50000 },
+  // Decor.
+  { id: 'tree', name: 'Tree', icon: '🌳', kind: 'decor', base: 5000 },
+  { id: 'lamp', name: 'Lamp', icon: '💡', kind: 'decor', base: 2000 },
+  { id: 'bench', name: 'Park bench', icon: '🪑', kind: 'decor', base: 3000 },
+  { id: 'garden', name: 'Garden', icon: '🌷', kind: 'decor', base: 50000 },
+  { id: 'pond', name: 'Pond', icon: '🦆', kind: 'decor', base: 100000 },
+  { id: 'fountain', name: 'Fountain', icon: '⛲', kind: 'decor', base: 250000 },
+  { id: 'statue', name: 'Statue', icon: '🗽', kind: 'decor', base: 150000 },
+];
+function myCityDecorItem(id) { return MYCITY_DECOR.find(x => x.id === id) || null; }
+function ensureMyCityGrid(m) {
+  if (!m.grid) m.grid = [];
+  // Drop any entry that is off the grid or refers to an unknown item.
+  m.grid = m.grid.filter(g => g && g.x >= 0 && g.x < MYCITY_GRID_W && g.y >= 0 && g.y < MYCITY_GRID_H && myCityDecorItem(g.id));
+  return m.grid;
+}
+function myCityGridValue(m) {
+  let v = 0; ensureMyCityGrid(m).forEach(g => { const it = myCityDecorItem(g.id); if (it) v += myCityPrice(it.base); });
+  return v;
+}
+function myCityPlace(itemId, x, y) {
+  const m = ensureMyCity(); ensureMyCityGrid(m);
+  const item = myCityDecorItem(itemId); if (!item) return 'Not placeable.';
+  if (x < 0 || x >= MYCITY_GRID_W || y < 0 || y >= MYCITY_GRID_H) return 'Outside your city grid.';
+  if (m.grid.some(g => g.x === x && g.y === y)) return 'That square is already built on.';
+  const cost = myCityPrice(item.base);
+  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  S.cash -= cost; m.grid.push({ x, y, id: itemId });
+  return null;
+}
+function myCityRemove(x, y) {
+  const m = ensureMyCity(); ensureMyCityGrid(m);
+  const i = m.grid.findIndex(g => g.x === x && g.y === y);
+  if (i < 0) return 'Nothing there.';
+  const item = myCityDecorItem(m.grid[i].id);
+  m.grid.splice(i, 1);
+  if (item) S.cash += Math.round(myCityPrice(item.base) * 0.8);
+  return null;
+}
 // trading firm pays a cut of your trading. Small vs the price —
 // this city is for owning, not for farming cash.
 function myCityWeek() {
