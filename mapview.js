@@ -462,8 +462,11 @@ const MapView = (() => {
       c.save();
       c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.clip();
       c.fillStyle = '#ffffff'; c.fillRect(sx - rr, sy - rr, rr * 2, rr * 2);
-      c.font = `${Math.round(rr * 1.9)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(fl, sx, sy + 1);
+      // Dead-centre: emoji glyphs sit high in their em box, so nudge
+      // down a touch and size the flag to fill the circle, not float
+      // small inside it.
+      c.font = `${Math.round(rr * 2.2)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(fl, sx, sy + Math.round(rr * 0.08));
       c.restore();
       c.strokeStyle = isMine || isSel ? '#2f7cf6' : '#ffffff';
       c.lineWidth = isMine || isSel ? 2.4 : held ? 2.6 : 1.5; c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();

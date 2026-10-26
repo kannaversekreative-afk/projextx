@@ -1533,9 +1533,9 @@ PANELS.help = () => {
     `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
-// Every menu item, shared by the hamburger drawer (right side,
-// scrollable) and the old More sheet. The drawer is the new home for
-// all of these now that the bottom bar is gone.
+// Every menu item, shared by the hamburger popup and the old More
+// sheet. The popup is the new home for all of these now that the
+// bottom bar is gone.
 const MENU_ITEMS = [
   ['leader', '👑', 'Leader'], ['inbox', '✉️', 'Messages'], ['news', '📰', 'News'], ['markets', '📈', 'Markets'],
   ['airport', '✈️', 'Airport'], ['mycity', '⭐', 'Your City'],
@@ -1548,7 +1548,25 @@ const MENU_ITEMS = [
 function moreSheet() {
   openModal(`<h2>More</h2><div class="more-grid">${MENU_ITEMS.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
-PANELS.drawer = () => panelShell('Menu', '', `<div class="menu-list">${MENU_ITEMS.map(([x, ic, t]) => `<button class="srow" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="avatar">${ic}</span><span class="sname"><b>${t}</b></span><span class="muted">›</span></button>`).join('')}</div><p class="muted small">Everything that used to live in the bottom bar is here now.</p>`);
+// The menu is a centred popup, not a side bar. Sections and rows
+// follow the screenshot layout: a header with ••• + More + X, then
+// grouped white cards with an icon tile, a title, a subtitle and a
+// chevron. Every menu item is still here, just grouped.
+function openMenuPopup() {
+  const TINTS = ['#ffe9e0', '#fff3c4', '#e0f0ff', '#e2f5e9', '#f3e8ff', '#ffe4ec'];
+  const row = (x, ic, t, d, i) => `<button class="menu-row" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="menu-ic" style="background:${TINTS[i % TINTS.length]}">${ic}</span><span class="menu-txt"><b>${t}</b><span>${d}</span></span><span class="menu-chev">›</span></button>`;
+  const group = (title, items) => `<div class="menu-sec">${title}</div><div class="menu-card">${items.map(([x, ic, t, d], i) => row(x, ic, t, d, i)).join('')}</div>`;
+  const find = x => { const m = MENU_ITEMS.find(m => m[0] === x); return [m[0], m[1], m[2]]; };
+  const g = (title, defs) => group(title, defs.map(([x, d]) => [...find(x), d]));
+  openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
+  <div class="menu-pop-body">
+  ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['leaderboard', 'Global leaderboards']])}
+  ${g('Your business', [['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['estate', 'Buildings you own'], ['web', 'Your business websites'], ['shop', 'Packs and boosts']])}
+  ${g('World', [['news', "What's happening in the world"], ['inbox', 'Your messages'], ['nation', 'Relations, taxes and trade'], ['capital', 'Your capital city'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mycity', 'Your own city']])}
+  ${g('Play', [['mode', 'Game modes'], ['offices', 'Offices and boards'], ['sports', 'Teams and leagues'], ['stores', 'Stores in your cities'], ['bank', 'Loans and banking'], ['search', 'Find anything'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  </div>`, 'menu');
+}
+PANELS.drawer = () => { closePanel(); openMenuPopup(); };
 // ---------- date modal: Done this week? + calendar ----------
 function openDateModal() {
   const e = ensureEarnings();
@@ -1653,15 +1671,15 @@ const A = {
   paperNext: () => flipPaper(1),
   paperEdPrev: () => flipEdition(1),
   paperEdNext: () => flipEdition(-1),
-  scrim: (x, el, e) => { if (e.target === el && UI.modal === 'sheet') closeModal(); },
+  scrim: (x, el, e) => { if (e.target === el && (UI.modal === 'sheet' || UI.modal === 'menu')) closeModal(); },
   closeModal: () => { closeModal(); if (S && S.over) gameOver(); },
   speed: x => { S.speed = +x; renderHUD(); },
   skipMenu: () => skipMenu(),
   skip: x => doSkip(+x),
   zoom: x => MapView.zoom(+x),
   locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
-  more: () => openPanel('drawer'),
-  drawer: () => openPanel('drawer'),
+  more: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
+  drawer: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
   dateModal: () => openDateModal(),
   dateYes: () => { closeModal(); A.ageWeek(); },
   dateNo: () => closeModal(),

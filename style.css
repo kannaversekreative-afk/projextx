@@ -336,6 +336,22 @@ body.in-city #hud { display: none; }
 .hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
 /* Departures board modal: dark, like a departures board, not a white card. */
 .mbox.dep { background: #0f172a; color: #fff; width: min(640px, 100%); }
+/* Menu popup (centred, not a side bar): header + grouped cards. */
+.mbox.menu { width: min(560px, 100%); max-height: 86vh; padding: 0; background: #eef2f7; overflow-y: auto; }
+.menu-pop-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; background: #fff; border-bottom: 1.5px solid var(--line); position: sticky; top: 0; z-index: 1; }
+.menu-dots { width: 44px; height: 44px; flex: none; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; font-size: 20px; letter-spacing: 2px; color: #5a6b82; }
+.menu-pop-head h2 { margin: 0; flex: 1; font-size: 24px; }
+.menu-pop-body { padding: 14px 16px 20px; }
+.menu-sec { font-size: 14px; font-weight: 700; color: var(--muted); margin: 16px 4px 8px; }
+.menu-sec:first-child { margin-top: 0; }
+.menu-card { background: #fff; border: 1.5px solid var(--line); border-radius: 20px; overflow: hidden; }
+.menu-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #fff; border: 0; border-bottom: 1.5px solid var(--line); cursor: pointer; }
+.menu-row:last-child { border-bottom: 0; }
+.menu-ic { width: 44px; height: 44px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 22px; }
+.menu-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.menu-txt b { font-size: 17px; color: var(--ink); }
+.menu-txt span { font-size: 13px; color: var(--muted); }
+.menu-chev { font-size: 22px; color: #9aa7b8; }
 .mbox.dep .muted { color: #94a3b8; }
 .mbox.dep .btn { background: #1e293b; color: #fff; border-color: #334155; }
 .mbox.dep .btn.primary { background: #2f7cf6; border-color: #2f7cf6; }
