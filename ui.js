@@ -336,21 +336,35 @@ function renderHUD() {
   if (UI.panel) $('panel').classList.add('open');
 }
 function renderCityHUD() {
-  if (!CityView.isOpen()) { $('chud').innerHTML = ''; return; }
-  const c = CityView.city;
-  if (typeof MARS_CITY_ID !== 'undefined' && c.id === MARS_CITY_ID) {
-    const sites = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home) : [];
-    const owned = sites.filter(s => s.owned).length;
-    $('chud').innerHTML = `<div class="citybar card"><div><b>🚀 Mars</b><span class="muted"> · Dirt and mines · ${owned} of ${sites.length} mine sites owned</span></div>
+  // Idempotent rewrite — this is the Leave city fix. The frame loop calls
+  // this every ~250ms, and it used to rewrite #chud innerHTML every time,
+  // replacing the Leave city button node 4x a second. If a rewrite landed
+  // between a click's mousedown and mouseup, the mousedown target was
+  // detached before mouseup, so the browser fired no click at all — the
+  // button silently did nothing, exactly as the live test saw. Now the
+  // DOM is only touched when the bar's content actually changed, so the
+  // button node survives across frames and clicks always land. Callers
+  // that clear #chud directly (leaveCity, the new-game reset) must also
+  // clear UI.lastCityHUD, or the next render would wrongly skip the
+  // rewrite and leave the bar empty.
+  let html = '';
+  if (CityView.isOpen()) {
+    const c = CityView.city;
+    if (typeof MARS_CITY_ID !== 'undefined' && c.id === MARS_CITY_ID) {
+      const sites = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home) : [];
+      const owned = sites.filter(s => s.owned).length;
+      html = `<div class="citybar card"><div><b>🚀 Mars</b><span class="muted"> · Dirt and mines · ${owned} of ${sites.length} mine sites owned</span></div>
     <div class="city-actions"><button data-a="leaveCity">✕ Leave Mars</button></div></div>`;
-    return;
-  }
-  const k = W.byA3[c.a3], co = S.co[c.a3];
-  // A company's locations are all in its own capital city (co.city), by construction
-  // in addLocation(), so the count here is exact, not a filter that happens to work.
-  const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
-  $('chud').innerHTML = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
+    } else {
+      const k = W.byA3[c.a3], co = S.co[c.a3];
+      // A company's locations are all in its own capital city (co.city), by construction
+      // in addLocation(), so the count here is exact, not a filter that happens to work.
+      const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
+      html = `<div class="citybar card"><div><b>${esc(c.name)}</b><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here</span></div>
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
+    }
+  }
+  if (html !== UI.lastCityHUD) { UI.lastCityHUD = html; $('chud').innerHTML = html; }
 }
 
 // ---------- vehicles: tap card + Watch view ----------
@@ -1094,7 +1108,7 @@ function enterCity(id) {
   closePopup(); CityView.open(id); document.body.classList.add('in-city'); renderCityHUD(); tutCheck();
 }
 function leaveCity() {
-  CityView.close(); document.body.classList.remove('in-city'); $('chud').innerHTML = ''; renderHUD();
+  CityView.close(); document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; renderHUD();
 }
 
 // ---------- skip / game over / loop ----------
@@ -2029,7 +2043,7 @@ const A = {
   newGame: async () => {
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
     S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
-    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; $('tut').innerHTML = ''; showInherit();
+    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; $('tut').innerHTML = ''; showInherit();
   },
   pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
