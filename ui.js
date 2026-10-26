@@ -2207,17 +2207,37 @@ function openDeparturesModal() {
   <div class="dep-title">✈ DEPARTURES</div>
   <canvas id="depmap" class="dep-map"></canvas>
   <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
-  <div class="dep-grplabel">${sel}</div>
   <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
   ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km.toLocaleString('en-US')}</span></button>`).join('')}
   </div>`, 'dep');
   drawDepMap(sel, from);
 }
-// Dotted world map for the departures board: dim dots for every land cell
-// from the game's own map grid, gold dot for the airport the player is
-// flying out of. No bright city dots — the map stays clean. Tapping a
-// continent switches the departures list to that continent's cities.
+// Land cells belonging to one continent group, cached per group. A cell
+// counts when it falls inside a group country's bounding box AND inside
+// its shape path — the same point-in-path test the map itself uses.
+const DEP_BRIGHT = {};
+function depBrightCells(group) {
+  if (DEP_BRIGHT[group]) return DEP_BRIGHT[group];
+  const set = new Set();
+  const tctx = document.createElement('canvas').getContext('2d');
+  const list = Object.values(W.byA3).filter(k => k && k.path && depContGroup(k.cont) === group);
+  const gw = W.ww, gh = W.wh;
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const c = y * gw + x; if (W.water[c]) continue;
+    const mx = cellXY(W, c)[0], my = cellXY(W, c)[1];
+    for (const k of list) {
+      const b = k.box; if (!b || mx < b[0] || mx > b[2] || my < b[1] || my > b[3]) continue;
+      try { if (tctx.isPointInPath(k.path, mx, my)) { set.add(c); break; } } catch (e) {}
+    }
+  }
+  DEP_BRIGHT[group] = set; return set;
+}
+// Dotted world map for the departures board: the selected continent's
+// land dots shine bright white like the reference, every other continent
+// stays dim, gold dot for the airport the player is flying out of, and
+// the continent name drawn over its own landmass. Tapping a continent
+// switches the departures list to that continent's cities.
 function drawDepMap(sel, from) {
   const cv = document.getElementById('depmap');
   if (!cv || typeof W === 'undefined' || !W.water) return;
@@ -2225,11 +2245,21 @@ function drawDepMap(sel, from) {
   cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
   const gw = W.ww, gh = W.wh, dx = w / gw, dy = h / gh;
+  const bright = depBrightCells(sel);
   ctx.clearRect(0, 0, w, h);
+  let sx = 0, sy = 0, n = 0;
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
-    if (W.water[y * gw + x]) continue;
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    const c = y * gw + x; if (W.water[c]) continue;
+    if (bright.has(c)) { ctx.fillStyle = 'rgba(255,255,255,0.95)'; sx += x; sy += y; n++; }
+    else ctx.fillStyle = 'rgba(255,255,255,0.18)';
     ctx.beginPath(); ctx.arc(x * dx + dx / 2, y * dy + dy / 2, Math.max(1, dx * 0.32), 0, 7); ctx.fill();
+  }
+  if (n) {
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.font = `700 ${Math.round(Math.max(16, w * 0.055))}px sans-serif`;
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 6;
+    ctx.fillText(sel, (sx / n) * dx + dx / 2, (sy / n) * dy + dy / 2);
+    ctx.shadowBlur = 0;
   }
   ctx.fillStyle = '#ffd166';
   ctx.beginPath(); ctx.arc((from.lon + 180) / 360 * w, (90 - from.lat) / 180 * h, Math.max(3, dx * 0.9), 0, 7); ctx.fill();
