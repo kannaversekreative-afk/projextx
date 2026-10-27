@@ -379,6 +379,7 @@ body.in-city #hud { display: none; }
 .mbox.dep { background: #101f28; color: #fff; width: 100%; max-width: 100%; min-height: 100vh; max-height: 100vh; border-radius: 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); overflow-y: auto; }
 .mbox.dep .dep-plane { font-size: 26px; }
 .mbox.dep .xbtn { background: rgba(255,255,255,0.12); color: #fff; }
+.mbox.dep .btn { color: #1f5fd0; }
 .mbox.dep .dep-welcome { color: rgba(255,255,255,0.85); margin: 10px 0 2px; font-size: 15px; line-height: 1.45; }
 .mbox.dep .dep-title { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: rgba(255,255,255,0.28); margin: 8px 0 2px; }
 .mbox.dep .dep-map { width: 100%; display: block; cursor: pointer; }

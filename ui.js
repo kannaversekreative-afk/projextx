@@ -2987,7 +2987,7 @@ function departuresBoardHTML(inPhone) {
   <div class="dep-title">✈ DEPARTURES</div>
   <canvas id="depmap" class="dep-map"></canvas>
   <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
-  <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
+  <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}<button class="dep-tab" data-a="depWorld">World</button><button class="dep-tab" data-a="depEstate">Estate</button><button class="dep-tab" data-a="marsTravel">Mars</button></div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
   ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km.toLocaleString('en-US')}</span></button>`).join('')}
   </div>`;
@@ -3520,6 +3520,8 @@ const A = {
   unlockCity: x => { const err = unlockCity(+x); if (err) { toast(err, 'bad'); return; } closeModal(); save(); renderHUD(); toast('City unlocked.', 'good'); },
   leaveCity: () => leaveCity(),
   depLeave: () => { closeModal(); leaveCity(); },
+  depWorld: () => { closeModal(); if (CityView.isOpen()) leaveCity(); if (typeof MapView !== 'undefined' && MapView.flyToCountry) MapView.flyToCountry(S.home); },
+  depEstate: () => { toast('Your city is not set yet — send it when you are ready.'); },
   cityFilter: () => {
     const f = ['all', 'lease', 'sale', 'mine'];
     CityView.setFilter(f[(f.indexOf(CityView.filter) + 1) % f.length]); renderCityHUD();
