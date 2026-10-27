@@ -19,11 +19,22 @@
 //   in-game-economy price. Bets whose settlement price cannot be fetched
 //   simply stay open until a price comes back.
 // State lives on S (saved by the existing save path). Bets settle on a
-// real clock: they are checked whenever the Crypto panel opens, and on
-// the panel's Refresh / Settle buttons. There is no background game tick
-// to settle them while the panel is closed, so a bet placed and left
-// settles the next time the panel opens after its window ends.
+// real clock: they are checked whenever the Crypto panel opens, on the
+// panel's Refresh / Settle buttons, and on every live tick while the
+// panel is open (see the ticker below). A bet placed and left settles
+// the next time the panel opens after its window ends.
+//   Live chart: every successfully fetched price is appended to
+// S.crypto.ticks (capped at 300 points) and drawn as a constantly
+// moving line chart while the panel is open — one new real point every
+// 10 seconds. The chart never interpolates, smooths, or invents points:
+// every point on it is a price actually fetched from the public API.
 'use strict';
+
+// One new real price point every 10 seconds while the Crypto panel is
+// open. 10s = 6 fetches/minute, inside both free sources' no-key limits.
+// Mutable (not const) so tests can run the ticker fast.
+let CRYPTO_TICK_MS = 10000;
+let cryptoTimer = null;
 
 // Free, no-key endpoints. Coinbase returns { data: { amount: "123..." } };
 // CoinGecko returns { bitcoin: { usd: 123... } }.
@@ -36,8 +47,9 @@ const CRYPTO_COIN = { id: 'bitcoin', sym: 'BTC', name: 'Bitcoin' };
 
 function ensureCrypto() {
   if (!S) return null;
-  if (!S.crypto || typeof S.crypto !== 'object') S.crypto = { lastPrice: null, lastAt: 0, lastSource: '', bets: [], won: 0, lost: 0, lastStake: 10000 };
+  if (!S.crypto || typeof S.crypto !== 'object') S.crypto = { lastPrice: null, lastAt: 0, lastSource: '', bets: [], won: 0, lost: 0, lastStake: 10000, ticks: [] };
   if (!Array.isArray(S.crypto.bets)) S.crypto.bets = [];
+  if (!Array.isArray(S.crypto.ticks)) S.crypto.ticks = [];
   if (!isFinite(S.crypto.lastStake) || S.crypto.lastStake <= 0) S.crypto.lastStake = 10000;
   return S.crypto;
 }
@@ -56,6 +68,10 @@ async function cryptoRefreshPrice(fetchFn) {
       const p = src.parse(j);
       if (p && isFinite(p) && p > 0) {
         cr.lastPrice = p; cr.lastAt = Date.now(); cr.lastSource = src.name;
+        // Live-chart point: every real fetched price, newest last,
+        // capped so the save never grows on ticks.
+        cr.ticks.push({ t: Date.now(), p });
+        if (cr.ticks.length > 300) cr.ticks.splice(0, cr.ticks.length - 300);
         return p;
       }
     } catch (e) { /* try the next source */ }
@@ -84,11 +100,13 @@ function cryptoPlaceBet(dir, target, windowMin, stake) {
 
 // Settle every due bet at one freshly fetched price. Returns a summary;
 // when no price can be fetched, due bets stay open (unavailable: true).
-async function cryptoSettleDue(fetchFn) {
+// priceOverride lets the live ticker settle at the price it just
+// fetched instead of fetching a second time for the same tick.
+async function cryptoSettleDue(fetchFn, priceOverride) {
   const cr = ensureCrypto(); if (!cr) return { settled: 0, unavailable: true };
   const due = cr.bets.filter(b => !b.settled && b.expiresAt <= Date.now());
   if (!due.length) return { settled: 0, unavailable: false };
-  const price = await cryptoRefreshPrice(fetchFn);
+  const price = (priceOverride != null) ? priceOverride : await cryptoRefreshPrice(fetchFn);
   if (price == null) return { settled: 0, unavailable: true };
   let won = 0, lost = 0, pushed = 0;
   for (const b of due) {
@@ -98,6 +116,31 @@ async function cryptoSettleDue(fetchFn) {
     else { b.result = 'lose'; cr.lost++; lost++; }
   }
   return { settled: due.length, won, lost, pushed, price, unavailable: false };
+}
+
+// One live tick: fetch the real price (appending a chart point),
+// settle any bets whose window ended at that fresh price, save, and
+// re-render if the panel is still open. A failed fetch changes nothing:
+// no tick is added, no bet settles, the last-known price stands.
+function cryptoTickNow(fetchFn) {
+  return cryptoRefreshPrice(fetchFn).then(price => {
+    if (price == null) return null;
+    return cryptoSettleDue(fetchFn, price);
+  }).then(() => {
+    try { save(); } catch (e) {}
+    if (typeof UI !== 'undefined' && UI.panel === 'crypto' && typeof renderPanelUnlessTyping === 'function') renderPanelUnlessTyping();
+  }).catch(() => {});
+}
+
+// Ticker lifecycle: runs only while the Crypto panel is open, so the
+// game never polls a price API in the background. Idempotent start.
+function startCryptoTicker() {
+  if (cryptoTimer || typeof setInterval === 'undefined') return;
+  cryptoTimer = setInterval(() => { cryptoTickNow(); }, CRYPTO_TICK_MS);
+}
+function stopCryptoTicker() {
+  if (cryptoTimer && typeof clearInterval !== 'undefined') clearInterval(cryptoTimer);
+  cryptoTimer = null;
 }
 
 function cryptoCountdown(b) {
@@ -123,10 +166,20 @@ function cryptoPanelHTML() {
   const pending = cr.bets.filter(b => !b.settled);
   const done = cr.bets.filter(b => b.settled).slice(0, 10);
   const betRow = b => `<div class="kv"><span>${b.dir === 'above' ? '▲' : '▼'} ${b.dir.toUpperCase()} ${fmtMoney(b.target)} · ${fmtMoney(b.stake, true)} · ${b.windowMin} min${b.settled ? ` · settled ${fmtMoney(b.settlePrice)}` : ` · ${cryptoCountdown(b)}`}</span><b>${b.settled ? (b.result === 'win' ? 'WON +'+fmtMoney(b.stake, true) : b.result === 'push' ? 'PUSH refunded' : 'LOST') : 'OPEN'}</b></div>`;
+  // Live chart: every point is a price actually fetched from the public
+  // API — no interpolation, no smoothing, no invented points. Under two
+  // points there is no line to draw yet, so say so instead of faking one.
+  const ticks = (cr.ticks || []).filter(t => t && isFinite(t.p));
+  const tickChg = ticks.length >= 2 ? (ticks[ticks.length - 1].p / ticks[0].p - 1) : 0;
+  const chartCard = `<div class="card in"><h4><span class="livedot"></span> LIVE · Bitcoin price — moving chart</h4>
+    ${ticks.length >= 2 ? lineChart(ticks.map(t => t.p), { h: 160 }) : '<p class="muted small">Chart builds live — one real price point every 10 seconds while this panel is open. Keep it open a few seconds and the line starts moving.</p>'}
+    <div class="stats3 box"><div><span>Now</span><b>${price ? fmtMoney(price) : '—'}</b></div><div><span>Since first point</span><b class="${upCls(tickChg)}">${ticks.length >= 2 ? fmtPct(tickChg) : '—'}</b></div><div><span>Points</span><b>${ticks.length} live</b></div></div>
+    <p class="muted small">New point every 10 seconds from ${cr.lastSource || 'the free price API'} · each point is a real fetched BTC price, never simulated.</p></div>`;
   return panelShell('Crypto', 'In-game cash only · not in Stocks · real live BTC price only',
     `<div class="card in"><h4>${(typeof ICONS !== 'undefined' && ICONS.crypto) ? ICONS.crypto : ''} Bitcoin (BTC)</h4>${priceLine}
     <p class="muted small">Price is the real live BTC price from a free public API — wars, sanctions, GDP, growth and events never move it. Source: ${cr.lastSource || 'none yet'}.</p>
     <div class="row wrap"><button class="btn" data-a="cryptoRefresh">REFRESH PRICE</button><button class="btn" data-a="cryptoSettle">SETTLE DUE BETS</button></div></div>
+    ${chartCard}
     <div class="card in"><h4>Place an above / under bet</h4><p class="muted small">Stake in-game cash. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
     <div class="row"><span class="muted small" style="min-width:90px">Target price $</span><input id="cryptoTarget" class="search" type="number" min="1" step="1" value="${targetVal}" placeholder="e.g. 100000"></div>
     <div class="row wrap"><span class="muted small">Quick target:</span>${[-5, -1, 1, 5].map(p => `<button class="btn small" data-a="cryptoTarget" data-x="${p}">${p > 0 ? '+' : ''}${p}%</button>`).join('')}</div>

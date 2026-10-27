@@ -486,3 +486,7 @@ body.landscape-phone .company-card { max-width: calc(100% - 130px); }
 .hud-profile svg { width: 28px; height: 28px; display: block; }
 button.hud-tl-text { border: 0; background: transparent; font: inherit; color: inherit; text-align: left; padding: 0; cursor: pointer; }
 .pin-landmark { cursor: pointer; }
+
+/* Crypto live indicator: pulsing green dot beside LIVE. */
+.livedot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #12a150; margin-right: 6px; animation: livedot-pulse 1.6s ease-in-out infinite; }
+@keyframes livedot-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }

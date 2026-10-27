@@ -291,10 +291,13 @@ function openModal(html, kind) {
 function closeModal() { UI.modal = null; $('modal').innerHTML = ''; }
 function openPanel(name, args) {
   closeModal(); if (CityView.isOpen()) leaveCity();
+  // Crypto live ticker runs only while the Crypto panel is open.
+  if (name === 'crypto' && typeof startCryptoTicker === 'function') startCryptoTicker();
+  else if (typeof stopCryptoTicker === 'function') stopCryptoTicker();
   UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
-function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
+function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } if (typeof stopCryptoTicker === 'function') stopCryptoTicker(); UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
 function panelShell(title, sub, body) {
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
@@ -2107,6 +2110,9 @@ PANELS.airport = () => {
 PANELS.mars = () => marsPanelHTML();
 PANELS.casino = () => casinoPanelHTML();
 PANELS.crypto = () => {
+  // Belt and braces: the ticker starts in openPanel, but a panel
+  // restored by any other path still gets live ticks.
+  if (typeof startCryptoTicker === 'function') startCryptoTicker();
   // Auto-refresh + auto-settle on open, at most once per 15s, so the
   // re-render these trigger does not loop back into another fetch.
   if (!UI.cryptoAutoAt || Date.now() - UI.cryptoAutoAt > 15000) {
