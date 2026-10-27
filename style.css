@@ -69,9 +69,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .rail-btn { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; font-weight: 900; }
 .rail-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--blue); color: #fff; font-size: 11px; min-width: 19px; height: 19px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; }
 .speedpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 82px); display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
-.bottombar, .company-card, .popup, .citybar, .citytopbar, .tut, .speedpill { background: #ffffff; color: #1f5fd0; }
-.citybar b { color: #1f5fd0; }
-.citybar .muted { color: #2f7cf6; }
+.bottombar, .company-card, .popup, .tut, .speedpill { background: #ffffff; color: #1f5fd0; }
 .bottombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 999px; max-width: calc(100vw - 24px); }
 /* Fixed Age stepper: always in the same spot at the bottom, above the
    bottom bar, small and thumb-reachable. It sits in #hud (z-index 5),
@@ -91,11 +89,12 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .tut { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top)) + 178px); width: min(480px, calc(100vw - 32px)); padding: 14px 16px; z-index: 6; }
 .tut p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 .popup { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 220px); overflow-y: auto; padding: 18px; z-index: 7; }
-.citybar { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: auto; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: space-between; gap: 10px; padding: 14px 16px; align-items: center; border-radius: 20px; box-shadow: 0 8px 28px rgba(0,0,0,0.25); }
-.citytopbar { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); display: flex; justify-content: center; padding: 10px 14px; border-radius: 20px; box-shadow: 0 8px 28px rgba(0,0,0,0.25); pointer-events: none; font-size: 15px; font-weight: 800; text-align: center; }
+.citytoptext { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); text-align: center; color: #1f5fd0; font-size: 15px; font-weight: 800; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,0.9); pointer-events: none; }
+.cityexit { position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 20px; pointer-events: none; }
+.cityexit button { pointer-events: auto; color: #1f5fd0; font-size: 15px; font-weight: 800; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,0.9); }
 .citybar b { font-size: 18px; }
-.city-actions button { border-radius: 999px; padding: 8px 12px; font-weight: 800; }
-.city-actions { display: flex; gap: 8px; }
+.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
+.hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
 
 /* panel: side sheet desktop, bottom sheet phone */
 #panel { position: fixed; z-index: 8; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(500px, calc(100vw - 24px)); background: #fff; border-radius: 26px; box-shadow: var(--shadow); display: none; flex-direction: column; overflow: hidden; touch-action: pan-y; }
@@ -431,7 +430,6 @@ body.in-city #hud { display: none; }
 .dep-dot small { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; color: rgba(255,255,255,0.55); }
 .dep-row .dep-km { white-space: nowrap; color: transparent; }
 .dep-filler { flex: 1; height: 14px; background-image: radial-gradient(rgba(255,255,255,0.28) 1.2px, transparent 1.7px); background-size: 9px 9px; background-repeat: repeat-x; background-position: 0 center; }
-.citybar-name { background: none; border: 0; padding: 0; font: inherit; font-size: 18px; font-weight: 700; color: #1f5fd0; cursor: pointer; }
 /* Hamburger drawer list: rows with the icon on the left of the label,
    in a right-side panel that scrolls. */
 .menu-list { display: flex; flex-direction: column; gap: 2px; }

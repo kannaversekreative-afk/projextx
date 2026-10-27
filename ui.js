@@ -480,9 +480,11 @@ function renderHUD() {
   // name and your money. Top-right: a white pill with blue text, the game date — tap it and
   // it asks if you are done this week, with a calendar underneath.
   // Bottom-left: map layers — toggle what shows on the map.
-  // Bottom-right: a hamburger
+  // Bottom-middle: your current city — tap it for the airport
+  // departures board and fly somewhere. Bottom-right: a hamburger
   // that opens every menu item, on the right, scrollable.
   const hk = W.byA3[S.home];
+  const curCity = airportFromCity();
   const youName = (S.you && S.you.name) || 'Founder';
   const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
   $('hud').innerHTML = `
@@ -492,6 +494,7 @@ function renderHUD() {
   </button>
   <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
+  <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
@@ -515,25 +518,19 @@ function renderCityHUD() {
     if (typeof MARS_CITY_ID !== 'undefined' && c.id === MARS_CITY_ID) {
       const sites = (typeof marsSitesFor === 'function') ? marsSitesFor(S.home) : [];
       const owned = sites.filter(s => s.owned).length;
-      html = `<div class="citybar card"><div><b>🚀 Mars</b><span class="muted"> · Dirt and mines · ${owned} of ${sites.length} mine sites owned</span></div>
-    <div class="city-actions"><button data-a="leaveCity">✕ Leave Mars</button></div></div>`;
+      html = `<div class="citytoptext"><span>\u{1F680} Mars \u00b7 Dirt and mines \u00b7 ${owned} of ${sites.length} mine sites owned</span></div><div class="cityexit"><button data-a="leaveCity">\u2715 Leave Mars</button></div>`;
     } else {
-      const k = W.byA3[c.a3], co = S.co[c.a3];
-      const photoNote = (typeof CityView !== 'undefined' && typeof CityView.isPhoto === 'function' && CityView.isPhoto()) ? ' \u00b7 Photo map \u2014 no stores on it yet' : '';
-      // A company's locations are all in its own capital city (co.city), by construction
-      // in addLocation(), so the count here is exact, not a filter that happens to work.
-      const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
       // Live city stats: the country's population and GDP move every day
       // (countryDay), and the city takes its fixed population share of
       // both, so these are current values, not the build-time allocations.
+      // Plain text, no card behind it — no white box in city view.
       const cs = (typeof country === 'function') ? country(c.a3) : S.countries[c.a3];
       const share = (typeof c.popShare === 'number') ? c.popShare : 0;
       const livePop = (cs && share) ? Math.round(cs.pop * share) : (c.popAlloc || c.pop);
       const liveGdp = (cs && share) ? cs.gdp * 1e6 * share : (c.gdpAlloc || 0);
       const growth = cs ? cs.growth : 0;
-      const topbar = `<div class="citytopbar card"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`;
-      html = topbar + `<div class="citybar card"><div><button class="citybar-name" data-a="departures" aria-label="Airport departures">${esc(c.name)}</button><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here${photoNote}</span></div>
-    <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
+      const filterBtn = (typeof CityView.isPhoto === 'function' && CityView.isPhoto()) ? '' : `<button data-a="cityFilter">Filter: ${CityView.filter}</button>`;
+      html = `<div class="citytoptext"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div><div class="cityexit">${filterBtn}<button data-a="leaveCity">\u2715 Leave city</button></div>`;
     }
   }
   if (html !== UI.lastCityHUD) { UI.lastCityHUD = html; $('chud').innerHTML = html; }
