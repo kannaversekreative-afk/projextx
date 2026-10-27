@@ -375,8 +375,16 @@ function renderPhoneApp() {
   }
   UI.inPhone = false;
   if (html === UI.lastPanelHTML && key === prevKey) return;
+  // Lock inner rows in place: horizontal scrollers (Tawk who row, etc.)
+  // reset to 0 when the card is rewritten, which looked like the app moving.
+  const rowScrolls = [];
+  ['.tawk-who', '.wtrade-idx', '.cc-line', '.staff-row'].forEach(sel => {
+    const el = card.querySelector(sel);
+    if (el && el.scrollLeft) rowScrolls.push([sel, el.scrollLeft]);
+  });
   UI.lastPanelHTML = html; UI.lastPanelKey = key;
   card.innerHTML = html;
+  rowScrolls.forEach(([sel, left]) => { const el = card.querySelector(sel); if (el) el.scrollLeft = left; });
   if (key === prevKey && prevTop > 0) card.scrollTop = Math.max(0, Math.min(prevTop, card.scrollHeight - card.clientHeight));
   if (UI.phoneApp === 'markets' && UI.marketsScroll != null) {
     card.scrollTop = Math.max(0, Math.min(UI.marketsScroll, card.scrollHeight - card.clientHeight));
@@ -1482,7 +1490,7 @@ PANELS.markets = () => {
     <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
     <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
       const held = c.isExtra ? (S.holdingsX || {})[c.id] : S.holdings[c.a3], ch = chgVs(c), starred = S.watch.includes(c.a3), key = c.stockKey || c.a3;
-      return `<button class="srow" data-a="stock" data-x="${key}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span>${c.isExtra ? '<span class="tagp">EXTRA</span>' : `<span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span>`}</button>`;
+      return `<button class="srow" data-a="stock" data-x="${key}"><span class="avatar" style="background:${c.color}">${typeof stockLogoSVG === "function" ? stockLogoSVG(c) : esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span>${c.isExtra ? '<span class="tagp">EXTRA</span>' : `<span class="star-btn ${starred ? 'on' : ''}" data-a="star" data-x="${c.a3}">${starred ? '★' : '☆'}</span>`}</button>`;
     }).join('') || '<div class="card in empty">Nothing here yet. Try another category, or star a stock to build your Watchlist.</div>'}</div>
     ${UI.cat === 'IPOs' ? '<p class="muted small">IPOs here means private companies you control that can go public. A company needs a full board room and 2 profitable weeks in a row to list.</p>' : ''}`);
 };

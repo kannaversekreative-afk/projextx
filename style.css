@@ -664,6 +664,15 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .mbox.phone { display: flex; flex-direction: column; height: min(800px, 92vh); max-height: 92vh; overflow: hidden; }
 .phone-notch, .phone-status, .phone-appbar { flex: none; }
 .phone-grid { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+/* Phone locked: no grey scroll bars on the side or bottom of the phone,
+   and the home grid does not scroll, so apps stay in place. Touch
+   scrolling inside an app still works, it just shows no bar. */
+.mbox.phone, .mbox.phone .phone-grid, .mbox.phone #phoneCard { scrollbar-width: none; }
+.mbox.phone * { scrollbar-width: none; }
+.mbox.phone *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.mbox.phone .phone-grid { overflow: hidden; }
+.mbox.phone #phoneCard { overflow-x: hidden; }
+.avatar svg { width: 26px; height: 26px; display: block; }
 .phone-appbar { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 12px; }
 .phone-appbar button { background: #1e293b; color: #fff; border: none; border-radius: 999px; padding: 8px 14px; font-weight: 800; cursor: pointer; }
 .phone-appbar b { font-size: 16px; }

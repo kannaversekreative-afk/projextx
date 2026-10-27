@@ -167,7 +167,11 @@ function tawkSponsoredPost(ad) {
   const acct = c
     ? { id: 'co:' + ad.ref, name: c.name, handle: '@' + (c.sym || ad.ref).toLowerCase(), icon: (SECTORS[c.sector] || {}).icon || '🏢', type: 'company', a3: ad.ref, verified: true }
     : { id: 'co:' + ad.ref, name: ad.name, handle: '@' + (ad.sym || 'ad').toLowerCase(), icon: '🏢', type: 'company', a3: ad.ref, verified: true };
-  return { id: 'ad:' + S.day + ':' + ad.ref, acct, text: adLineFor(ad, 'tawk') + ' — Sponsored', hour: -1, likes: Math.floor(Math.random() * 300), sponsored: true };
+  // Sponsored likes are seeded by day + ad, not Math.random: a random
+  // like count changed the Tawk HTML on every 1.5s phone re-render,
+  // so the whole Tawk screen was rewritten and jumped around.
+  const adRnd = (typeof corpRand === 'function' && typeof corpHash === 'function') ? corpRand(corpHash('tawkad' + S.day + ad.ref)) : Math.random;
+  return { id: 'ad:' + S.day + ':' + ad.ref, acct, text: adLineFor(ad, 'tawk') + ' — Sponsored', hour: -1, likes: Math.floor(adRnd() * 300), sponsored: true };
 }
 // --- Tawk Sports: the week's live slate from the game's real teams ---
 // The season engine tracks wins/losses only, no per-game scores, so the
