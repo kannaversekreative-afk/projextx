@@ -48,6 +48,17 @@ const CityView = (() => {
     c.drawImage(kenneyImgs[key], p[0] - w / 2, p[1] - h, w, h);
     return true;
   }
+  // Kenney ground slab for one tile: the block's top point sits on the
+  // tile's top corner, so its diamond lands exactly on the game's
+  // diamond and its sides hang below it like a real Kenney block.
+  // Returns false when the sprite is not ready (caller falls back).
+  function drawKenneyGround(c, t, key) {
+    if (!kenneyReady(key)) return false;
+    const sp = KENNEY_SPRITES[key], dw = TW, dh = sp.h * (TW / sp.w), n = P(t.x, t.y);
+    c.drawImage(kenneyImgs[key], n[0] - dw / 2, n[1], dw, dh);
+    return true;
+  }
+  const KENNEY_GROUND = { water: 'gwater', beach: 'gbeach', road: 'groad', plaza: 'glot', park: 'gpark', lot: 'glot' };
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -60,6 +71,11 @@ const CityView = (() => {
   function diamond(c, x, y, fill, k) { k = k || 0; poly(c, [P(x + k, y + k), P(x + 1 - k, y + k), P(x + 1 - k, y + 1 - k), P(x + k, y + 1 - k)], fill); }
   function road(c, t, T) {
     diamond(c, t.x, t.y, '#5b6470');
+    roadMarks(c, t, T);
+  }
+  // Road markings only (no fill): used on top of a Kenney road slab
+  // in Havana, where the slab replaces the flat diamond.
+  function roadMarks(c, t, T) {
     const N = layout.N, isR = (x, y) => { const q = T[y * N + x]; return q && q.kind === 'road'; };
     const h = isR(t.x - 1, t.y) || isR(t.x + 1, t.y), v = isR(t.x, t.y - 1) || isR(t.x, t.y + 1);
     if (h && v) { // intersection: crosswalk stripes + streetlights
@@ -97,6 +113,9 @@ const CityView = (() => {
   function plazaGround(c, t) {
     diamond(c, t.x, t.y, '#ebe5d6');
     diamond(c, t.x, t.y, (t.x + t.y) % 2 ? '#a8d877' : '#e4dccb', 0.18);
+    plazaMarks(c, t);
+  }
+  function plazaMarks(c, t) {
     // People dots on the plaza, plus a fountain and a food stall.
     const cols = ['#e5484d', '#2f7cf6', '#f5b301', '#12a150', '#7c4dff'];
     for (let i = 0; i < 7; i++) { const [px, py] = P(t.x + 0.15 + (i * 0.37) % 0.75, t.y + 0.2 + (i * 0.53) % 0.6); c.fillStyle = cols[(t.x + t.y + i) % cols.length]; c.beginPath(); c.arc(px, py, 2.2, 0, 7); c.fill(); c.fillStyle = '#333'; c.fillRect(px - 1, py - 4, 2, 2); }
@@ -106,6 +125,9 @@ const CityView = (() => {
   function water(c, t) {
     diamond(c, t.x, t.y, '#2aa8d8');
     diamond(c, t.x, t.y, '#3db5e0', 0.12);
+    waterMarks(c, t);
+  }
+  function waterMarks(c, t) {
     c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1; const a = P(t.x + 0.25, t.y + 0.5), b = P(t.x + 0.6, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, a[1] - 3, b[0], b[1]); c.stroke();
     if (t.seed > 0.85) { // a little boat on the water
       const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(mx, my, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e5484d'; c.fillRect(mx - 1, my - 9, 2, 9);
@@ -694,7 +716,26 @@ const CityView = (() => {
     for (let i = 0; i < 4; i++) waveLine(H2 - 14 - i * 18 - wr() * 6);
     waveLine(880 + wr() * 40); waveLine(1030 + wr() * 40);
     // pass 1: ground
-    T.forEach(t => {
+    if (city && city.name === 'Havana') {
+      // Whole-city Kenney ground, drawn back-to-front so each block's
+      // sides sit correctly behind the block in front of it. Markings
+      // and plaza/water life are drawn back on top of the slabs, so
+      // streets keep their dashes and crosswalks and the plaza keeps
+      // its fountain. Any slab that is not ready falls back to the
+      // flat ground for that tile, so the city never renders blank.
+      [...T].sort((a, b) => (a.x + a.y) - (b.x + b.y) || a.x - b.x).forEach(t => {
+        const key = KENNEY_GROUND[t.kind] || 'glot';
+        if (drawKenneyGround(c, t, key)) {
+          if (t.kind === 'road') roadMarks(c, t, T);
+          else if (t.kind === 'plaza') plazaMarks(c, t);
+          else if (t.kind === 'water') waterMarks(c, t);
+        } else if (t.kind === 'water') water(c, t);
+        else if (t.kind === 'beach') beach(c, t);
+        else if (t.kind === 'road') road(c, t, T);
+        else if (t.kind === 'plaza') plazaGround(c, t);
+        else lotGround(c, t);
+      });
+    } else T.forEach(t => {
       if (t.kind === 'water') water(c, t); else if (t.kind === 'beach') beach(c, t); else if (t.kind === 'road') road(c, t, T);
       else if (t.kind === 'plaza') plazaGround(c, t); else lotGround(c, t);
     });
