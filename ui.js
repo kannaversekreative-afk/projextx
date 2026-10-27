@@ -1126,7 +1126,9 @@ function enterGame(returning) {
   UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit();
   S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
   if (typeof ensurePerson === 'function') { try { ensurePerson(); } catch (e) {} }
-  const da = S.leader ? 0 : autoCreditDaily(), ca = S.leader ? 0 : autoCreditShopCash();
+  // Daily free cash grants are legacy tycoon only. Flow (employee)
+  // games earn from jobs and business — no free $250k shop grant.
+  const da = (S.leader || S.flow) ? 0 : autoCreditDaily(), ca = (S.leader || S.flow) ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
   renderHUD(); MapView.home();
@@ -1145,9 +1147,9 @@ const TUT = [
 // the tutorial opens with investing, then follows the same steps. The
 // final step is reworded: the game runs week by week, not year by year.
 const TUT_FLOW = [
-  { t: () => `Welcome! You're 18 in ${esc(W.cities[W.byA3[S.home].capital].name)}. Invest some of your $250,000 into your business first — open your profile (the person icon, top left) and tap INVEST.`, done: () => !!S.invested },
-  { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
-  { t: () => 'Tap ENTER CAPITAL to see the streets.', done: () => CityView.isOpen() },
+  { t: () => `Welcome! You're 18 in ${esc((typeof homeStartCityId === 'function' ? W.cities[homeStartCityId()] : W.cities[W.byA3[S.home].capital]).name)} with $5,000. Get a job first — open your profile (the person icon, top left) and tap APPLY at a business in your city.`, done: () => { try { return ensurePerson().job && ensurePerson().job.track === 'company'; } catch (e) { return false; } } },
+  { t: () => `Every dot is a real city. Tap ${esc((typeof homeStartCityId === 'function' ? W.cities[homeStartCityId()] : W.cities[W.byA3[S.home].capital]).name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
+  { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
   { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Your business runs week by week. When you are done, press DONE THIS WEEK to advance and collect profits. No age limit — you can play 100 years, or 1000.', btn: 'Got it' },
@@ -1379,7 +1381,7 @@ function enterCity(id) {
   if (typeof isCityUnlocked === 'function' && !isCityUnlocked(id)) {
     const c = W.cities[id];
     const cost = (typeof CITY_UNLOCK_COST !== 'undefined') ? CITY_UNLOCK_COST : 25000;
-    openModal(`<h2>${c ? esc(c.name) : 'City'} is locked</h2><p class="muted">You start with one city unlocked. Unlock this one for ${fmtMoney(cost, true)} from business cash (you have ${fmtMoney(S.cash, true)}).</p><button class="btn3d orange wide" data-a="unlockCity" data-x="${id}">UNLOCK FOR ${fmtMoney(cost, true)}</button><button class="btn wide" data-a="closeModal">NOT NOW</button>`, 'sheet');
+    openModal(`<h2>${c ? esc(c.name) : 'City'} is locked</h2><p class="muted">You start with one city unlocked. Unlock this one for ${fmtMoney(cost, true)} — personal first, then business cash (you have ${fmtMoney((typeof ensurePerson === 'function' ? ensurePerson().cash : 0), true)} personal, ${fmtMoney(S.cash, true)} business).</p><button class="btn3d orange wide" data-a="unlockCity" data-x="${id}">UNLOCK FOR ${fmtMoney(cost, true)}</button><button class="btn wide" data-a="closeModal">NOT NOW</button>`, 'sheet');
     return;
   }
   closePopup(); CityView.open(id); document.body.classList.add('in-city'); renderCityHUD(); tutCheck();
@@ -1421,7 +1423,8 @@ function loop(now) {
   // Leaders get none here either, matching enterGame (their treasury
   // is not a daily-grant wallet — without this guard the first frame
   // paid a leader 2% of net worth, ~$21B on a $1T treasury).
-  const _da = S.leader ? 0 : autoCreditDaily(), _ca = S.leader ? 0 : autoCreditShopCash();
+  // Flow games get none either: employee games earn from jobs, not grants.
+  const _da = (S.leader || S.flow) ? 0 : autoCreditDaily(), _ca = (S.leader || S.flow) ? 0 : autoCreditShopCash();
   if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
   lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
@@ -1770,7 +1773,7 @@ function countryAdvisor() {
   const mil = Object.entries(MILITARY).map(([b, d]) => [b, d, milCost(b)]).filter(([, , c]) => c != null).sort((a, b) => a[2] - b[2])[0];
   if (milRank(S.home) > 100 && mil && S.cash >= mil[2]) return { title: 'Military is weak', body: `You rank #${milRank(S.home)} in military power. Upgrade ${mil[1].name} to strengthen it.`, btn: 'UPGRADE MILITARY', a: 'milUp', x: mil[0] };
   if (!S.stores || !S.stores.length) return { title: 'Build your first business', body: 'You have no store yet. Open a city, tap a FOR LEASE lot, and press BUILD STORE to pick a business.', btn: 'MY STORES', a: 'panel', x: 'stores' };
-  if (locCount() === 0) return { title: 'Open your first location', body: 'Lease a storefront in your capital city and your company starts earning there.', btn: 'ENTER CAPITAL', a: 'enterCity', x: String(W.byA3[S.home].capital) };
+  if (locCount() === 0) { const startCity = (typeof homeStartCityId === 'function' ? homeStartCityId() : W.byA3[S.home].capital); const startName = W.cities[startCity] ? W.cities[startCity].name : 'your city'; const isCap = startCity === W.byA3[S.home].capital; return { title: 'Open your first location', body: `Lease a storefront in ${startName} and your company starts earning there.`, btn: isCap ? 'ENTER CAPITAL' : 'ENTER CITY', a: 'enterCity', x: String(startCity) }; }
   return { title: 'You are in good shape', body: 'No urgent move. Grow by building another store, developing its products, or buying a stock in Markets.', btn: 'MY STORES', a: 'panel', x: 'stores' };
 }
 // You — the person, not the country. Three wallets (personal, business,
@@ -1864,6 +1867,7 @@ PANELS.economy = () => {
     <div class="card in"><h4>🏘️ REAL ESTATE</h4>
     <div class="kv"><span>Owner in ${esc(cname(S.home))}</span><b>${owner ? esc(owner.name) : 'None yet'}</b></div>
     <div class="kv"><span>Rent collected last week</span><b>${fmtMoney(rent, true)}</b></div>
+    <div class="kv"><span>Of that, stadium rent</span><b>${fmtMoney((S.lastStadiumRent || {})[S.home] || 0, true)}</b></div>
     <p class="muted small">All farmland, apartments, stores for lease, already-leased stores and stadium rent is owned by real estate companies. Rent that used to vanish now lands on that company's weekly profit.</p></div>
     ${all.length ? `<div class="card in"><h4>⚠️ SHORTAGES ELSEWHERE</h4>${all.slice(0, 10).map(x => `<div class="kv"><span>${esc(cname(x.a3))}</span><b>Factory costs ${(x.farmCost * 100).toFixed(0)}% · Shop demand ${(x.shopDemand * 100).toFixed(0)}%</b></div>`).join('')}</div>` : ''}
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
@@ -1874,9 +1878,11 @@ PANELS.office = () => {
   if (!o) return panelShell('Office decisions', '', '<p class="muted">You hold no office. Win an election first, then your decisions live here.</p><button class="btn wide" data-a="closePanel">RETURN TO MAP</button>');
   const list = officeDecisionsFor(o);
   if (!list.length) return panelShell(o.title, '', '<p class="muted">This office uses the generic policy announcement for now. Mayor, governor and congress decisions are the ones built out.</p><button class="btn wide" data-a="closePanel">RETURN TO MAP</button>');
-  const role = o.scope === 'city' ? 'Mayor — community decisions, not laws. Every yes has a good side and a bad side.' : o.scope === 'region' ? 'Governor — laws you sign for your state.' : 'Congress — bills you develop.';
+  const role = o.scope === 'city' ? 'Mayor — community decisions, not laws. Every yes has a good side and a bad side.' : o.scope === 'region' ? 'Governor — laws you sign for your state.' : o.scope === 'legislature' ? 'Congress — bills you develop.' : 'Head of state — sign federal laws, veto bills, grant pardons.';
+  const law = S.officeLaw && !S.officeLaw.decided && S.officeLaw.year === yearOf(S.day) ? S.officeLaw : null;
   return panelShell(o.title, `${role} · Budget ${fmtMoney(officeTreasury(o), true)}`,
-    `${list.map(d => {
+    `${law ? `<div class="card in"><h4>📜 LAW FOR YOUR SIGNATURE — ${esc(law.name)}</h4><p class="muted small">Once a year, a law lands here. Sign it and it takes effect (using that decision's once-a-year slot). Veto it and it does not take effect — popularity +1, public opinion −1, no cost.</p><div class="row"><button class="btn" data-a="officeLawSign">SIGN IT</button><button class="btn" data-a="officeLawVeto">VETO IT</button></div></div>` : ''}
+    ${list.map(d => {
       const last = (o.decisions || {})[d.id];
       const taken = last && S.day - last < 365;
       const cost = d.costPct ? Math.max(50000, Math.round(officeTreasury(o) * d.costPct)) : 0;
@@ -3183,6 +3189,8 @@ const A = {
   etfBuy: x => { const [id, q] = x.split('|'); act(() => buyETF(id, +q), 'ETF bought'); },
   etfSell: x => { const [id, q] = x.split('|'); act(() => sellETF(id, +q), 'ETF sold'); },
   officeDecision: x => act(() => takeOfficeDecision(x), 'Decision made'),
+  officeLawSign: () => act(() => takeOfficeLawSign(), 'Law signed'),
+  officeLawVeto: () => act(() => takeOfficeLawVeto(), 'Law vetoed'),
   rebirthPanel: () => { closeModal(); openPanel('bankruptcy'); },
   doRebirth: () => { const sel = $('rebirthCountry'); const a3 = sel ? sel.value : null; const err = rebirthAs(a3); if (err) toast(err, 'bad'); else { closePanel(); refreshAll(); save(); toast('Reborn — you keep nothing.', 'good'); } },
   takeCityLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeCityLoan(UI.bankCity, amt, mo), 'Loan taken'); },

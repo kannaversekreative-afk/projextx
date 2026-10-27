@@ -706,6 +706,8 @@ function yearEnd(year) {
   // Bankruptcy year: lastYearProfit is now set, so company streaks
   // can be counted, along with personal, business and country balances.
   if (typeof bankruptcyYear === 'function') { try { bankruptcyYear(year); } catch (e) {} }
+  // Yearly law for signature, for law-making offices.
+  if (typeof generateOfficeLaw === 'function') { try { generateOfficeLaw(year); } catch (e) {} }
   const cs = country(S.home), prev = S.homeTaxPrev || { tax: cs.tax, incTax: cs.incTax, vat: cs.vat };
   const taxLines = [];
   const dCorp = cs.tax - prev.tax, dInc = (cs.incTax || 0.20) - (prev.incTax || 0.20), dVat = (cs.vat || 0.05) - (prev.vat || 0.05);

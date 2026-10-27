@@ -12,6 +12,10 @@
 //   The manager's profit is the fee: 0.50% a year, applied as a drag
 //   on the ETF price. That is what makes creating one worthwhile, and
 //   what stops it being free money.
+//   The drag is not lost money: once a year, the fee is paid out in
+//   cash to the manager — business cash if you manage it yourself,
+//   weekly profit (so value follows) if a company manages it. Holders
+//   pay via the drag, the manager receives via the payout: a transfer.
 // - ETF price starts at $100 and follows the basket: price = 100 *
 //   (basket now / basket at creation) * (1 - fee) ^ years.
 // - You buy and sell ETF shares with business cash, like stocks, in
@@ -118,6 +122,24 @@ function etfHoldingsValue() {
 // over years, not overnight.
 function etfWeek() {
   if (!S.etfs) S.etfs = [];
+  // Annual fee payout, once per game year: 0.50% of ETF assets
+  // (shares x price) to the manager. First call in a year only sets
+  // the marker — no fee for a year that has not elapsed yet.
+  const yr = (typeof yearOf === 'function') ? yearOf(S.day) : 2026;
+  if (S.etfFeeYear == null) S.etfFeeYear = yr;
+  else if (S.etfFeeYear !== yr) {
+    S.etfFeeYear = yr;
+    S.etfs.forEach(etf => {
+      const fee = Math.round(etfPrice(etf) * ETF_SHARES * ETF_FEE);
+      if (!fee) return;
+      if (!etf.manager || etf.manager === 'player') S.cash += fee;
+      else {
+        const mgr = S.co[etf.manager];
+        if (mgr) { if (mgr.week) mgr.week.profit = Math.round((mgr.week.profit || 0) + fee); mgr.avg = Math.round((mgr.avg || 0) + fee * 0.2); }
+      }
+      if ((!etf.manager || etf.manager === 'player') && typeof news === 'function') news('Business', `Your ${etf.name} paid you ${fmtMoney(fee, true)} in management fees for the year.`, S.home);
+    });
+  }
   if (Math.random() > 0.25) return;
   const managers = Object.values(S.co || {}).filter(c => sectorGroupOf(c.sector) === 'finance' && !controlled(c.a3));
   if (!managers.length) return;

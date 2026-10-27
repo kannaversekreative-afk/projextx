@@ -22,6 +22,13 @@ function startingCityFor(a3) {
   pool.sort((x, y) => y.pop - x.pop);
   return pool[0].id;
 }
+function homeStartCityId() {
+  if (S && S.flow && typeof startingCityFor === 'function') {
+    const start = startingCityFor(S.home);
+    if (start != null) return start;
+  }
+  return W.byA3[S.home] ? W.byA3[S.home].capital : null;
+}
 function isCityUnlocked(cityId) {
   if (!S) return true;
   if (S.leader) return true;
@@ -36,8 +43,12 @@ function unlockCity(cityId) {
   if (!city) return 'That city does not exist.';
   if (isCityUnlocked(cityId)) return 'That city is already unlocked.';
   const cost = (typeof CITY_UNLOCK_COST !== 'undefined') ? CITY_UNLOCK_COST : 25000;
-  if (S.cash < cost) return `Unlocking ${city.name} costs ${fmtMoney(cost, true)} from business cash (you have ${fmtMoney(S.cash, true)}).`;
-  S.cash -= cost;
+  // Pay from personal first (the employee loop: salary saves up to a
+  // city), then business cash — never strand money in the other wallet.
+  const P = (typeof ensurePerson === 'function') ? ensurePerson() : null;
+  if (P && P.cash >= cost) P.cash -= cost;
+  else if (S.cash >= cost) S.cash -= cost;
+  else return `Unlocking ${city.name} costs ${fmtMoney(cost, true)} (you have ${fmtMoney(P ? P.cash : 0, true)} personal, ${fmtMoney(S.cash, true)} business).`;
   if (!Array.isArray(S.unlockedCities)) S.unlockedCities = [];
   S.unlockedCities.push(cityId);
   if (typeof news === 'function') news('Business', `You unlocked ${city.name} for ${fmtMoney(cost, true)}.`, city.a3);

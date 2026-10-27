@@ -79,7 +79,9 @@ function realEstateOwner(a3) {
 }
 function realEstateWeek() {
   if (!S.lastRent) S.lastRent = {};
+  if (!S.lastStadiumRent) S.lastStadiumRent = {};
   const pool = {};
+  const stadiumPool = {};
   // Company locations pay rent to the real estate owner in that city.
   for (const a3 in (S.co || {})) {
     const c = S.co[a3];
@@ -93,6 +95,17 @@ function realEstateWeek() {
     const cityA3 = (st.cityId != null && W.cities[st.cityId]) ? W.cities[st.cityId].a3 : S.home;
     pool[cityA3] = (pool[cityA3] || 0) + (st.rent || 0);
   });
+  // Stadium rent: every team pays $2 per seat per week (~$100/seat/year) to the real
+  // estate owner in its city country. Player-owned teams pay it out of
+  // their weekly net in sportWeek, so this is a transfer, not new money.
+  if (S.sports && S.sports.leagues) S.sports.leagues.forEach(lg => lg.teams.forEach(t => {
+    const city = W.cities[t.cityId];
+    const a3 = city ? city.a3 : S.home;
+    const rent = Math.round(((t.stadium && t.stadium.capacity) || 0) * 2);
+    t.stadiumRent = rent;
+    pool[a3] = (pool[a3] || 0) + rent;
+    stadiumPool[a3] = (stadiumPool[a3] || 0) + rent;
+  }));
   for (const a3 in pool) {
     const owner = realEstateOwner(a3);
     if (!owner) continue;
@@ -101,5 +114,6 @@ function realEstateWeek() {
     owner.avg = Math.round((owner.avg || 0) + rent * 0.2);
     owner.rentIncome = rent;
     S.lastRent[a3] = rent;
+    S.lastStadiumRent[a3] = Math.round(stadiumPool[a3] || 0);
   }
 }

@@ -1,7 +1,9 @@
 // ---------- the person ----------
-// You play a person, not a country. You start at 18 with $250,000 of
-// your own money. Age is just a stat: it advances with the years and
-// never kills you or retires you.
+// You play a person, not a country. You start at 18. Leader and legacy
+// starts give $250,000 of your own money; flow (employee life-path)
+// starts give $5,000 — you get a job, save, go to college, and unlock
+// cities from earnings, with no daily free cash grants. Age is just
+// a stat: it advances with the years and never kills you or retires you.
 // Three wallets:
 //   personal — your money (person panel),
 //   business — S.cash, the money shown in the top-left pill,
@@ -194,13 +196,29 @@ function promoteJob() {
   // it needs the company's value to actually double since your last promotion.
   if (P.job.track === 'company') {
     if (P.job.weeks < next.weeks) return `Need ${next.weeks} weeks in this job for ${next.title} (you have ${P.job.weeks}).`;
+    // Degree gates, matching the college card: Associate for manager
+    // work (rank 2+), Bachelor for analyst work (rank 3+), Master for
+    // director work (rank 6+). A jump is checked against the rank it
+    // lands on, so a Sr. Manager still needs a Master to jump to VP.
+    const degreeReqForRank = r => r >= 6 ? 'master' : r >= 3 ? 'bachelor' : r >= 2 ? 'assoc' : null;
     if (P.job.rank >= 3) {
       const cur = companyValueForJob(P.job), base = P.job.valueAtPromo || cur;
       if (!cur || cur < base * 2) return `Analyst-level promotion needs the company to double since your last promotion (now ${fmtMoney(cur, true)}, need ${fmtMoney(base * 2, true)}).`;
       const jump = Math.min(2, l.length - 1 - P.job.rank);
+      const target = P.job.rank + jump;
+      const deg = degreeReqForRank(target);
+      if (deg && !(P.degrees || []).includes(deg)) {
+        const degName = (typeof COLLEGE_DEGREES !== 'undefined' ? COLLEGE_DEGREES.find(x => x.id === deg) : null) || { name: deg };
+        return `To jump to ${l[target].title} you need ${deg === 'assoc' ? 'an' : 'a'} ${degName.name} — go to college first.`;
+      }
       P.job.rank += jump; P.job.weeks = 0; P.job.valueAtPromo = cur;
       if (typeof news === 'function') news('Person', `You jumped to ${l[P.job.rank].title} after doubling the company.`, S.home);
       return null;
+    }
+    const deg = degreeReqForRank(P.job.rank + 1);
+    if (deg && !(P.degrees || []).includes(deg)) {
+      const degName = (typeof COLLEGE_DEGREES !== 'undefined' ? COLLEGE_DEGREES.find(x => x.id === deg) : null) || { name: deg };
+      return `To become ${next.title} you need ${deg === 'assoc' ? 'an' : 'a'} ${degName.name} — go to college first.`;
     }
     P.job.rank++; P.job.weeks = 0;
     if (P.job.rank === 3) P.job.valueAtPromo = companyValueForJob(P.job);

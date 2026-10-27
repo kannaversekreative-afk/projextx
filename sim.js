@@ -160,6 +160,13 @@ function newGame(opt) {
     const start = startingCityFor(opt.home);
     if (start != null) s.unlockedCities = [start];
   }
+  // Employee life path (flow games only): start with $5,000 personal
+  // money, not $250,000. Old saves and leader games are untouched —
+  // their person record already exists with its own cash.
+  if (s.flow && typeof defaultPerson === 'function') {
+    s.person = defaultPerson();
+    s.person.cash = (typeof EMPLOYEE_START_CASH !== 'undefined') ? EMPLOYEE_START_CASH : 5000;
+  }
   return s;
 }
 function tickerFor(name, used) {

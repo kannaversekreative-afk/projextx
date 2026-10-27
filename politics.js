@@ -35,6 +35,12 @@ const OFFICE_DECISIONS = {
     { id: 'healthcare', name: 'Develop a healthcare bill', good: 'Popularity +5, public opinion +3', bad: 'Costs 10% of your budget, stability −1 (political fight)', costPct: 0.10, pop: 5, opin: 3, stab: -1 },
     { id: 'defense', name: 'Develop a defense spending bill', good: 'Stability +3', bad: 'Popularity −2, public opinion −1, costs 10% of your budget', costPct: 0.10, pop: -2, opin: -1, stab: 3 },
     { id: 'taxreform', name: 'Develop a tax reform bill', good: 'Public opinion +4, popularity +2', bad: 'Your budget grows half as fast for a year', pop: 2, opin: 4, taxCut: 365 }
+  ],
+  head: [
+    { id: 'budget', name: 'Sign the federal budget', good: 'Stability +2, popularity +2', bad: 'Public opinion −2 (spending fights), costs 10% of your budget', costPct: 0.10, pop: 2, opin: -2, stab: 2 },
+    { id: 'defenseauth', name: 'Sign the defense authorization', good: 'Stability +4', bad: 'Popularity −1, public opinion −2, costs 10% of your budget', costPct: 0.10, pop: -1, opin: -2, stab: 4 },
+    { id: 'vetospend', name: 'Veto a spending bill', good: 'Public opinion +3 (fiscal discipline)', bad: 'Popularity −2, stability −1 (government fight)', pop: -2, opin: 3, stab: -1 },
+    { id: 'pardon', name: 'Grant a pardon', good: 'Public opinion +2', bad: 'Popularity −3 (critics call it favouritism)', pop: -3, opin: 2 }
   ]
 };
 function officeDecisionsFor(office) {
@@ -42,7 +48,42 @@ function officeDecisionsFor(office) {
   if (office.scope === 'city') return OFFICE_DECISIONS.mayor;
   if (office.scope === 'region') return OFFICE_DECISIONS.governor;
   if (office.scope === 'legislature') return OFFICE_DECISIONS.congress;
+  if (office.scope === 'nation' || office.scope === 'royal') return OFFICE_DECISIONS.head;
   return [];
+}
+// Yearly law for signature: at year end, a law-making office gets one
+// law waiting in Office Decisions — sign it (it takes effect, using
+// that decision's once-a-year slot) or veto it (small popularity
+// gain, small opinion loss, no cost, law does not take effect). A
+// blocking modal during the day loop would break week/year skips, so
+// the law lives in the panel with a news notice, not a modal.
+function generateOfficeLaw(year) {
+  const P = ensurePerson();
+  const o = P.office;
+  if (!o) return;
+  const list = officeDecisionsFor(o);
+  if (!list.length) return;
+  const d = list[Math.floor(Math.random() * list.length)];
+  S.officeLaw = { year, decisionId: d.id, name: d.name, decided: false };
+  if (typeof news === 'function') news('Person', `A law is waiting for your signature as ${o.title}: ${d.name}. Open Office Decisions to sign or veto it.`, S.home);
+}
+function takeOfficeLawSign() {
+  const law = S.officeLaw;
+  if (!law || law.decided) return 'No law is waiting for your signature.';
+  const err = takeOfficeDecision(law.decisionId);
+  if (err) return err;
+  law.decided = true;
+  return null;
+}
+function takeOfficeLawVeto() {
+  const law = S.officeLaw;
+  if (!law || law.decided) return 'No law is waiting for your signature.';
+  const P = ensurePerson();
+  P.pop = Math.max(0, Math.min(100, P.pop + 1));
+  P.opin = Math.max(0, Math.min(100, P.opin - 1));
+  law.decided = true;
+  if (typeof news === 'function') news('Person', `You vetoed ${law.name}.`, S.home);
+  return null;
 }
 function takeOfficeDecision(id) {
   const P = ensurePerson();

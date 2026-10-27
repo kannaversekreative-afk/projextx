@@ -65,18 +65,15 @@ function bankPanelHTML() {
   const acct = bankAcct();
   const view = UI.bankView || 'home';
   const lt = bankLoanTotals();
-  const head = `<div class="wbank-head"><b>🌍 Worl Bank</b><span><button class="wbank-bell" data-a="panel" data-x="web" aria-label="Mail">🔔</button><button class="wbank-borrow" data-a="bankView" data-x="loan">Borrow</button></span></div>`;
+  const head = `<div class="wbank-head"><b>🌍 Worl Bank</b><span><button class="wbank-bell" data-a="panel" data-x="web" aria-label="Mail">🔔</button><button class="wbank-borrow" data-a="bankView" data-x="citybanks">Borrow</button></span></div>`;
   let body = '';
   if (view === 'loan') {
     body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
-    <h3 class="wbank-h">New business loan</h3><p class="wbank-note">Interest 6.50% a year. Weekly payment is fixed for the whole term.</p>
-    <label class="wbank-label">LOAN AMOUNT</label><input id="loanAmt" class="wbank-input" type="number" value="1000000">
-    <label class="wbank-label">MATURITY (months)</label><input id="loanMonths" class="wbank-input" type="number" value="36">
-    <button class="btn3d orange wide" data-a="takeLoan">TAKE LOAN</button>
+    <h3 class="wbank-h">New loans</h3><p class="wbank-note">Loans now come only from city banks — Bank of every city, at that city's rate, on approval. The old flat 6.50% loan is closed for new borrowing; loans you already have still repay here.</p>
+    <button class="btn3d orange wide" data-a="bankView" data-x="citybanks">OPEN CITY BANKS</button>
     <h3 class="wbank-h">Your loans</h3>
     ${S.loan > 0 ? `<div class="wbank-loanrow"><span>Main loan</span><b>${fmtMoney(S.loan, true)} owed</b><button class="wbank-smallbtn" data-a="repay">Repay in full</button></div>` : ''}
-    ${lt.loans.map(l => `<div class="wbank-loanrow"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || (S.loan > 0 ? '' : '<p class="wbank-note">No loans outstanding.</p>')}
-    <p class="wbank-note">Bank will lend up to ${fmtMoney(maxLoan(), true)} on your main loan.</p>`;
+    ${lt.loans.map(l => `<div class="wbank-loanrow"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || (S.loan > 0 ? '' : '<p class="wbank-note">No loans outstanding.</p>')}`;
   } else if (view === 'account') {
     const sel = UI.bankAcctSel || 'business';
     const a = bankAccounts().find(x => x.id === sel) || bankAccounts()[1];

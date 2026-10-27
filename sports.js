@@ -174,7 +174,9 @@ function sportWeek() {
     if (t.owner === 'you') {
       const bc = (typeof boardWeeklyCost === 'function') ? boardWeeklyCost(t) : 0;
       const boost = (typeof boardBoost === 'function') ? boardBoost(t) : 0;
-      const weeklyNet = Math.round(fin.net / 52 - bc + Math.max(0, fin.net / 52) * boost);
+      const stadiumRent = Math.round(((t.stadium && t.stadium.capacity) || 0) * 2);
+      t.stadiumRent = stadiumRent;
+      const weeklyNet = Math.round(fin.net / 52 - bc + Math.max(0, fin.net / 52) * boost - stadiumRent);
       t.weekNets.push(weeklyNet); if (t.weekNets.length > 4) t.weekNets.shift();
       let streak = 0; for (let i = t.weekNets.length - 1; i >= 0; i--) { if (t.weekNets[i] > 0) streak++; else break; }
       t.weekStreak = streak; if (t.wallet === 'private') ensurePerson().cash += weeklyNet; else total += weeklyNet;
