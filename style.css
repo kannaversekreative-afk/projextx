@@ -564,3 +564,42 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .tawk-nav button span { font-size: 10px; }
 .tawk-nav button.on { color: #1d9bf0; }
 .tawk-badge { position: absolute; top: 4px; right: calc(50% - 22px); background: #1d9bf0; color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 1px 6px; }
+.tawk-avatarbtn { width: 40px; height: 40px; flex: none; border-radius: 50%; background: #16181c; border: 1px solid #2f3336; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; }
+.tawk-drawer-back { position: absolute; inset: 0; background: rgba(0,0,0,0.55); border: none; cursor: pointer; z-index: 5; }
+.tawk-drawer { position: absolute; top: 0; bottom: 0; left: 0; width: 78%; max-width: 320px; background: #000; border-right: 1px solid #2f3336; z-index: 6; padding: 16px 0; }
+.tawk-drawer-head { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 16px; border-bottom: 1px solid #2f3336; position: relative; }
+.tawk-drawer-head span { color: #71767b; font-size: 13px; }
+.tawk-drawer-head span b { color: #fff; }
+.tawk-drawer-x { position: absolute; top: 8px; right: 12px; background: none; border: none; color: #71767b; font-size: 18px; cursor: pointer; }
+.tawk-drawer-row { display: block; width: 100%; text-align: left; background: none; border: none; color: #fff; font-size: 18px; font-weight: 700; padding: 14px 16px; cursor: pointer; }
+.tawk-drawer-row:hover { background: #16181c; }
+.tawk-chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; }
+.tawk-chip { background: #16181c; color: #fff; border: 1px solid #2f3336; border-radius: 20px; padding: 7px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.tawk-chip.on { background: #1d9bf0; border-color: #1d9bf0; }
+.tawk-game { border: 1px solid #2f3336; border-radius: 16px; margin: 10px 14px; padding: 12px 14px; background: #0a0c0e; }
+.tawk-game-top { display: flex; justify-content: space-between; color: #71767b; font-size: 13px; margin-bottom: 10px; }
+.tawk-live { color: #f4212e; font-weight: 800; }
+.tawk-game-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.tawk-game-row b { font-size: 16px; }
+.tawk-score { margin-left: auto; font-size: 18px !important; }
+.tawk-team-ic { width: 32px; height: 32px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; }
+.tawk-game-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: #71767b; font-size: 13px; }
+.tawk-join { background: #fff; color: #000; border: none; border-radius: 20px; padding: 7px 16px; font-weight: 800; cursor: pointer; }
+.tawk-chat-row { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid #2f3336; color: #fff; padding: 12px 14px; cursor: pointer; position: relative; }
+.tawk-chat-row .tawk-badge { position: static; margin-left: auto; }
+.tawk-msg { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #2f3336; }
+.tawk-msg-main { flex: 1; min-width: 0; }
+.tawk-game-head { padding: 14px; border-bottom: 1px solid #2f3336; display: flex; flex-direction: column; gap: 4px; }
+.tawk-game-head span { color: #71767b; font-size: 13px; }
+.tawk-back { background: none; border: none; color: #1d9bf0; font-size: 15px; font-weight: 700; padding: 12px 14px 4px; cursor: pointer; }
+.tawk-notif { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #2f3336; }
+.tawk-topic { display: flex; justify-content: space-between; width: 100%; background: none; border: none; border-bottom: 1px solid #2f3336; color: #fff; padding: 14px; font-size: 15px; cursor: pointer; text-align: left; }
+.tawk-topic span { color: #71767b; font-size: 13px; }
+.tawk-who { display: flex; gap: 12px; overflow-x: auto; padding: 10px 14px 14px; }
+.tawk-who-card { flex: none; width: 150px; border: 1px solid #2f3336; border-radius: 16px; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; background: #0a0c0e; }
+.tawk-who-card span { color: #71767b; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tawk-who-card button { margin-top: 8px; background: #fff; color: #000; border: none; border-radius: 20px; padding: 7px 12px; font-weight: 800; cursor: pointer; }
+.tawk-set-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #2f3336; }
+.tawk-set-row button { background: #16181c; color: #fff; border: 1px solid #2f3336; border-radius: 16px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+/* Newspaper index edition link + footer nav (bottom bar is page flip only) */
+.nindex button { background: none; border: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }

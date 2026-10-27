@@ -115,8 +115,10 @@ function webAdStart() {
 
 // --- Advertising panel (the buying app) ------------------------------
 function adsPanelHTML() {
-  const mine = (typeof mine === 'function') ? mine() : [];
-  const sel = (UI.adCompany && S.co[UI.adCompany]) ? UI.adCompany : (mine.length ? mine[0].a3 : null);
+  // NOTE: the local must NOT be called `mine` — `const mine = mine()`
+  // is a TDZ error (the local shadows the global function).
+  const mineList = (typeof mine === 'function') ? mine() : [];
+  const sel = (UI.adCompany && S.co[UI.adCompany]) ? UI.adCompany : (mineList.length ? mineList[0].a3 : null);
   const route = UI.adRoute || 'paper';
   const weeks = UI.adWeeks || 4;
   const rate = AD_ROUTES[route].cost;
@@ -125,8 +127,8 @@ function adsPanelHTML() {
   const byRoute = {};
   Object.keys(AD_ROUTES).forEach(r => { byRoute[r] = activeAds(r).length; });
   return panelShell('Advertising', 'Four routes. Real companies pay, real companies get seen.',
-    `${!mine.length ? '<p class="muted">You control no company yet. Buy a majority stake or found one, then come back and advertise it.</p>' : `
-    <div class="card in"><h4>Your company</h4><div class="row wrap">${mine.map(c => `<button class="chip ${c.a3 === sel ? 'on' : ''}" data-a="adCompany" data-x="${c.a3}">${esc(c.name)} (${esc(c.sym)})</button>`).join('')}</div></div>
+    `${!mineList.length ? '<p class="muted">You control no company yet. Buy a majority stake or found one, then come back and advertise it.</p>' : `
+    <div class="card in"><h4>Your company</h4><div class="row wrap">${mineList.map(c => `<button class="chip ${c.a3 === sel ? 'on' : ''}" data-a="adCompany" data-x="${c.a3}">${esc(c.name)} (${esc(c.sym)})</button>`).join('')}</div></div>
     <div class="card in"><h4>Route</h4><div class="row wrap">${Object.entries(AD_ROUTES).map(([k, v]) => `<button class="chip ${k === route ? 'on' : ''}" data-a="adRoute" data-x="${k}">${v.name} · ${fmtMoney(v.cost, true)}/wk</button>`).join('')}</div><p class="muted small">${AD_ROUTES[route].blurb}</p></div>
     <div class="card in"><h4>Duration</h4><div class="row wrap">${[1, 4, 13].map(w => `<button class="chip ${w === weeks ? 'on' : ''}" data-a="adWeeks" data-x="${w}">${w} week${w === 1 ? '' : 's'}</button>`).join('')}</div>
     <div class="kv"><span>Total cost</span><b>${fmtMoney(cost, true)}</b></div><div class="kv"><span>Business cash</span><b>${fmtMoney(S.cash, true)}</b></div>

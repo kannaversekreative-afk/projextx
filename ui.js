@@ -767,7 +767,7 @@ function paperHTML() {
     <figure class="ncut">${paperCutSVG(ed.front.kind || 'growth')}<figcaption><b>${esc(ed.front.caption)}</b> <span class="ncredit">Ticker Times illustration.</span></figcaption></figure>
     <div class="nlead"><p class="pdrop">${esc(ed.front.body)}</p><p class="pbody">The story above is the one every capital is talking about this year. What happens next will be written in trade, in politics, and in the markets — and it will be in this paper first.</p></div>
     <div class="ncols">${ed.front.stories.map(paperArticle).join('') || '<p>No world stories this year.</p>'}</div>
-    <div class="nindex"><b>IN TODAY'S PAPER</b><span>Business — Page 2</span><span>Sport — Page 3</span><span>The Numbers — Page 4</span><span>Your Year — Page 5</span><span>Advertisements — Pages 6–7</span><span>Last edition — use LAST EDITION below</span></div>`;
+    <div class="nindex"><b>IN TODAY'S PAPER</b><span>Business — Page 2</span><span>Sport — Page 3</span><span>The Numbers — Page 4</span><span>Your Year — Page 5</span><span>Advertisements — Pages 6–7</span>${S.papers.length > 1 ? (paperEdIdx === 0 ? '<span><button data-a="paperEdPrev">Last edition →</button></span>' : '<span><button data-a="paperEdNext">← This edition</button></span>') : ''}</div>`;
   } else if (page === 1) {
     body = `<div class="nsection"><span>BUSINESS</span><span>Page 2 · ${ed.date.toUpperCase()}</span></div>
     <div class="pfront">
@@ -825,12 +825,9 @@ function paperHTML() {
       </div>
     </div>` : `<div class="pfront"><div class="pheadline"><div class="pkicker">YOUR YEAR</div><h2>Your ledger starts next year</h2><p class="pdrop">This edition was made before the player page existed. Age up once more and this page will fill with your actions, your outcomes, and your numbers.</p></div></div>`);
   }
-  const edLabel = paperEdIdx === 0 ? `THIS YEAR · ${ed.year}` : `LAST YEAR · ${ed.year}`;
   return `<div class="paper-closebar"><button class="paper-closebtn" data-a="closePaper" aria-label="Close newspaper">✕ CLOSE</button></div>
   <div class="psheet">${body}<div class="nfoliofoot"><span>The Ticker Times</span><span>Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><span>${ed.date.toUpperCase()}</span></div></div>
-  <div class="pedition"><button class="btn" data-a="paperEdPrev" ${paperEdIdx >= S.papers.length - 1 ? 'disabled' : ''}>← LAST EDITION</button><span class="ppage">${edLabel}</span><button class="btn" data-a="paperEdNext" ${paperEdIdx === 0 ? 'disabled' : ''}>THIS EDITION →</button></div>
-  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= PAPER_PAGES.length - 1 ? 'disabled' : ''}>NEXT →</button></div>
-  <button class="btn wide paper-return" data-a="closePaper">✕ CLOSE — RETURN TO MAP</button>`;
+  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= PAPER_PAGES.length - 1 ? 'disabled' : ''}>NEXT →</button></div>`;
 }
 
 function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
@@ -2547,16 +2544,28 @@ const A = {
   adCompany: x => { UI.adCompany = x; renderPanel(); },
   adRoute: x => { UI.adRoute = x; renderPanel(); },
   adWeeks: x => { UI.adWeeks = parseInt(x, 10) || 4; renderPanel(); },
-  adBuy: () => { const mine = (typeof mine === 'function') ? mine() : []; const a3 = (UI.adCompany && S.co[UI.adCompany]) ? UI.adCompany : (mine.length ? mine[0].a3 : null); if (!a3) { toast('Control a company first.', 'bad'); return; } const err = buyAd(a3, UI.adRoute || 'paper', UI.adWeeks || 4); if (err) toast(err, 'bad'); else { toast('Ad bought — it runs from this week.', 'good'); renderPanel(); } },
+  adBuy: () => { const mineList = (typeof mine === 'function') ? mine() : []; const a3 = (UI.adCompany && S.co[UI.adCompany]) ? UI.adCompany : (mineList.length ? mineList[0].a3 : null); if (!a3) { toast('Control a company first.', 'bad'); return; } const err = buyAd(a3, UI.adRoute || 'paper', UI.adWeeks || 4); if (err) toast(err, 'bad'); else { toast('Ad bought — it runs from this week.', 'good'); renderPanel(); } },
   tawkPost: () => { const inp = document.getElementById('tawkText'); const text = (inp ? inp.value : (UI.tawkDraft || '')).trim().slice(0, 280); if (!text) return; const t = tawkState(); t.posts.unshift({ id: 'u' + Date.now(), text, likes: 0 }); UI.tawkDraft = ''; if (S.person) S.person.vis = clamp((S.person.vis || 5) + 1, 0, 100); toast('Posted on Tawk.', 'good'); renderPanel(); },
   tawkLike: x => { const t = tawkState(); t.liked[x] = !t.liked[x]; save(); const b = document.querySelector(`[data-a="tawkLike"][data-x="${x}"]`); if (b) b.innerHTML = `${t.liked[x] ? '❤️' : '🤍'} ${tawkCompact(parseInt(b.dataset.likes || '0', 10) + (t.liked[x] ? 1 : 0))}`; },
   tawkRepost: x => { const t = tawkState(); t.reposted[x] = !t.reposted[x]; save(); const b = document.querySelector(`[data-a="tawkRepost"][data-x="${x}"]`); if (b) b.innerHTML = `🔁 ${tawkCompact(parseInt(b.dataset.reposts || '0', 10) + (t.reposted[x] ? 1 : 0))}${t.reposted[x] ? ' ✓' : ''}`; },
-  tawkBookmark: x => { const t = tawkState(); t.bookmarked[x] = !t.bookmarked[x]; save(); const b = document.querySelector(`[data-a="tawkBookmark"][data-x="${x}"]`); if (b) b.innerHTML = t.bookmarked[x] ? '🔖 ✓' : '🔖'; },
+  tawkBookmark: x => { const t = tawkState(); t.bookmarked[x] = !t.bookmarked[x]; if (t.bookmarked[x]) { const all = tawkFeed('foryou').concat(tawkDailyPosts()); const p = all.find(p => p.id === x) || (t.posts || []).find(p => p.id === x); if (p) t.saved[x] = p; } else delete t.saved[x]; save(); const b = document.querySelector(`[data-a="tawkBookmark"][data-x="${x}"]`); if (b) b.innerHTML = t.bookmarked[x] ? '🔖 ✓' : '🔖'; },
   tawkFollow: x => { const t = tawkState(); t.followed[x] = !t.followed[x]; save(); document.querySelectorAll(`[data-a="tawkFollow"][data-x="${x}"]`).forEach(b => { b.innerHTML = t.followed[x] ? 'Following ✓' : 'Follow'; }); },
   tawkReply: x => { const feed = tawkFeed(UI.tawkTab || 'foryou'); const post = feed.find(p => p.id === x); UI.tawkDraft = (post ? post.acct.handle + ' ' : '') + (UI.tawkDraft || ''); UI.tawkView = 'feed'; renderPanel(); setTimeout(() => { const el = document.getElementById('tawkText'); if (el) el.focus(); }, 0); },
   tawkTab: x => { const ci = document.getElementById('tawkText'); if (ci) UI.tawkDraft = ci.value; UI.tawkTab = x; UI.tawkView = 'feed'; renderPanel(); },
-  tawkView: x => { const ci = document.getElementById('tawkText'); if (ci) UI.tawkDraft = ci.value; UI.tawkView = x; renderPanel(); },
-  tawkSearch: () => { const inp = document.getElementById('tawkSearch'); UI.tawkQuery = inp ? inp.value.trim() : (UI.tawkQuery || ''); renderPanel(); },
+  tawkView: x => { const ci = document.getElementById('tawkText'); if (ci) UI.tawkDraft = ci.value; const cc = document.getElementById('tawkChatText'); if (cc) UI.tawkChatDraft = cc.value; UI.tawkView = x; renderPanel(); },
+  tawkSearch: () => { const inp = document.getElementById('tawkSearch'); UI.tawkQuery = inp ? inp.value.trim() : (UI.tawkQuery || ''); UI.tawkExploreTab = 'explore'; UI.tawkView = 'explore'; renderPanel(); },
+  tawkDrawer: () => { UI.tawkDrawer = true; renderPanel(); },
+  tawkDrawerClose: () => { UI.tawkDrawer = false; renderPanel(); },
+  tawkDrawerNav: x => { UI.tawkDrawer = false; UI.tawkView = x; renderPanel(); },
+  tawkExploreTab: x => { UI.tawkExploreTab = x; renderPanel(); },
+  tawkTopic: x => { const tp = tawkTopics()[parseInt(x, 10)]; if (!tp) return; UI.tawkQuery = tp.label; UI.tawkExploreTab = 'explore'; UI.tawkView = 'explore'; renderPanel(); },
+  tawkSportLeague: x => { UI.tawkSport = x; renderPanel(); },
+  tawkJoinChat: x => { let g = null; ['base', 'basket'].forEach(l => tawkSportGames(l).forEach(gg => { if (gg.id === x) g = gg; })); if (!g) return; const c = tawkEnsureChat(g); c.seen = c.msgs.length; UI.tawkGame = x; UI.tawkView = 'gamechat'; save(); renderPanel(); },
+  tawkChatOpen: x => { const t = tawkState(); const c = t.chats[x]; if (!c) return; c.seen = c.msgs.length; UI.tawkGame = x; UI.tawkView = 'gamechat'; save(); renderPanel(); },
+  tawkChatBack: () => { const ci = document.getElementById('tawkChatText'); if (ci) UI.tawkChatDraft = ci.value; UI.tawkView = 'chat'; renderPanel(); },
+  tawkChatPost: () => { const inp = document.getElementById('tawkChatText'); const text = (inp ? inp.value : (UI.tawkChatDraft || '')).trim().slice(0, 280); if (!text) return; const t = tawkState(); const c = t.chats[UI.tawkGame]; if (!c) return; const youName = (S.you && S.you.name) || 'Founder'; c.msgs.push({ acct: { name: youName, handle: tawkHandle(youName), icon: '👤' }, text, time: 'now' }); c.seen = c.msgs.length; UI.tawkChatDraft = ''; if (S.person) S.person.vis = clamp((S.person.vis || 5) + 1, 0, 100); save(); renderPanel(); },
+  tawkMuteAdd: () => { const inp = document.getElementById('tawkMuteWord'); const w = (inp ? inp.value : '').trim().toLowerCase(); if (!w) return; const t = tawkState(); if (!t.muted.includes(w)) t.muted.push(w); save(); renderPanel(); },
+  tawkMuteRemove: x => { const t = tawkState(); t.muted.splice(parseInt(x, 10), 1); save(); renderPanel(); },
   tawkFocus: () => { UI.tawkView = 'feed'; renderPanel(); setTimeout(() => { const el = document.getElementById('tawkText'); if (el) el.focus(); }, 0); },
   radioStation: x => { UI.radioStation = x; UI.radioT = 0; renderPanel(); },
   radioNext: () => { UI.radioTrack = (UI.radioTrack || 0) + 1; UI.radioT = 0; renderPanel(); },
