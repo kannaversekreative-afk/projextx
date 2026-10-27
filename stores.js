@@ -15,51 +15,51 @@
 // earns modest weekly money — growth comes from developing it
 // (levels, products, managers), never from just opening the doors.
 const STORE_TYPES = {
-  coffee: { name: 'Coffee shop', icon: '☕', buildout: 25000, desc: 'Cheap to open, steady foot traffic, small tickets.', products: [
+  coffee: { name: 'Coffee shop', icon: 'logo:coffee', buildout: 25000, desc: 'Cheap to open, steady foot traffic, small tickets.', products: [
     { name: 'Hot Beverage', price: 4.5, cost: 1.1, capture: 0.32 },
     { name: 'Cold Beverage', price: 5.5, cost: 1.4, capture: 0.42 },
     { name: 'Foods', price: 6.0, cost: 2.2, capture: 0.14 } ] },
-  bakery: { name: 'Bakery', icon: '🥐', buildout: 28000, desc: 'Morning regulars, cakes carry the margin.', products: [
+  bakery: { name: 'Bakery', icon: 'logo:bakery', buildout: 28000, desc: 'Morning regulars, cakes carry the margin.', products: [
     { name: 'Bread', price: 5.0, cost: 1.5, capture: 0.35 },
     { name: 'Pastries', price: 4.0, cost: 1.2, capture: 0.40 },
     { name: 'Cakes', price: 28.0, cost: 9.0, capture: 0.08 } ] },
-  burger: { name: 'Burger joint', icon: '🍔', buildout: 30000, desc: 'High volume, thin margin, needs traffic.', products: [
+  burger: { name: 'Burger joint', icon: 'logo:burger', buildout: 30000, desc: 'High volume, thin margin, needs traffic.', products: [
     { name: 'Burgers', price: 9.5, cost: 3.2, capture: 0.38 },
     { name: 'Fries', price: 4.0, cost: 1.0, capture: 0.30 },
     { name: 'Drinks', price: 3.5, cost: 0.8, capture: 0.30 } ] },
-  pizza: { name: 'Pizza place', icon: '🍕', buildout: 35000, desc: 'Families and evenings. Delivery-sized tickets.', products: [
+  pizza: { name: 'Pizza place', icon: 'logo:pizza', buildout: 35000, desc: 'Families and evenings. Delivery-sized tickets.', products: [
     { name: 'Pizzas', price: 14.0, cost: 4.5, capture: 0.40 },
     { name: 'Sides', price: 6.0, cost: 1.8, capture: 0.30 },
     { name: 'Drinks', price: 3.5, cost: 0.8, capture: 0.28 } ] },
-  restaurant: { name: 'Restaurant', icon: '🍽️', buildout: 60000, desc: 'Bigger tickets, bigger wage bill. Needs a good manager.', products: [
+  restaurant: { name: 'Restaurant', icon: 'logo:restaurant', buildout: 60000, desc: 'Bigger tickets, bigger wage bill. Needs a good manager.', products: [
     { name: 'Mains', price: 22.0, cost: 7.0, capture: 0.38 },
     { name: 'Starters', price: 9.0, cost: 2.8, capture: 0.30 },
     { name: 'Desserts', price: 8.0, cost: 2.2, capture: 0.22 } ] },
-  grocery: { name: 'Grocery store', icon: '🛒', buildout: 90000, desc: 'Everyone shops. Low margin, very high volume in big cities.', products: [
+  grocery: { name: 'Grocery store', icon: 'logo:grocery', buildout: 90000, desc: 'Everyone shops. Low margin, very high volume in big cities.', products: [
     { name: 'Fresh food', price: 12.0, cost: 8.5, capture: 0.40 },
     { name: 'Pantry', price: 8.0, cost: 5.2, capture: 0.35 },
     { name: 'Household', price: 15.0, cost: 9.5, capture: 0.20 } ] },
-  clothing: { name: 'Clothing store', icon: '👕', buildout: 55000, desc: 'Fashion margin, seasonal swings.', products: [
+  clothing: { name: 'Clothing store', icon: 'logo:clothing', buildout: 55000, desc: 'Fashion margin, seasonal swings.', products: [
     { name: 'Tops', price: 32.0, cost: 12.0, capture: 0.38 },
     { name: 'Bottoms', price: 45.0, cost: 17.0, capture: 0.32 },
     { name: 'Accessories', price: 18.0, cost: 6.0, capture: 0.25 } ] },
-  pharmacy: { name: 'Pharmacy', icon: '💊', buildout: 75000, desc: 'Repeat customers, steady demand in any city.', products: [
+  pharmacy: { name: 'Pharmacy', icon: 'logo:pharmacy', buildout: 75000, desc: 'Repeat customers, steady demand in any city.', products: [
     { name: 'Medicine', price: 18.0, cost: 9.0, capture: 0.42 },
     { name: 'Wellness', price: 24.0, cost: 11.0, capture: 0.30 },
     { name: 'Essentials', price: 9.0, cost: 4.0, capture: 0.25 } ] },
-  electronics: { name: 'Electronics store', icon: '📱', buildout: 110000, desc: 'Big tickets, but customers compare prices hard.', products: [
+  electronics: { name: 'Electronics store', icon: 'logo:electronics', buildout: 110000, desc: 'Big tickets, but customers compare prices hard.', products: [
     { name: 'Phones', price: 699.0, cost: 520.0, capture: 0.10 },
     { name: 'Accessories', price: 29.0, cost: 10.0, capture: 0.45 },
     { name: 'Audio', price: 89.0, cost: 48.0, capture: 0.25 } ] },
-  gym: { name: 'Gym', icon: '🏋️', buildout: 130000, desc: 'Membership money, week after week, if service holds up.', products: [
+  gym: { name: 'Gym', icon: 'logo:gym', buildout: 130000, desc: 'Membership money, week after week, if service holds up.', products: [
     { name: 'Membership', price: 39.0, cost: 8.0, capture: 0.45 },
     { name: 'Classes', price: 15.0, cost: 4.0, capture: 0.30 },
     { name: 'Gear', price: 25.0, cost: 11.0, capture: 0.20 } ] },
-  salon: { name: 'Salon', icon: '💇', buildout: 45000, desc: 'Loyal clients, skill-driven reviews.', products: [
+  salon: { name: 'Salon', icon: 'logo:salon', buildout: 45000, desc: 'Loyal clients, skill-driven reviews.', products: [
     { name: 'Cuts', price: 35.0, cost: 8.0, capture: 0.42 },
     { name: 'Colour', price: 65.0, cost: 18.0, capture: 0.30 },
     { name: 'Products', price: 22.0, cost: 9.0, capture: 0.22 } ] },
-  bookstore: { name: 'Bookstore', icon: '📚', buildout: 40000, desc: 'Quiet, loyal, and review-sensitive.', products: [
+  bookstore: { name: 'Bookstore', icon: 'logo:bookstore', buildout: 40000, desc: 'Quiet, loyal, and review-sensitive.', products: [
     { name: 'Books', price: 19.0, cost: 10.0, capture: 0.45 },
     { name: 'Stationery', price: 12.0, cost: 5.0, capture: 0.30 },
     { name: 'Cafe corner', price: 6.0, cost: 1.8, capture: 0.22 } ] },
@@ -70,9 +70,25 @@ const STORE_CAMPAIGNS = [
   { id: 'ads', name: 'Local Ads', boost: 0.25, cost: 1200, unlock: 10 },
   { id: 'loyalty', name: 'Loyalty Card', boost: 0.12, cost: 400, unlock: 20 },
 ];
-// Logo / icon picker for a business: emoji only, original set, no
-// brand marks. Picked in the store panel, shown on the city pin,
-// the store list and the panel header.
+// Logo / icon picker for a business. Each store TYPE has an approved
+// flat logo image (sliced from the 4 approved logo sheets, in
+// store-logos/<type>.png), used as the default icon for new stores.
+// The picker also keeps the original emoji set for customisation —
+// no visible picker option was removed. Old saves keep their emoji
+// icons; only stores with no icon get the new type logo.
+const STORE_LOGOS = ['coffee', 'bakery', 'burger', 'pizza', 'restaurant', 'grocery', 'clothing', 'pharmacy', 'electronics', 'gym', 'salon', 'bookstore'];
+function storeLogoSrc(type) {
+  if (typeof STORE_LOGO_DATA !== 'undefined' && STORE_LOGO_DATA[type]) return STORE_LOGO_DATA[type];
+  return 'store-logos/' + type + '.png';
+}
+function storeIconHTML(icon, size) {
+  const s = size || 28;
+  if (typeof icon === 'string' && icon.indexOf('logo:') === 0) {
+    const type = icon.slice(5);
+    if (STORE_LOGOS.indexOf(type) >= 0) return `<img src="${storeLogoSrc(type)}" alt="${type}" style="width:${s}px;height:${s}px;object-fit:contain;background:#fff;border-radius:6px;vertical-align:middle">`;
+  }
+  return icon || '🏪';
+}
 const STORE_ICONS = ('☕ 🥐 🍔 🍕 🍽️ 🛒 👕 💊 📱 🏋️ 💇 📚 🍩 🧁 🥤 🍦 🍜 🍣 🥩 🥗 🍞 🧀 🥛 🍷 🍺 🌮 🌯 🥪 🍰 🎂 🍪 🛍️ 👗 👠 🧢 👓 ⌚ 💍 👜 🎒 🧴 💄 ✂️ 💈 🧖 🏥 🩺 🦷 👁️ 🐾 🐶 🐱 🌸 💐 🌿 🪴 🛠️ 🔧 🔨 🪛 🎨 🖌️ 🎸 🎹 🎧 📷 🎥 🎮 🧸 ⚽ 🏀 🎳 🎯 🎪 🎬 📖 📰 ✏️ 🖊️ 📎 🗝️ 🔑 💡 🔋 🧲 🧭 🪙 💰 💳 🏦 📦 🚗 🚲 🛵 🏍️ ✈️ 🚀 🛟 ⚓ 🏕️ 🏖️ 🏨 🏠 🏡 🏢 🏬 🏭 ⛽ 🚿 🧺 🧹 🧻 🧼 🪥 🛁 🚽 🪑 🛋️ 🛏️ 🖥️ ⌨️ 🖱️ 🖨️ 📺 📻 🎙️ 📞 ☎️ 📠 🔌 💻 🖲️ 🕹️ 🎲 🧩 ♟️ 🃏 🎰 🎁 🎈 🎉 ✨ ⭐ 🌟 💎 🔮 🧿 🍀 🌈 🔥 💧 ❄️ 🌊 ☀️ 🌙 ⭐').split(' ');
 // ---------- Progress: the 1-100 goals / rewards map ----------
 // XP comes from doing, never from just owning: building a store,
@@ -259,7 +275,7 @@ function upgradeStore(storeId) {
 }
 function setStoreIcon(storeId, icon) {
   const st = storeById(storeId); if (!st) return 'Store not found.';
-  if (!STORE_ICONS.includes(icon)) return 'Pick an icon from the picker.';
+  if (!(typeof icon === 'string' && icon.indexOf('logo:') === 0 && STORE_LOGOS.indexOf(icon.slice(5)) >= 0) && !STORE_ICONS.includes(icon)) return 'Pick an icon from the picker.';
   st.icon = icon; return null;
 }
 function storeById(id) { ensureStores(); return S.stores.find(s => s.id === id); }

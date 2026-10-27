@@ -2485,7 +2485,7 @@ PANELS.stores = () => {
       <h4>DEVELOP THIS STORE · Lv ${st.level || 1} / 5</h4><p class="muted small">Each store level adds 10% to customer demand. Developing products and upgrading the store is how a shop grows — opening one alone never makes trillions.</p>
       ${(st.level || 1) >= 5 ? '<p class="muted small">Fully upgraded.</p>' : (progressLevel() < upNeed ? `<p class="muted small">🔒 Store Lv ${nextUp} unlocks at Progress Lv ${upNeed}.</p>` : `<button class="btn3d orange wide" data-a="storeUp" data-x="${st.id}">UPGRADE TO LV ${nextUp} · ${fmtMoney(storeUpgradeCost(st), true)}</button>`)}
       <h4>LOGO</h4><p class="muted small">Pick an icon for this business. It shows on the city map, in the store list and here.</p>
-      <div class="row"><span style="font-size:28px">${st.icon || def.icon}</span><button class="btn" data-a="storeIconOpen" data-x="${st.id}">CHANGE LOGO</button></div>
+      <div class="row"><span>${(typeof storeIconHTML === 'function' ? storeIconHTML(st.icon || def.icon, 28) : (st.icon || def.icon))}</span><button class="btn" data-a="storeIconOpen" data-x="${st.id}">CHANGE LOGO</button></div>
       <h4>COMPANY BLEND</h4><p class="muted small">Your house blend is the ${esc(def.products[0].name)} line above — price it like any other product, or rename the store to name the blend.</p>
       <label class="muted small">STORE NAME</label><input id="storeName" class="search" value="${esc(st.name)}"><button class="btn" data-a="storeRename" data-x="${st.id}">SAVE NAME</button></div>`;
     } else if (tab === 'marketing') {
@@ -2502,10 +2502,10 @@ PANELS.stores = () => {
       <button class="btn" data-a="closeStore" data-x="${st.id}">CLOSE STORE</button></div>`;
     }
     body += `<div class="store-tabs">${tabs.map(x => `<button class="store-tab ${tab === x ? 'on' : ''}" data-a="storeTab" data-x="${x}">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>`;
-    return panelShell(`${st.icon || def.icon} ${esc(st.name)} · Lv ${st.level || 1}`, `${esc(st.address)} · Rent ${fmtMoney(st.rent)}/week · Foot traffic ${st.footTraffic.toLocaleString()}/week`, `<div class="storeview">${body}</div>`);
+    return panelShell(`${(typeof storeIconHTML === 'function' ? storeIconHTML(st.icon || def.icon, 28) : (st.icon || def.icon))} ${esc(st.name)} · Lv ${st.level || 1}`, `${esc(st.address)} · Rent ${fmtMoney(st.rent)}/week · Foot traffic ${st.footTraffic.toLocaleString()}/week`, `<div class="storeview">${body}</div>`);
   }
   return panelShell('Stores', 'Stores you built from a FOR LEASE lot. Tap one to manage it.',
-    `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${st.icon || (STORE_TYPES[st.type] || STORE_TYPES.coffee).icon}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
+    `<div class="list">${S.stores.map(st => `<button class="srow" data-a="storeOpen" data-x="${st.id}"><span class="avatar">${(typeof storeIconHTML === 'function' ? storeIconHTML(st.icon || (STORE_TYPES[st.type] || STORE_TYPES.coffee).icon, 26) : (st.icon || (STORE_TYPES[st.type] || STORE_TYPES.coffee).icon))}</span><span class="sname"><b>${esc(st.name)}</b><small>${esc(st.address)} · ${st.reviews.overall}★ · ${st.staff} staff</small></span><span class="sprice"><b>${fmtMoney((st.weeks[0] || { income: 0 }).income, true)}/week</b><small>${fmtMoney((st.weeks[0] || { rev: 0 }).rev, true)} rev</small></span></button>`).join('') || '<p class="muted small">No stores yet. Open a city, tap a FOR LEASE pin, and press BUILD STORE.</p>'}</div>
     <p class="muted small">Stores earn every in-game week: customers pay, the store pays rent, wages, ingredients and campaigns, and the net lands in your cash.</p>`);
 };
 
@@ -3384,7 +3384,7 @@ const A = {
   progressSel: x => { UI.progressSel = +x; renderPanel(); },
   storeDev: x => { const [id, idx] = x.split('|'); act(() => developProduct(id, +idx), 'Product developed'); },
   storeUp: x => act(() => upgradeStore(x), 'Store upgraded'),
-  storeIconOpen: x => { openModal(`<h2>Pick a logo</h2><p class="muted">Tap an icon for this business.</p><div class="row wrap">${STORE_ICONS.map(ic => `<button class="btn" style="font-size:22px;padding:8px 10px" data-a="storeIconDo" data-x="${x}|${ic}">${ic}</button>`).join('')}</div>`, 'sheet'); },
+  storeIconOpen: x => { openModal(`<h2>Pick a logo</h2><p class="muted">Tap a logo for this business.</p><div class="row wrap">${STORE_LOGOS.map(lg => `<button class="btn" style="padding:6px" data-a="storeIconDo" data-x="${x}|logo:${lg}"><img src="${(typeof STORE_LOGO_DATA !== 'undefined' && STORE_LOGO_DATA[lg]) || ('store-logos/' + lg + '.png')}" alt="${lg}" style="width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px"><br><small>${(STORE_TYPES[lg] || {}).name || lg}</small></button>`).join('')}</div><p class="muted small">More icons</p><div class="row wrap">${STORE_ICONS.map(ic => `<button class="btn" style="font-size:22px;padding:8px 10px" data-a="storeIconDo" data-x="${x}|${ic}">${ic}</button>`).join('')}</div>`, 'sheet'); },
   storeIconDo: x => { const [id, ic] = x.split('|'); act(() => setStoreIcon(id, ic), 'Logo changed'); closeModal(); },
   storeCamp: x => { const [id, cid] = x.split('|'); act(() => startStoreCampaign(id, cid), 'Campaign started'); },
   storeRename: x => { const inp = document.getElementById('storeName'); act(() => renameStore(x, inp ? inp.value : ''), 'Store renamed'); },

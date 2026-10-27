@@ -786,7 +786,7 @@ const CityView = (() => {
     // Stores built on a leased lot get their logo as a pin, so tapping
     // a built business opens its management panel (manager, products,
     // marketing, finance) instead of vanishing with the FOR LEASE sign.
-    if (typeof storesInCity === 'function') storesInCity(city.id).forEach(st => add(st.lotT, 'pin-store', `<span class="logo own">${st.icon || '🏪'}</span>`, () => onPin({ type: 'store', store: st }), st.name));
+    if (typeof storesInCity === 'function') storesInCity(city.id).forEach(st => add(st.lotT, 'pin-store', `<span class="logo own">${(typeof storeIconHTML === 'function' ? storeIconHTML(st.icon || '🏪', 26) : (st.icon || '🏪'))}</span>`, () => onPin({ type: 'store', store: st }), st.name));
     // Government buildings, capitals only: police, fire, the agencies,
     // the leader's house, the base and the port. They sit on the free
     // lot tiles nearest the capitol, so they never cover a store, a
