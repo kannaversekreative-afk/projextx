@@ -37,7 +37,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 function newGame(opt) {
   const s = {
     v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', flow: !opt.leader && opt.mode !== 'worl' && opt.mode !== 'random', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
-    you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
+    you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0], look: opt.look || (typeof randLook === 'function' ? randLook() : null) },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
     holdings: {}, holdingsP: {}, holdingsXP: {}, props: [], lotState: {}, placed: [],

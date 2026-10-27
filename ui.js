@@ -481,7 +481,7 @@ function renderHUD() {
   const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
   $('hud').innerHTML = `
   <button class="hud-pill hud-tl" data-a="panel" data-x="profile" aria-label="User profile">
-    <span class="hud-avatar">${esc(youName.charAt(0).toUpperCase())}</span>
+    <span class="hud-avatar">${(S.you && S.you.look && typeof portraitSVG === 'function') ? portraitSVG(S.you.look, 34) : esc(youName.charAt(0).toUpperCase())}</span>
     <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)}</small></span>
   </button>
   <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
@@ -1035,11 +1035,13 @@ function renderInheritStep() {
       <button class="btn wide" data-a="introMode" data-x="offline">← PLAY OFFLINE INSTEAD</button>`;
   } else if (UI.introMode === 'world') {
     const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
+    if (!Array.isArray(UI.inheritLooks) || !UI.inheritLooks.length) { UI.inheritLooks = Array.from({length: 8}, () => randLook()); UI.inheritLookIdx = 0; }
     step.innerHTML = `<div class="inherit-line">You have inherited</div>
       <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
       <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
       <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
       <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
+      <div style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Your person — tap to pick</div><div class="look-row" id="inheritLooksRow">${lookPickerHTML(UI.inheritLooks, UI.inheritLookIdx || 0, 'inheritLook', 'inheritLookShuffle')}</div>
       <p>You are now the leader of this country, as it is today. Tax its businesses, pay your people, trade, and grow — or invade a neighbour for the challenge.</p>
       <button class="btn3d orange wide" data-a="inheritContinue">CONTINUE</button>`;
     const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
@@ -1055,11 +1057,13 @@ function renderInheritStep() {
       <button class="btn3d orange wide" data-a="minigamesPlay">▶ PLAY BATTLE GRID</button>`;
   } else if (UI.introMode === 'random') {
     const list = W.playable.slice().sort((a, b) => a.name.localeCompare(b.name));
+    if (!Array.isArray(UI.inheritLooks) || !UI.inheritLooks.length) { UI.inheritLooks = Array.from({length: 8}, () => randLook()); UI.inheritLookIdx = 0; }
     step.innerHTML = `<div class="inherit-line">You have inherited — Random World</div>
       <select id="inheritCountry" aria-label="Choose a country to inherit">${list.map(k => `<option value="${k.a3}" ${k.a3 === 'USA' ? 'selected' : ''}>${k.flag} ${k.a3} · ${esc(k.name)} — ${inheritDifficulty(k)}</option>`).join('')}</select>
       <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Washington, D.C. · 328M people · GDP $21.4T</div>
       <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Country name — keep its real name, or give it your own</label>
       <input id="inheritName" class="text-in" style="width:min(480px,90vw)" maxlength="40" value="United States" autocomplete="off" aria-label="Country name">
+      <div style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Your person — tap to pick</div><div class="look-row" id="inheritLooksRow">${lookPickerHTML(UI.inheritLooks, UI.inheritLookIdx || 0, 'inheritLook', 'inheritLookShuffle')}</div>
       <p>Random World: a fully generated world. The landmass, continents, countries, cities, populations, GDPs and every company and stock name are generated fresh each time you pick it — no real Earth at all. Your starting treasury, debt and stability are random on top of that. No rivals, no win goal, no situation cards: an endless sandbox, like World.</p>
       <div class="row"><button class="btn flex" data-a="introRandom">🎲 RANDOM COUNTRY</button><button class="btn3d orange flex" data-a="randomContinue">START RANDOM WORLD</button></div>`;
     const sel = document.getElementById('inheritCountry'), inp = document.getElementById('inheritName'), infoEl = document.getElementById('inheritInfo');
@@ -1103,9 +1107,11 @@ function renderPick() {
 function nameCompany() {
   const k = W.byA3[UI.pick.a3];
   UI.color = LOGO_COLORS[0];
+  UI.pickLooks = Array.from({length: 8}, () => randLook()); UI.pickLookIdx = 0;
   openModal(`<h2>Name your company</h2><p class="muted">Based in ${k.flag} ${esc(k.name)}.</p>
     <input id="cname" class="text-in" maxlength="24" value="${esc(k.name.split(' ')[0])} Holdings" autocomplete="off">
     <div class="label">Colour</div><div class="swatches">${LOGO_COLORS.map((c, i) => `<button class="sw ${i === 0 ? 'on' : ''}" style="background:${c}" data-a="swatch" data-x="${c}" aria-label="colour ${i + 1}"></button>`).join('')}</div>
+    <div class="label">Your person</div><div class="look-row" id="pickLooksRow">${lookPickerHTML(UI.pickLooks, 0, 'pickLook', 'pickLookShuffle')}</div>
     <button class="btn3d orange wide" data-a="beginGame">START</button>`, 'center');
 }
 function enterGame(returning) {
@@ -1753,6 +1759,10 @@ function countryAdvisor() {
 // office), four meters (visibility, fame, popularity, public opinion),
 // your career and your assets. Country logic is untouched: the country
 // panel still opens from the country name/cash part of the same HUD pill.
+function youLookOpts() { if (!Array.isArray(UI.youLookOpts) || !UI.youLookOpts.length) UI.youLookOpts = Array.from({length: 8}, () => randLook()); const cur = (typeof S !== 'undefined' && S && S.you && S.you.look) ? JSON.stringify(S.you.look) : null; if (cur && !UI.youLookOpts.some(lk => JSON.stringify(lk) === cur)) { UI.youLookOpts.unshift(S.you.look); UI.youLookOpts.length = 8; } return UI.youLookOpts; }
+function lookPickerHTML(looks, selIdx, action, shuffleAction) {
+  return `${(looks || []).map((lk, i) => `<button class="pick-look ${i === selIdx ? 'on' : ''}" data-a="${action}" data-x="${i}">${portraitSVG(lk, 56)}</button>`).join('')}<button class="btn" data-a="${shuffleAction}" title="New faces">↻</button>`;
+}
 PANELS.profile = () => {
   const P = ensurePerson();
   const you = (S.you || { name: 'Founder' });
@@ -1765,6 +1775,7 @@ PANELS.profile = () => {
   const office = P.office;
   return panelShell('You', `${esc(you.name)} · Age ${personAge()} · ${office ? esc(office.title) : esc(cur.title)}`,
     `<div class="card in"><h4>✏️ Name</h4><div class="row"><input id="profileName" class="search" type="text" value="${esc(you.name)}" maxlength="24"><button class="btn" data-a="profileRename">Save name</button></div><p class="muted small">This is the name on the top pill, with your title behind it. Your title changes on its own as you win offices, run companies, and climb careers.</p></div>
+    <div class="card in"><h4>🧑 Your person</h4><p class="muted small">This is the face in the top-left pill. Tap a person to pick them.</p><div class="look-row">${lookPickerHTML(youLookOpts(), youLookOpts().findIndex(lk => JSON.stringify(lk) === JSON.stringify(you.look || {})), 'youLook', 'youLookShuffle')}</div></div>
     <div class="card in"><h4>📊 Meters</h4>${bar('👁 Visibility', P.vis)}${bar('⭐ Fame', P.fame)}${bar('❤️ Popularity', P.pop)}${bar('🗳️ Public opinion', P.opin)}<p class="muted small">Elections are won on fame, popularity, and public opinion — three separate scores. Visibility helps fame grow.</p></div>
     <div class="card in"><h4>💰 Your money</h4>
     <div class="kv"><span>Personal money</span><b>${fmtMoney(P.cash, true)}</b></div>
@@ -2917,7 +2928,8 @@ const A = {
   swatch: (x, el) => { UI.color = x; document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === el)); },
   beginGame: () => {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
-    S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color }); save(); enterGame(false);
+    const look = (UI.pickLooks || [])[UI.pickLookIdx || 0] || null;
+    S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color, look }); save(); enterGame(false);
   },
   introMode: x => {
     UI.introMode = x;
@@ -2932,7 +2944,7 @@ const A = {
   randomContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
-    S = newGame({ mode: 'random', home: a3, leader: true, name: 'Leader', countryName }); S.randomSeed = (UI.randomSeed != null ? UI.randomSeed : (W.randomSeed != null ? W.randomSeed : null)); if (typeof applyRandomStart === 'function') applyRandomStart(); save(); enterGame(false);
+    S = newGame({ mode: 'random', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); S.randomSeed = (UI.randomSeed != null ? UI.randomSeed : (W.randomSeed != null ? W.randomSeed : null)); if (typeof applyRandomStart === 'function') applyRandomStart(); save(); enterGame(false);
   },
   worlContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
@@ -2951,7 +2963,7 @@ const A = {
   inheritContinue: () => {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
-    S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName }); save(); enterGame(false);
+    S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
   },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
@@ -3247,6 +3259,12 @@ const A = {
   capTheme: x => { ensureCapital().theme = x; renderPanel(); },
   capRename: () => { const v = document.getElementById('capName'); if (v && v.value.trim()) { ensureCapital().name = v.value.trim(); applyCapitalName(); toast('Capital renamed', 'good'); renderPanel(); } },
   profileRename: () => { const inp = document.getElementById('profileName'); const v = inp ? inp.value.trim() : ''; if (!v) return toast('Enter a name first.', 'bad'); if (!S.you) S.you = { name: 'Founder' }; S.you.name = v.slice(0, 24); toast('Name saved', 'good'); renderHUD(); renderPanel(); },
+  youLook: x => { const lk = youLookOpts()[+x]; if (!lk) return; if (!S.you) S.you = { name: 'Founder' }; S.you.look = lk; save(); renderHUD(); renderPanel(); },
+  youLookShuffle: () => { UI.youLookOpts = Array.from({length: 8}, () => randLook()); renderPanel(); },
+  pickLook: (x, el) => { UI.pickLookIdx = +x; document.querySelectorAll('#pickLooksRow .pick-look').forEach(b => b.classList.toggle('on', b === el)); },
+  pickLookShuffle: () => { UI.pickLooks = Array.from({length: 8}, () => randLook()); UI.pickLookIdx = 0; const row = document.getElementById('pickLooksRow'); if (row) row.innerHTML = lookPickerHTML(UI.pickLooks, 0, 'pickLook', 'pickLookShuffle'); },
+  inheritLook: (x, el) => { UI.inheritLookIdx = +x; document.querySelectorAll('#inheritLooksRow .pick-look').forEach(b => b.classList.toggle('on', b === el)); },
+  inheritLookShuffle: () => { UI.inheritLooks = Array.from({length: 8}, () => randLook()); UI.inheritLookIdx = 0; const row = document.getElementById('inheritLooksRow'); if (row) row.innerHTML = lookPickerHTML(UI.inheritLooks, 0, 'inheritLook', 'inheritLookShuffle'); },
   tradeFocus: () => { const el = document.getElementById('tradeBox'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   capMotto: () => { const v = document.getElementById('capMotto'); if (v) { ensureCapital().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   airportCont: x => { UI.airport = { cont: x, a3: null }; renderPanel(); },

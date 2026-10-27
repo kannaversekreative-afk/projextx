@@ -39,6 +39,7 @@ function ensurePerson() {
   if (!Array.isArray(p.cabinet)) p.cabinet = [];
   if (!Array.isArray(p.tips)) p.tips = [];
   p.vis = clampMeter(p.vis); p.fame = clampMeter(p.fame); p.pop = clampMeter(p.pop); p.opin = clampMeter(p.opin);
+  if (S.you && !S.you.look && typeof randLook === 'function') S.you.look = randLook();
   return p;
 }
 function personAge() { return 18 + Math.floor(((typeof S !== 'undefined' && S ? S.day : 0) || 0) / 365); }
