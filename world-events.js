@@ -258,6 +258,9 @@ function ensureWarState(w) {
   if (w.spentA == null) w.spentA = 0;
   if (w.spentB == null) w.spentB = 0;
   if (w.status == null) w.status = 'ongoing';
+  // War progress history: weekly front samples, display only, never
+  // used by war rules. Old wars without one get a start point + today.
+  if (!Array.isArray(w.hist)) w.hist = [{ day: w.start || S.day, front: 50 }, { day: S.day, front: w.front == null ? 50 : w.front }];
   return w;
 }
 // Supply factor for one side: troops and weapons on hand, plus whether
@@ -366,14 +369,14 @@ function resolveOngoingWar(w, trigger) {
   }
   if (w.a === S.home || w.b === S.home) {
     const other = w.a === S.home ? w.b : w.a;
-    S.lastWarResult = { target: other, outcome, attackerWins: outcome === 'annexation', winP: s.winP, roll, att: s.att, def: s.def, cost: spent, days: len };
+    S.lastWarResult = { target: other, outcome, attackerWins: outcome === 'annexation', winP: s.winP, roll, att: s.att, def: s.def, cost: spent, days: len, hist: (w.hist || []).slice() };
   }
   return outcome;
 }
 
 // ---------- wars ----------
 function startWar(att, def, byPlayer) {
-  const w = { id: uid(), a: att, b: def, start: S.day, front: 50, player: !!byPlayer, status: 'ongoing', plan: null, troopsA: 100, troopsB: 100, weaponsA: 100, weaponsB: 100, spentA: 0, spentB: 0, unpaidA: false, unpaidB: false };
+  const w = { id: uid(), a: att, b: def, start: S.day, front: 50, player: !!byPlayer, status: 'ongoing', plan: null, troopsA: 100, troopsB: 100, weaponsA: 100, weaponsB: 100, spentA: 0, spentB: 0, unpaidA: false, unpaidB: false, hist: [{ day: S.day, front: 50 }] };
   S.wars.push(w); country(att).war = w.id; country(def).war = w.id;
   shockCountry(att, 'war', 0.8); shockCountry(def, 'war', 1.3);
   W.byA3[att].nb.concat(W.byA3[def].nb).forEach(n => { if (S.countries[n] && n !== att && n !== def) { shockCountry(n, 'unrest', 0.3); setRel(n, att, getRel(n, att) - 10); } });
@@ -400,6 +403,13 @@ function warDay(w) {
   const pa = milPower(w.a) * warSupply(w, 'a'), pb = milPower(w.b) * warSupply(w, 'b');
   const odds = pa / (pa + pb * 1.15);
   w.front += (odds - 0.5) * 3.2 + gauss() * 1.2;
+  // War progress record only: one front sample a week, so a war that
+  // runs 100 years still shows its whole arc. Thinning keeps the
+  // history bounded without changing any rule or outcome.
+  if (S.day % 7 === 0) {
+    w.hist.push({ day: S.day, front: Math.round(w.front * 10) / 10 });
+    if (w.hist.length > 5000) w.hist = w.hist.filter((_, i) => i % 2 === 0);
+  }
   const len = S.day - w.start;
   if (w.front >= 100) { resolveOngoingWar(w, 'breakthrough-attacker'); return; }
   if (w.front <= 0) { resolveOngoingWar(w, 'breakthrough-defender'); return; }

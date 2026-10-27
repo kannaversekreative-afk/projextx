@@ -2014,6 +2014,38 @@ PANELS.warplan = () => {
     <button class="btn3d orange wide" data-a="warSubmit" ${err ? 'disabled' : ''}>SUBMIT ATTACK</button>
     <p class="muted small">Attacking may win or lose right there, or start an ongoing war that runs for years. While it runs, money, troops and weapons drain every day, and it can end in treaty, annexation, sanctions, nuclear escalation, or stalemate. The outcome is 70% your real stats and 30% chaos. You can declare war only once every 10 years.</p>`);
 };
+// War progress display — display only, no war rules live here.
+// The control bar reads like the territorial-control maps: red = ground
+// the attacker has taken, light blue = ground the defender still holds,
+// and the white line is the front itself. The timeline is the weekly
+// front history, so a war that runs a week or 100 years shows its arc.
+function warProgressHTML(w) {
+  const front = Math.round(Math.max(0, Math.min(100, w.front || 50)));
+  const atk = esc(cname(w.a)), def = esc(cname(w.b));
+  const status = front > 60 ? `${atk} advancing` : front < 40 ? `${def} pushing back` : 'Stalemate — front barely moving';
+  const hist = (w.hist || []).filter(p => p && isFinite(p.front));
+  let pts = '';
+  if (hist.length >= 2) {
+    const d0 = hist[0].day, d1 = hist[hist.length - 1].day, span = Math.max(1, d1 - d0);
+    pts = hist.map(p => `${((p.day - d0) / span * 300).toFixed(1)},${(80 - Math.max(0, Math.min(100, p.front)) / 100 * 80).toFixed(1)}`).join(' ');
+  } else {
+    pts = `0,${80 - front / 100 * 80} 300,${80 - front / 100 * 80}`;
+  }
+  return `<div class="card in"><h4>CONTROL OF TERRITORY</h4><p class="muted small">${status} · Front ${front}%</p>
+    <div style="display:flex;height:28px;border-radius:8px;overflow:hidden;position:relative">
+      <div style="width:${front}%;background:#e5484d"></div>
+      <div style="width:${100 - front}%;background:#7ec3f2"></div>
+      <div style="position:absolute;left:${front}%;top:0;bottom:0;border-left:3px dashed #fff"></div>
+    </div>
+    <div class="row between" style="margin-top:6px"><span class="muted small">■ ${atk} controls ${front}%</span><span class="muted small">■ ${def} holds ${100 - front}%</span></div>
+    <h4 style="margin-top:14px">FRONT OVER TIME</h4>
+    <svg viewBox="0 0 300 90" style="width:100%;background:#fff;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#e5484d" stroke-width="2"/><line x1="0" y1="80" x2="300" y2="80" stroke="#cbd5e1" stroke-width="1"/><text x="2" y="12" font-size="9" fill="#64748b">100% attacker</text><text x="2" y="88" font-size="9" fill="#64748b">0% defender</text></svg>
+    <p class="muted small">${hist.length} weekly samples · Started ${fmtDate(w.start)} · ${Math.floor((S.day - w.start) / 365)} years, ${(S.day - w.start) % 365} days in</p></div>`;
+}
+function warMiniBarHTML(w) {
+  const front = Math.round(Math.max(0, Math.min(100, w.front || 50)));
+  return `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Front ${front}%</b></div><div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin:2px 0 10px"><div style="width:${front}%;background:#e5484d"></div><div style="width:${100 - front}%;background:#7ec3f2"></div></div>`;
+}
 PANELS.war = () => {
   const w = (S.wars || []).find(x => x.a === S.home || x.b === S.home);
   if (!w) {
@@ -2026,8 +2058,10 @@ PANELS.war = () => {
   return panelShell(`Ongoing war — ${cname(other)}`, `NOT a win or a loss yet · ${Math.floor(len / 365)} years, ${len % 365} days in · Front ${Math.round(w.front)}%`,
     `<p class="muted small">This war is unresolved. Money, troops and weapons drain every day. It can end in treaty, annexation, sanctions, nuclear escalation, or stalemate — 70% real stats, 30% chaos.</p>
     <div class="stats3 box"><div><span>Front</span><b>${Math.round(w.front)}%</b></div><div><span>Your stats chance</span><b>${Math.round(s.winP * 100)}%</b></div><div><span>Days at war</span><b>${len}</b></div></div>
+    ${warProgressHTML(w)}
     <div class="kv"><span>${esc(cname(w.a))} — troops</span><b>${Math.round(w.troopsA)}%</b></div><div class="kv"><span>${esc(cname(w.a))} — weapons</span><b>${Math.round(w.weaponsA)}%</b></div><div class="kv"><span>${esc(cname(w.a))} — money spent</span><b>${fmtMoney(w.spentA, true)}</b></div>
     <div class="kv"><span>${esc(cname(w.b))} — troops</span><b>${Math.round(w.troopsB)}%</b></div><div class="kv"><span>${esc(cname(w.b))} — weapons</span><b>${Math.round(w.weaponsB)}%</b></div><div class="kv"><span>${esc(cname(w.b))} — money spent</span><b>${fmtMoney(w.spentB, true)}</b></div>
+    <h4>ALL WARS — PROGRESS BY COUNTRY</h4>${(S.wars || []).map(x => warMiniBarHTML(x)).join('') || '<p class="muted small">No other wars.</p>'}
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 PANELS.warresult = () => {
