@@ -480,11 +480,9 @@ function renderHUD() {
   // name and your money. Top-right: a white pill with blue text, the game date — tap it and
   // it asks if you are done this week, with a calendar underneath.
   // Bottom-left: map layers — toggle what shows on the map.
-  // Bottom-middle: your current city — tap it for the airport
-  // departures board and fly somewhere. Bottom-right: a hamburger
+  // Bottom-right: a hamburger
   // that opens every menu item, on the right, scrollable.
   const hk = W.byA3[S.home];
-  const curCity = airportFromCity();
   const youName = (S.you && S.you.name) || 'Founder';
   const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
   $('hud').innerHTML = `
@@ -495,7 +493,6 @@ function renderHUD() {
   <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
-  <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
@@ -526,7 +523,16 @@ function renderCityHUD() {
       // A company's locations are all in its own capital city (co.city), by construction
       // in addLocation(), so the count here is exact, not a filter that happens to work.
       const myLocs = controlled(c.a3) ? co.locs.filter(l => (l.city || co.city) === c.id).length : 0;
-      html = `<div class="citybar card"><div><button class="citybar-name" data-a="departures" aria-label="Airport departures">${esc(c.name)}</button><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here${photoNote}</span></div>
+      // Live city stats: the country's population and GDP move every day
+      // (countryDay), and the city takes its fixed population share of
+      // both, so these are current values, not the build-time allocations.
+      const cs = (typeof country === 'function') ? country(c.a3) : S.countries[c.a3];
+      const share = (typeof c.popShare === 'number') ? c.popShare : 0;
+      const livePop = (cs && share) ? Math.round(cs.pop * share) : (c.popAlloc || c.pop);
+      const liveGdp = (cs && share) ? cs.gdp * 1e6 * share : (c.gdpAlloc || 0);
+      const growth = cs ? cs.growth : 0;
+      const topbar = `<div class="citytopbar card"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`;
+      html = topbar + `<div class="citybar card"><div><button class="citybar-name" data-a="departures" aria-label="Airport departures">${esc(c.name)}</button><span class="muted"> · ${esc(k.name)} · ${SECTORS[co.sector].icon} ${esc(co.name)} · ${myLocs} of your locations here${photoNote}</span></div>
     <div class="city-actions"><button data-a="cityFilter">Filter: ${CityView.filter}</button><button data-a="leaveCity">✕ Leave city</button></div></div>`;
     }
   }
