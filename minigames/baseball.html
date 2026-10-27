@@ -2193,7 +2193,7 @@ function mpSwingEval(p,pt,tx,ty,dt){const r=p.r,pk=p.pk||{};const con=r.con+(pk.
 function mpPitchEval(p,type,tx,ty,m){const pk=p.pk||{};const ctl=p.r.ctl+(pk.ctl||0);const df=mpDiff();const green=(.07+ctl*.0016)*df;const off=Math.abs(m-.5);const inG=off<=green;const acc=1-Math.min(1,off/.5);
   const sd=.04+(inG?0:(off-green)*1.1)+(100-ctl)*.0035;const x=tx+gauss(0,sd),y=ty+gauss(0,sd);return{type,x:Math.round(x*100)/100,y:Math.round(y*100)/100,qb:inG?3+acc*4:(acc-.65)*14,mph:inG&&off<green*.35?1.6:inG?0:-1.2,inG,perfect:inG&&off<green*.35}}
 /* actions */
-A.mpgo=()=>{const s=UI.mpg;const g=s.g;if(s.mode!=='bat'||s.phase!=='ready')return;const pt=preparePitch(g);s.pt=pt;s.phase='flight';s.t0=performance.now();const df=mpDiff();s.T=clamp(1180-(pt.mph-75)*22,560,1180)*df;s.tap=null;renderMpGame();mpAnim()};
+A.mpgo=()=>{const s=UI.mpg;const g=s.g;if(s.mode!=='bat'||s.phase!=='ready')return;if(!g.pa){mpProceed();return}const pt=preparePitch(g);s.pt=pt;s.phase='flight';s.t0=performance.now();const df=mpDiff();s.T=clamp(1180-(pt.mph-75)*22,560,1180)*df;s.tap=null;renderMpGame();mpAnim()};
 A.mptap=(x,y)=>{};
 function mpZoneTap(ev){const s=UI.mpg;if(!s)return;const cv=ev.currentTarget;const rc=cv.getBoundingClientRect();const px=(ev.clientX-rc.left)/rc.width*cv._w,py=(ev.clientY-rc.top)/rc.height*cv._h;const z=cv._toZone(px,py);
   if(s.mode==='bat'){if(s.phase==='ready'){A.mpgo();return}if(s.phase!=='flight'||s.tap)return;const now=performance.now();s.tap={x:z.x,y:z.y,t:now};const dt=now-(s.t0+s.T);s.swing=mpSwingEval(s.g.mp,s.pt,z.x,z.y,dt);}
@@ -2202,18 +2202,19 @@ A.mpsel=t=>{const s=UI.mpg;if(s.mode!=='pitch'||!['ready','aim'].includes(s.phas
 A.mpcall=()=>{const s=UI.mpg;if(s.mode!=='pitch')return;s.sel=s.call.type;s.target={x:s.call.x,y:s.call.y};s.phase='meter';s.m0=performance.now();renderMpGame();mpAnim()};
 A.mpstop=()=>{const s=UI.mpg;if(s.phase!=='meter')return;const per=1150*mpDiff();const ph=((performance.now()-s.m0)%per)/per;const m=ph<.5?ph*2:2-ph*2;s.mval=m;const pe=mpPitchEval(s.g.mp,s.sel,s.target.x,s.target.y,m);s.pe=pe;
   const g=s.g;const pt=preparePitch(g,{type:s.sel,x:pe.x,y:pe.y,qb:pe.qb,mph:pe.mph});s.pt=pt;s.phase='flight';s.t0=performance.now();s.T=650;renderMpGame();mpAnim()};
-A.mpsteal=yn=>{const s=UI.mpg;const g=s.g;const b=g.bases;const p=g.mp;if(yn==='1'){const to=b[0]&&b[0].p===p?1:2;doSteal(g,to);mpScanLog()}g._stealAsk=true;
-  const n=g.log.length;let k=0;while(!g.done&&k<12){stepPitch(g);k++;if(g.log.length>n)break}g._stealAsk=false;mpScanLog();mpProceed()};
+A.mpsteal=yn=>{const s=UI.mpg;const g=s.g;const b=g.bases;const p=g.mp;let se=null;if(yn==='1'){const to=b[0]&&b[0].p===p?1:2;se=doSteal(g,to);mpScanLog()}g._stealAsk=true;
+  const n=g.log.length;let k=0;while(!g.done&&k<12){stepPitch(g);k++;if(g.log.length>n)break}g._stealAsk=false;mpScanLog();mpProceed();if(se)s.flash={txt:se.txt,pa:false,steal:true};renderMpGame()};
 A.mpautopa=()=>{const s=UI.mpg;const g=s.g;const n=g.log.length;let k=0;while(!g.done&&k<20){stepPitch(g);k++;if(g.log.slice(n).some(e=>e.pa||e.half))break}s.flash=null;mpScanLog();mpProceed()};
 A.mpsimrest=()=>{const s=UI.mpg;const g=s.g;if(g.showcase){while(g.showcase.done<g.showcase.need&&!g.done){stepPitch(g);mpScanLog()}mpEndShowcase();return}simGame(g);mpScanLog();s.mode='done';renderMpGame()};
 A.mpnext=()=>{const s=UI.mpg;s.flash=null;s.phase='idle';mpProceed()};
 A.mpdone=()=>{const s=UI.mpg;const g=s.g;UI.mpg=null;$('live').innerHTML='';const r=mpFinishGame(g);UI.modal={type:'mpres',g,r};save();render()};
-function resolveUserPitch(){const s=UI.mpg;const g=s.g;const before=g.log.length;let res;
+function resolveUserPitch(){const s=UI.mpg;const g=s.g;if(!g.pa){s.phase='idle';mpProceed();return}const before=g.log.length;let res;
   if(s.mode==='bat'){res=resolvePitch(g,s.pt,s.tap?s.swing:{swing:false})}else{res=resolvePitch(g,s.pt,null)}
-  const ev=g.log.length>before?g.log[g.log.length-1]:null;const p=s.pt;const last=g.cur.length?g.cur[g.cur.length-1]:null;
+  let ev=null;for(let i=g.log.length-1;i>=before;i--){if(g.log[i].pa){ev=g.log[i];break}}
+  const p=s.pt;const last=g.cur.length?g.cur[g.cur.length-1]:null;
   let txt=last?last.r:'';if(s.mode==='bat'&&s.tap&&s.swing)txt=s.swing.msg+(s.swing.contact&&!s.swing.foul?'':'. '+(last?last.r:''));if(s.mode==='pitch'&&s.pe)txt=(s.pe.perfect?'Perfect release! ':s.pe.inG?'Good release. ':'Missed your spot. ')+(last?last.r:'');
-  if(ev&&ev.pa)txt=ev.txt;s.flash={txt,pa:!!(ev&&ev.pa),res:ev&&ev.res,score:ev&&ev.score};s.phase='result';mpScanLog();renderMpGame();
-  if(!(ev&&ev.pa)&&!g.done&&!(g.showcase&&g.showcase.done>=g.showcase.need)){setTimeout(()=>{if(UI.mpg===s&&s.phase==='result'){s.flash=null;s.phase='ready';if(s.mode==='pitch'){s.sel=null;s.target=null;s.call=catcherCall(g)}renderMpGame()}},s.mode==='bat'?1100:1000)}}
+  if(ev)txt=ev.txt;const paEnded=!g.pa;s.flash={txt,pa:!!(ev||paEnded),res:ev&&ev.res,score:ev&&ev.score};s.phase='result';mpScanLog();renderMpGame();
+  if(!ev&&!paEnded&&!g.done&&!(g.showcase&&g.showcase.done>=g.showcase.need)){setTimeout(()=>{if(UI.mpg===s&&s.phase==='result'){s.flash=null;s.phase='ready';if(s.mode==='pitch'){s.sel=null;s.target=null;s.call=catcherCall(g)}renderMpGame()}},s.mode==='bat'?1100:1000)}}
 /* animation */
 function mpAnim(){const s=UI.mpg;if(!s)return;const cv=$('mpcv');if(!cv)return;drawZone(cv,s);
   if(s.phase==='flight'){const t=(performance.now()-s.t0)/s.T;if(s.mode==='bat'&&(s.tap&&performance.now()>s.tap.t+120||t>1.25)){resolveUserPitch();return}if(s.mode==='pitch'&&t>=1.05){resolveUserPitch();return}}
@@ -2240,7 +2241,7 @@ function drawZone(cv,s){const ctx=cv._ctx||(cv._ctx=setupCanvas(cv));const w=cv.
   if(s.mode==='bat'&&s.phase==='ready'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(w/2-110,h*.42,220,30);ctx.fillStyle='#fff';ctx.font='500 15px '+FONT;ctx.textAlign='center';ctx.fillText('Tap to bring the pitch',w/2,h*.42+20)}}
 /* render */
 function renderMpGame(){const s=UI.mpg;if(!s){$('live').innerHTML='';return}const g=s.g;const p=g.mp;
-  const recent=g.log.slice(-6).reverse().map(e=>e.pa?`<div class="mpl ${e.score?'g':''}">${e.top?'▲':'▼'}${e.inn} · ${esc(e.txt)}</div>`:'').join('');
+  const recent=g.log.slice(-6).reverse().map(e=>(e.pa||e.ev==='sb'||e.ev==='cs')?`<div class="mpl ${e.score?'g':''}">${e.top?'▲':'▼'}${e.inn} · ${esc(e.txt)}</div>`:'').join('');
   let ctl='';
   if(s.mode==='done'){const st=g.st[p.id]||{};ctl=`<div class="mpdone"><h2>${g.showcase?'Showcase complete':'Final'}: ${esc(g.sd[1].abbr)} ${g.sc[1]} - ${g.sc[0]} ${esc(g.sd[0].abbr)}</h2><p>${(st.pa||st.outs)?esc(st.outs?pitLine(g,p):batLine(g,p)):"You didn't get into this one."}</p><button class="btn go wide" data-a="mpdone">Continue</button></div>`}
   else if(s.mode==='steal'){ctl=`<div class="mpctl"><p class="mpq">You're on ${g.bases[0]&&g.bases[0].p===p?'first':'second'}. Speed ${p.r.spd}, steal ${p.r.stl}. Go?</p><div class="twobtn"><button class="btn wide" data-a="mpsteal|0">Stay put</button><button class="btn go wide" data-a="mpsteal|1">Steal!</button></div></div>`}
