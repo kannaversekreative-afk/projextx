@@ -189,9 +189,14 @@ function randLook() {
 function makeStaffMember() {
   return { name: pick(MGR_FIRST) + ' ' + pick(MGR_LAST), rating: 20 + Math.floor(rand() * 79), morale: 70, star: rand() < 0.35, starCap: 85 + Math.floor(rand() * 14), look: randLook() };
 }
+// Store staffing rule: 1 store = 1 manager + 1-50 employees, and the
+// employee cap grows with store upgrades: Lv 1 allows 10, Lv 2 allows
+// 20, Lv 3 allows 30, Lv 4 allows 40, Lv 5 allows 50. The manager is
+// separate — never counted in the employee cap.
+function storeStaffCap(st) { return clamp((st.level || 1) * 10, 10, 50); }
 function syncStaffMembers(st) {
   if (!Array.isArray(st.members)) st.members = [];
-  st.staff = clamp(Math.floor(st.staff || 0), 0, 40);
+  st.staff = clamp(Math.floor(st.staff || 1), 1, storeStaffCap(st));
   while (st.members.length < st.staff) st.members.push(makeStaffMember());
   if (st.members.length > st.staff) st.members.length = st.staff;
   return st.members;
@@ -200,6 +205,7 @@ function hireStoreStaff(storeId) {
   const st = storeById(storeId); if (!st) return 'Store not found.';
   if (st.delegation.staffing) return 'Staffing is delegated to the manager. Turn delegation off to hire yourself.';
   syncStaffMembers(st);
+  if (st.staff >= storeStaffCap(st)) return `Staff is full at Store Lv ${st.level || 1} (${storeStaffCap(st)} employees). Upgrade the store to hire more.`;
   st.members.push(makeStaffMember()); st.staff = st.members.length;
   return null;
 }
@@ -299,7 +305,7 @@ function storesWeek() {
     const mgrF = 0.75 + (m.product / 100) * 0.5, mktF = 0.8 + (m.marketing / 100) * 0.4;
     const storeF = 1 + ((st.level || 1) - 1) * 0.10;
     const demandBase = st.footTraffic * boost * mgrF * mktF * storeF * (0.85 + rand() * 0.3);
-    if (st.delegation.staffing) st.staff = clamp(Math.round(demandBase / 900), 2, 14);
+    if (st.delegation.staffing) st.staff = clamp(Math.round(demandBase / 900), 1, storeStaffCap(st));
     syncStaffMembers(st);
     let revenue = 0, cogs = 0;
     st.products.forEach((p, i) => {
