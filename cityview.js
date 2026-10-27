@@ -42,7 +42,10 @@ const CityView = (() => {
     diamond(c, t.x, t.y, '#cfc9b8'); // sidewalk border around every lot
     diamond(c, t.x, t.y, '#e8e2d0', 0.04);
     const green = t.arch === 'house' || t.arch === 'rowhouse' || t.kind === 'park';
-    diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
+    if (city && city.name === 'Havana' && t.kind !== 'park') {
+      const q = t.x < 12 ? (t.y < 12 ? 0 : 2) : (t.y < 12 ? 1 : 3);
+      diamond(c, t.x, t.y, ['#e8dcc0', '#f0e1b2', '#d2d6da', '#a5d97a'][q], 0.07);
+    } else diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
     if (t.arch === 'warehouse' || t.arch === 'factory' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
       diamond(c, t.x, t.y, '#a4aab0', 0.1);
       c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.8;
@@ -134,6 +137,20 @@ const CityView = (() => {
       t = Object.assign({}, t, { color: style.w[Math.floor(rr() * style.w.length)], roof: style.r });
     }
     const r = mulberry(Math.floor(t.seed * 1e9)), x = t.x, y = t.y;
+    if (city && city.name === 'Havana') {
+      // Four sections, four code-only looks, split by the central avenues
+      // (x=12, y=12 are roads, so no lot straddles a boundary). Draw-time
+      // only: the layout, lots and saves are untouched.
+      const q = t.x < 12 ? (t.y < 12 ? 0 : 2) : (t.y < 12 ? 1 : 3);
+      const QP = [
+        ['#f2c6b6', '#f6e2a9', '#fbe7d0', '#e8cfe0', '#ffd9a0'],
+        ['#ffffff', '#a8d8ea', '#ffe29a', '#a8e6cf', '#f2f2f2'],
+        ['#7fa8c9', '#5b8fb5', '#9ab8c9', '#c9d4de', '#6f97ba'],
+        ['#d5e8cf', '#e4ecd6', '#c9d3b0', '#f2ead8', '#b7d7a8'],
+      ];
+      const QR = ['#a63a2e', '#e8e2d2', '#4f5b66', '#7a5a3c'];
+      t = Object.assign({}, t, { color: QP[q][Math.floor(r() * QP[q].length)], roof: QR[q] });
+    }
     const k = t.arch === 'warehouse' ? 0.08 : t.arch === 'glass' || t.arch === 'skyscraper' ? 0.13 : 0.15;
     const x0 = x + k, y0 = y + k, x1 = x + 1 - k, y1 = y + 1 - k;
     if (t.arch === 'house') return house(c, t, r);
