@@ -59,9 +59,8 @@ const CityView = (() => {
     if ((t.x + t.y) % 3 === 0) { const [vx, vy] = P(t.x + 0.82, t.y + 0.2); c.fillStyle = '#ff6b2c'; c.fillRect(vx - 7, vy - 6, 14, 7); c.fillStyle = '#fff'; c.fillRect(vx - 7, vy - 9, 14, 3); }
   }
   function water(c, t) {
-    const hav = city && city.name === 'Havana';
-    diamond(c, t.x, t.y, hav ? '#358fb8' : '#2aa8d8');
-    diamond(c, t.x, t.y, hav ? '#4aa8cc' : '#3db5e0', 0.12);
+    diamond(c, t.x, t.y, '#2aa8d8');
+    diamond(c, t.x, t.y, '#3db5e0', 0.12);
     c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1; const a = P(t.x + 0.25, t.y + 0.5), b = P(t.x + 0.6, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, a[1] - 3, b[0], b[1]); c.stroke();
     if (t.seed > 0.85) { // a little boat on the water
       const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(mx, my, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e5484d'; c.fillRect(mx - 1, my - 9, 2, 9);
@@ -153,8 +152,8 @@ const CityView = (() => {
       g = box(c, x0, y0, x1, y1, h, t.color);
       if (t.arch === 'glass') glassFaces(c, g, t.color, h);
       else if (t.arch === 'office' || t.arch === 'bank') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } });
-        const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < (city && city.name === 'Havana' ? 0.7 : 0.45)) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
-      else if (t.arch === 'apartment' || t.arch === 'hotel') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < (city && city.name === 'Havana' ? 0.5 : 0.25) ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
+        const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
+      else if (t.arch === 'apartment' || t.arch === 'hotel') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
         for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.25), b = lerp(g.D, g.C, 0.75); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1; c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1); c.lineTo(b[0], b[1] - i * floorH - 1); c.stroke(); }
         c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.1), b = lerp(g.D, g.C, 0.9); c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1.5); c.lineTo(b[0], b[1] - i * floorH - 1.5); c.stroke(); } }
       else if (t.arch === 'shop') shopFront(c, g, t, h);
@@ -612,12 +611,9 @@ const CityView = (() => {
     // Sky above the city, sea around it: the gradient runs sky blue to
     // sea blue, so the ground outside the city diamond reads as water
     // on every side, not a green void. Tiles cover the diamond itself.
-    const havana = city && city.name === 'Havana';
     const sky = c.createLinearGradient(0, 0, 0, H2);
-    if (havana) { sky.addColorStop(0, '#ffd9a0'); sky.addColorStop(0.45, '#ffb37a'); sky.addColorStop(1, '#2e7fa8'); }
-    else { sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#a8d8e8'); sky.addColorStop(1, '#2e8fc7'); }
+    sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#a8d8e8'); sky.addColorStop(1, '#2e8fc7');
     c.fillStyle = sky; c.fillRect(0, 0, W2, H2);
-    if (havana) { const sg = c.createRadialGradient(W2 * 0.78, 110, 10, W2 * 0.78, 110, 130); sg.addColorStop(0, 'rgba(255,246,200,0.95)'); sg.addColorStop(0.35, 'rgba(255,220,150,0.55)'); sg.addColorStop(1, 'rgba(255,220,150,0)'); c.fillStyle = sg; c.beginPath(); c.arc(W2 * 0.78, 110, 130, 0, 7); c.fill(); }
     const cr = mulberry(hashStr('clouds:' + city.code + city.name));
     for (let i = 0; i < 6; i++) {
       const cx = cr() * W2, cy = 30 + cr() * Math.max(60, oy - 100);
@@ -694,7 +690,6 @@ const CityView = (() => {
         }
       }
     } catch (e) {}
-    if (havana) { c.fillStyle = 'rgba(255,180,90,0.10)'; c.fillRect(0, 0, W2, H2); }
   }
 
 
@@ -947,7 +942,6 @@ const CityView = (() => {
     view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
     const [cx, cy] = P(layout.landmark.x + 1.5, layout.landmark.y + 1.5);
     view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
-    if (city && city.name === 'Havana') { view.s = 1; view.x = vw / 2 - cx * view.s; view.y = Math.round(vh * 0.62) - cy * view.s; }
     pins(); apply();
   }
   function openPhoto(src) {
