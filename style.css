@@ -961,3 +961,7 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .pick-look { background: #111; border: 2px solid #333; border-radius: 12px; padding: 3px; cursor: pointer; line-height: 0; }
 .pick-look.on { border-color: #2f7cf6; box-shadow: 0 0 0 2px rgba(47,124,246,.4); }
 .pick-look svg { display: block; }
+
+/* Mini Games: football games live in an iframe inside the phone card. */
+.mg-wrap { display: flex; flex-direction: column; height: 100%; gap: 10px; }
+.mg-frame { flex: 1; width: 100%; min-height: 520px; border: 0; display: block; background: #262626; border-radius: 12px; }

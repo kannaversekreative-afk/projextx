@@ -323,7 +323,7 @@ function openPanel(name, args) {
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
 function phoneToGrid() {
-  UI.phoneApp = null; UI.panel = null; UI.stack = []; UI.phoneStack = [];
+  UI.phoneApp = null; UI.panel = null; UI.stack = []; UI.phoneStack = []; UI.mgGame = null;
   const mbox = document.querySelector('#modal .mbox.phone');
   if (mbox) mbox.innerHTML = phoneHTML();
   renderHUD();
@@ -2497,6 +2497,25 @@ function sportScoresHTML() {
     `<div class="wsport"><div class="wsport-top"><b>🏆 Worl Sports</b><button class="wsport-home" data-a="sportView" data-x="leagues">My Leagues</button></div>
     ${sportDayTabs()}${myTeams}${sections}</div>`);
 }
+// ---------- Mini Games: Hashmark football (pro + college) inside the phone ----------
+// The battle board below is the older Mini Games panel; it stays reachable
+// from this menu so nothing that was here is lost.
+const OLD_MINIGAMES_PANEL = PANELS.minigames;
+PANELS.minigames = () => {
+  if (UI.mgGame === 'pro' || UI.mgGame === 'college') {
+    const src = UI.mgGame === 'pro' ? 'minigames/pro.html?v=20261026db' : 'minigames/college.html?v=20261026db';
+    const title = UI.mgGame === 'pro' ? 'Pro Football' : 'College Football';
+    return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
+  }
+  if (UI.mgGame === 'battle') return OLD_MINIGAMES_PANEL();
+  return panelShell('Mini Games', '', `<div class="card in"><h3>Pick a game</h3>
+    <button class="btn3d orange wide" data-a="mgplay" data-x="pro">🏈 PRO FOOTBALL · Hashmark GM</button>
+    <p class="muted small">Franchise, MyGM and My Team. Real nicknames only: Ravens, Cowboys, Packers.</p>
+    <button class="btn3d orange wide" data-a="mgplay" data-x="college">🎓 COLLEGE FOOTBALL · Hashmark College</button>
+    <p class="muted small">States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.</p>
+    <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
+    <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · baseball &amp; basketball leagues</button></div>`);
+};
 PANELS.sports = () => {
   ensureSports();
   const teamId = UI.stack[0];
@@ -2965,6 +2984,7 @@ const MENU_ITEMS = [
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['markets', ICONS.markets, 'Trade'],
   ['radio', '📻', 'Robot Radio'],
+  ['minigames', '🎮', 'Mini Games'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
@@ -2980,7 +3000,7 @@ function moreSheet() {
 // Two home pages: real stuff (the game) and the rest (chat, calendar,
 // settings). The money tiles ride on the real-stuff page.
 const PHONE_PAGES = [
-  { name: 'Real stuff', wallets: ['private'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport'] },
+  { name: 'Real stuff', wallets: ['private'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport', 'minigames'] },
   { name: 'More', wallets: [], apps: ['tawk', 'calendar', 'settings', 'help'] },
 ];
 function phoneHTML() {
@@ -3755,6 +3775,8 @@ const A = {
   },
   restart: () => openModal(`<h2>Restart?</h2><p class="muted">This ends your current game.</p><button class="btn3d orange wide" data-a="newGame">RESTART</button>`, 'sheet'),
 };
+A.mgplay = (g) => { UI.mgGame = g; renderPhoneApp(); renderPanel(); };
+A.mgmenu = () => { UI.mgGame = null; renderPhoneApp(); renderPanel(); };
 function onClick(e) {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const fn = A[el.dataset.a]; if (fn) fn(el.dataset.x, el, e);
