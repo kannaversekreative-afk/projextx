@@ -21,6 +21,8 @@ function defaultPerson() {
     vis: 5, fame: 5, pop: 50, opin: 50,
     job: { track: 'civilian', rank: 0, weeks: 0 },
     office: null,
+    degrees: [],
+    college: null,
     cabinet: [],
     cabCands: null,
     tips: [],
@@ -402,6 +404,14 @@ function runOffice(officeId) {
   if (P.pop < o.req.pop) missing.push(`${o.req.pop} popularity`);
   if (P.opin < o.req.opin) missing.push(`${o.req.opin} public opinion`);
   if (missing.length) return `To run for ${o.title} you need ${missing.join(', ')}.`;
+  // College gate: you start young and unknown, so politics needs a
+  // degree — Associate for mayor, Bachelor for governor/congress,
+  // Master for head of state.
+  const degReq = (typeof officeDegreeReq === 'function') ? officeDegreeReq(officeId) : null;
+  if (degReq && !(P.degrees || []).includes(degReq)) {
+    const degName = (typeof COLLEGE_DEGREES !== 'undefined' ? COLLEGE_DEGREES.find(x => x.id === degReq) : null) || { name: degReq };
+    return `To run for ${o.title} you need ${degReq === 'assoc' ? 'an' : 'a'} ${degName.name} — go to college first.`;
+  }
   const yourScore = 0.25 * P.fame + 0.40 * P.pop + 0.35 * P.opin;
   const opp = o.base - 5 + Math.random() * 20;
   const chaos = (Math.random() - 0.5) * 16;
@@ -494,7 +504,11 @@ function personWeek() {
   }
   if (P.office) {
     const o = P.office;
-    officeAddTreasury(o, Math.round(officeScopeGdp(o) * 0.00002));
+    let income = Math.round(officeScopeGdp(o) * 0.00002);
+    if (o.incomeBoostUntil > S.day) income *= 2;
+    if (o.taxCutUntil > S.day) income = Math.round(income * 0.5);
+    if (o.schoolCutUntil > S.day) income = Math.round(income * 0.75);
+    officeAddTreasury(o, income);
     P.fame = Math.min(100, P.fame + 0.1);
     if (S.day >= o.termEnd) {
       const title = o.title; P.office = null;

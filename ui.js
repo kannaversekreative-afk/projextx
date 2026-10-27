@@ -1860,6 +1860,23 @@ PANELS.economy = () => {
     ${all.length ? `<div class="card in"><h4>⚠️ SHORTAGES ELSEWHERE</h4>${all.slice(0, 10).map(x => `<div class="kv"><span>${esc(cname(x.a3))}</span><b>Factory costs ${(x.farmCost * 100).toFixed(0)}% · Shop demand ${(x.shopDemand * 100).toFixed(0)}%</b></div>`).join('')}</div>` : ''}
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
+PANELS.office = () => {
+  const P = ensurePerson();
+  const o = P.office;
+  if (!o) return panelShell('Office decisions', '', '<p class="muted">You hold no office. Win an election first, then your decisions live here.</p><button class="btn wide" data-a="closePanel">RETURN TO MAP</button>');
+  const list = officeDecisionsFor(o);
+  if (!list.length) return panelShell(o.title, '', '<p class="muted">This office uses the generic policy announcement for now. Mayor, governor and congress decisions are the ones built out.</p><button class="btn wide" data-a="closePanel">RETURN TO MAP</button>');
+  const role = o.scope === 'city' ? 'Mayor — community decisions, not laws. Every yes has a good side and a bad side.' : o.scope === 'region' ? 'Governor — laws you sign for your state.' : 'Congress — bills you develop.';
+  return panelShell(o.title, `${role} · Budget ${fmtMoney(officeTreasury(o), true)}`,
+    `${list.map(d => {
+      const last = (o.decisions || {})[d.id];
+      const taken = last && S.day - last < 365;
+      const cost = d.costPct ? Math.max(50000, Math.round(officeTreasury(o) * d.costPct)) : 0;
+      return `<div class="card in"><h4>${esc(d.name)}</h4><p class="muted small">✅ ${esc(d.good)}</p><p class="muted small">⚠️ ${esc(d.bad)}${cost ? ` · Costs ${fmtMoney(cost, true)}` : ''}</p>${taken ? `<p class="muted small">Made this year — you can make it again in ${365 - (S.day - last)} days.</p>` : `<button class="btn" data-a="officeDecision" data-x="${d.id}">YES — DO IT</button>`}</div>`;
+    }).join('')}
+    <p class="muted small">No is just skipping it — no reward, no penalty. A decision can be taken once a year.</p>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
 // World leaders, with the exact names Tawk uses (seeded per country),
 // cached — the names are deterministic per a3, so the cache is valid
 // across games.
@@ -1960,6 +1977,8 @@ PANELS.elections = () => {
     if (P.fame < o.req.fame) missing.push(`${o.req.fame} fame`);
     if (P.pop < o.req.pop) missing.push(`${o.req.pop} popularity`);
     if (P.opin < o.req.opin) missing.push(`${o.req.opin} public opinion`);
+    const degReq = (typeof officeDegreeReq === 'function') ? officeDegreeReq(o.id) : null;
+    if (degReq && !(P.degrees || []).includes(degReq)) missing.push(`a ${(typeof COLLEGE_DEGREES !== 'undefined' ? COLLEGE_DEGREES.find(x => x.id === degReq) : null || {}).name || degReq} (college)`);
     let status = '', btn = '';
     if (holding) status = `Holding — ${Math.max(0, Math.ceil((office.termEnd - S.day) / 365))}y left`;
     else if (P.flaggedUntil > S.day) status = `Flagged — ${Math.ceil((P.flaggedUntil - S.day) / 365)}y until you can run`;
@@ -1974,7 +1993,7 @@ PANELS.elections = () => {
     <h4>🏙️ City elections — ${esc(cname(S.home))}</h4>${cityRows}
     <h4>🌍 Every country — national races</h4><p class="muted small">Tap a country to see its race card. Voting is open for 28 days before each election day, and every country votes on its own dates.</p>${worldRows}</div>
     <div class="card in"><h4>📣 Campaign</h4><div class="row wrap"><button class="btn small" data-a="campaign" data-x="rally">Rally · $25K</button><button class="btn small" data-a="campaign" data-x="ads">Campaign ads · $100K</button><button class="btn small" data-a="campaign" data-x="donate">Donate · $50K</button></div><p class="muted small">Rallies raise visibility, fame, and opinion. Ads raise opinion and popularity. Donations raise popularity. A strategist makes campaigning 25% stronger.</p></div>
-    <div class="card in"><h4>🗳️ Offices</h4>${rows}</div>`);
+    <div class="card in"><h4>🗳️ Offices</h4>${rows}${office ? `<button class="btn" data-a="panel" data-x="office">OFFICE DECISIONS — ${esc(office.title)}</button>` : ''}</div>`);
 };
 PANELS.country = () => {
   const cs = country(S.home), k = W.byA3[S.home], cap = W.cities[k.capital];
@@ -3139,6 +3158,7 @@ const A = {
   etfCreate: x => act(() => createETF(x, 'player'), 'ETF created and listed!'),
   etfBuy: x => { const [id, q] = x.split('|'); act(() => buyETF(id, +q), 'ETF bought'); },
   etfSell: x => { const [id, q] = x.split('|'); act(() => sellETF(id, +q), 'ETF sold'); },
+  officeDecision: x => act(() => takeOfficeDecision(x), 'Decision made'),
   takeCityLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeCityLoan(UI.bankCity, amt, mo), 'Loan taken'); },
   walletSel: x => { UI.wallet = x; document.querySelectorAll('.wallet-pick').forEach(el => { el.querySelectorAll('.wallet-opt').forEach(b => b.classList.toggle('on', b.dataset.x === x)); const cc = el.querySelector('.wallet-cash'); if (cc) cc.textContent = 'Available Cash: ' + fmtMoney(walletCash(x)); }); save(); },
   bankJob: x => { act(() => switchJob(x), 'New job'); },
