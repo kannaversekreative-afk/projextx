@@ -133,6 +133,8 @@ function ensureStores() {
     if (!st.manager) st.manager = makeManager(1);
     if (!st.manager.level) st.manager.level = 1;
     if (st.manager.star == null) { st.manager.star = rand() < 0.35; st.manager.starCap = 85 + Math.floor(rand() * 14); }
+    if (!st.manager.look) st.manager.look = randLook();
+    syncStaffMembers(st);
     if (!isFinite(st.loseStreak)) st.loseStreak = 0;
     if (!isFinite(st.winStreak)) st.winStreak = 0;
     // A store without products (bad save, bad test data) used to throw
@@ -156,6 +158,48 @@ function makeManager(level) {
     salary: 45000 + lv * 15000 + Math.floor(rand() * 8) * 5000, since: yearOf(S.day),
     star: rand() < 0.35, starCap: 85 + Math.floor(rand() * 14) };
 }
+// Floor staff individuals: shoulder-and-face portraits only — no bodies,
+// no standing figures, everyone in a suit. Portraits are inline SVG busts
+// with rounded bottoms; each sits in its own box in a scrollable row.
+function randLook() {
+  const skins = ['#f2c9a0', '#e8b88a', '#d9a077', '#b07a4e', '#8a5a33', '#5d3d22'];
+  const suits = ['#1f2d50', '#3a3a3a', '#5a1f2b', '#2e5a3a', '#111827', '#155e63'];
+  const ties = ['#c0392b', '#2f7cf6', '#e8c547', '#111111', '#7d3cff', '#0e7a5a'];
+  const hairCs = ['#111111', '#3a2a1a', '#6b4a2a', '#222222', '#666666', '#c9a86a'];
+  const sex = rand() < 0.5 ? 'f' : 'm';
+  const hairs = sex === 'f' ? ['long', 'bun', 'curly', 'short'] : ['short', 'curly', 'bald', 'long'];
+  return { skin: pick(skins), hair: pick(hairs), hairC: pick(hairCs), suit: pick(suits), tie: pick(ties), sex };
+}
+function makeStaffMember() {
+  return { name: pick(MGR_FIRST) + ' ' + pick(MGR_LAST), rating: 20 + Math.floor(rand() * 79), morale: 70, star: rand() < 0.35, starCap: 85 + Math.floor(rand() * 14), look: randLook() };
+}
+function syncStaffMembers(st) {
+  if (!Array.isArray(st.members)) st.members = [];
+  st.staff = clamp(Math.floor(st.staff || 0), 0, 40);
+  while (st.members.length < st.staff) st.members.push(makeStaffMember());
+  if (st.members.length > st.staff) st.members.length = st.staff;
+  return st.members;
+}
+function hireStoreStaff(storeId) {
+  const st = storeById(storeId); if (!st) return 'Store not found.';
+  if (st.delegation.staffing) return 'Staffing is delegated to the manager. Turn delegation off to hire yourself.';
+  syncStaffMembers(st);
+  st.members.push(makeStaffMember()); st.staff = st.members.length;
+  return null;
+}
+function staffSkill(st) { const ms = syncStaffMembers(st); return ms.length ? Math.round(ms.reduce((a, m) => a + (m.rating || 0), 0) / ms.length) : 0; }
+function staffMorale(st) { const ms = syncStaffMembers(st); return ms.length ? Math.round(ms.reduce((a, m) => a + (m.morale || 0), 0) / ms.length) : 0; }
+function portraitSVG(look, w) {
+  const L = look || randLook(), s = L.skin, h = L.hairC, su = L.suit, t = L.tie;
+  let back = '', front = '';
+  if (L.hair === 'long') back = `<path d="M27,30 Q26,74 34,78 L38,78 L38,26 Q38,18 50,18 Q62,18 62,26 L62,78 L66,78 Q74,74 73,30 Q70,14 50,14 Q30,14 27,30 Z" fill="${h}"/>`;
+  if (L.hair === 'short') front = `<path d="M29,36 Q27,8 50,8 Q73,8 71,36 Q67,20 50,20 Q33,20 29,36 Z" fill="${h}"/>`;
+  else if (L.hair === 'curly') front = `<g fill="${h}"><circle cx="33" cy="18" r="9"/><circle cx="45" cy="11" r="10"/><circle cx="57" cy="11" r="10"/><circle cx="68" cy="19" r="8"/><circle cx="29" cy="28" r="7"/><circle cx="71" cy="28" r="7"/></g>`;
+  else if (L.hair === 'bun') front = `<path d="M29,36 Q27,8 50,8 Q73,8 71,36 Q67,20 50,20 Q33,20 29,36 Z" fill="${h}"/><circle cx="50" cy="7" r="8" fill="${h}"/>`;
+  else if (L.hair === 'long') front = `<path d="M29,36 Q27,10 50,10 Q73,10 71,36 Q67,20 50,20 Q33,20 29,36 Z" fill="${h}"/>`;
+  return `<svg width="${w || 84}" viewBox="0 0 100 116" xmlns="http://www.w3.org/2000/svg"><ellipse cx="50" cy="58" rx="46" ry="52" fill="#1a2440"/>${back}<rect x="43" y="48" width="14" height="16" fill="${s}"/><rect x="8" y="62" width="84" height="54" rx="16" fill="${su}"/><path d="M38,62 L50,84 L62,62 L56,62 L50,72 L44,62 Z" fill="#f5f5f5"/><path d="M47,66 L53,66 L55,78 L50,96 L45,78 Z" fill="${t}"/><rect x="46" y="62" width="8" height="7" fill="${t}"/><ellipse cx="29" cy="36" rx="4" ry="6" fill="${s}"/><ellipse cx="71" cy="36" rx="4" ry="6" fill="${s}"/><ellipse cx="50" cy="34" rx="20" ry="24" fill="${s}"/>${front}</svg>`;
+}
+
 function storeAddress(cityId, lotT) {
   const city = W.cities[cityId];
   return `${100 + (lotT % 900)} ${pick(STORE_STREETS)}, ${city ? city.name : ''}`;
@@ -239,6 +283,7 @@ function storesWeek() {
     const storeF = 1 + ((st.level || 1) - 1) * 0.10;
     const demandBase = st.footTraffic * boost * mgrF * mktF * storeF * (0.85 + rand() * 0.3);
     if (st.delegation.staffing) st.staff = clamp(Math.round(demandBase / 900), 2, 14);
+    syncStaffMembers(st);
     let revenue = 0, cogs = 0;
     st.products.forEach((p, i) => {
       const base = def.products[i] || def.products[0];
@@ -268,6 +313,11 @@ function storesWeek() {
       const cap = m.starCap || 98;
       ['people', 'product', 'marketing', 'ethics'].forEach(k => { if (m[k] < cap && rand() < 0.5) m[k]++; });
     }
+    // Floor staff: stars develop toward their cap; morale follows results.
+    st.members.forEach(mem => {
+      if (mem.star && mem.rating < (mem.starCap || 98) && rand() < 0.5) mem.rating++;
+      mem.morale = clamp((mem.morale || 70) + (incomeR > 0 ? 1 : incomeR < 0 ? -2 : 0), 0, 100);
+    });
     // The COO runs staffing when it is delegated. Firing is on STORE
     // profit (this week's income), never on what you spent elsewhere:
     // 2 losing months fires the manager, 2 profitable months promotes
