@@ -1397,7 +1397,10 @@ let lastT = 0;
 function loop(now) {
   if (!S || UI.pick || S.over) { lastT = now; return; }
   // Daily money is automatic, even if the game stays open past midnight.
-  const _da = autoCreditDaily(), _ca = autoCreditShopCash();
+  // Leaders get none here either, matching enterGame (their treasury
+  // is not a daily-grant wallet — without this guard the first frame
+  // paid a leader 2% of net worth, ~$21B on a $1T treasury).
+  const _da = S.leader ? 0 : autoCreditDaily(), _ca = S.leader ? 0 : autoCreditShopCash();
   if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
   lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
