@@ -177,7 +177,7 @@ function sportWeek() {
       const weeklyNet = Math.round(fin.net / 52 - bc + Math.max(0, fin.net / 52) * boost);
       t.weekNets.push(weeklyNet); if (t.weekNets.length > 4) t.weekNets.shift();
       let streak = 0; for (let i = t.weekNets.length - 1; i >= 0; i--) { if (t.weekNets[i] > 0) streak++; else break; }
-      t.weekStreak = streak; total += weeklyNet;
+      t.weekStreak = streak; if (t.wallet === 'private') ensurePerson().cash += weeklyNet; else total += weeklyNet;
     }
   }));
   return total;
@@ -247,11 +247,12 @@ function sportSeason() {
   });
   S.sports.draftYear = year;
 }
-function buySportTeam(id) {
+function buySportTeam(id, w) {
   const t = sportTeam(id); if (!t) return 'Team not found.';
   if (t.owner === 'you') return 'You already own this team.';
-  if (S.cash < t.value) return `Costs ${fmtMoney(t.value, true)}. You have ${fmtMoney(S.cash, true)}.`;
-  S.cash -= t.value; t.owner = 'you';
+  w = w || curWallet();
+  if (walletCash(w) < t.value) return `Costs ${fmtMoney(t.value, true)}. You have ${fmtMoney(walletCash(w), true)} in this wallet.`;
+  walletPay(w, t.value); t.owner = 'you'; t.wallet = w;
   news('Sports', `You bought ${t.name} for ${fmtMoney(t.value, true)}.`, t.a3);
   return null;
 }
@@ -298,8 +299,8 @@ function tradeSportPlayer(teamId, outId, targetId, inId, cashOffer) {
 function upgradeStadium(teamId) {
   const t = sportTeam(teamId); if (!t || t.owner !== 'you') return 'Only your own team.';
   const cost = 40000000 * t.stadium.level;
-  if (S.cash < cost) return `Stadium upgrade costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; t.stadium.level++; t.stadium.capacity = Math.round(t.stadium.capacity * 1.15);
+  const w = t.wallet || 'company'; if (walletCash(w) < cost) return `Stadium upgrade costs ${fmtMoney(cost, true)} in this wallet.`;
+  walletPay(w, cost); t.stadium.level++; t.stadium.capacity = Math.round(t.stadium.capacity * 1.15);
   return null;
 }
 function sportIpoEligible(t) {

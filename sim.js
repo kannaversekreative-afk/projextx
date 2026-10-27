@@ -40,7 +40,7 @@ function newGame(opt) {
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0] },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
-    holdings: {}, props: [], lotState: {}, placed: [],
+    holdings: {}, holdingsP: {}, holdingsXP: {}, props: [], lotState: {}, placed: [],
     regime: regimeOf('calm'), nextRate: 30 + Math.floor(rand() * 40), oil: 1, trade: 1,
     wars: [], live: [], news: [], mail: [], papers: [], cityHit: {}, boosts: {}, pandemic: 0, facilities: {}, lastWarDay: null,
     maxDays: NORMAL_DAYS, yearsBought: 0, yearReport: null, homeTaxPrev: null,
@@ -199,7 +199,7 @@ function businessesInCity(cityId) { const out = []; for (const a3 in S.co) { con
 const co = a3 => S.co[a3];
 const cname = a3 => (S && S.countryName && a3 === S.home) ? S.countryName : W.byA3[a3].name;
 const homeCo = () => S.co[S.home];
-function stake(a3) { const h = S.holdings[a3]; return h && h.qty > 0 ? h.qty / S.co[a3].shares : 0; }
+function stake(a3) { const q = holdQty(a3); return q > 0 ? q / S.co[a3].shares : 0; }
 const controlled = a3 => stake(a3) >= 0.5;
 
 // ---------- game flow (new standard games only) ----------
@@ -505,10 +505,10 @@ function fairValue(c) { return companyFairTotal(c) / c.shares; }
 function companyValue(c) { return c.listed ? c.price * c.shares : companyFairTotal(c); }
 
 // ---------- money ----------
-function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const id in (S.holdingsX || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsX[id].qty * b.price; } return v; }
-function shortValue() { let v = 0; for (const a3 in S.holdings) if (S.holdings[a3].qty < 0) v -= S.holdings[a3].qty * S.co[a3].price; return v; }
+function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const a3 in (S.holdingsP || {})) { const h = S.holdingsP[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const id in (S.holdingsX || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsX[id].qty * b.price; } for (const id in (S.holdingsXP || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsXP[id].qty * b.price; } return v; }
+function shortValue() { let v = 0; const add = (map) => { for (const a3 in (map || {})) { const h = map[a3]; if (h.qty < 0 && S.co[a3]) v -= h.qty * S.co[a3].price; } }; add(S.holdings); add(S.holdingsP); return v; }
 function propValue() { return S.props.reduce((a, p) => a + p.value, 0); }
-function netWorth() { return S.cash + holdingsValue() + propValue() - S.loan; }
+function netWorth() { return S.cash + ((typeof ensurePerson === 'function') ? ensurePerson().cash : 0) + holdingsValue() + propValue() - S.loan; }
 function nationPop() { let p = country(S.home).pop; for (const a3 in S.countries) if (S.countries[a3].occ === S.home) p += S.countries[a3].pop; return p; }
 function popGrowth() { return nationPop() / country(S.home).pop0 - 1; }
 function marketReturn() { return S.idx.v / S.idx0 - 1; }
@@ -518,43 +518,70 @@ function weekProfit() { return S.week ? S.week.profit : 0; }
 function level() { return 1 + Math.floor(Math.sqrt(S.xp / 120)); }
 function levelProgress() { const L = level(); const a = (L - 1) ** 2 * 120, b = L ** 2 * 120; return (S.xp - a) / (b - a); }
 
+// ---------- wallets: Company vs Private ----------
+// Every spend asks which wallet pays: Company (business cash, S.cash)
+// or Private (personal cash, S.person.cash). The country office
+// budget is never a spend wallet: it pays for policies only, and
+// country money never buys stocks. UI.wallet holds the current pick;
+// panels render a Company/Private toggle (walletPickerHTML in ui.js)
+// and every spend action reads curWallet() at click time.
+function curWallet() { return (typeof UI !== 'undefined' && UI.wallet === 'private') ? 'private' : 'company'; }
+function walletCash(w) { const P = (typeof ensurePerson === 'function') ? ensurePerson() : null; return w === 'private' ? (P ? P.cash : 0) : S.cash; }
+function walletPay(w, amt) { if (walletCash(w) < amt) return false; if (w === 'private') ensurePerson().cash -= amt; else S.cash -= amt; return true; }
+function walletAdd(w, amt) { if (w === 'private') ensurePerson().cash += amt; else S.cash += amt; }
+// Holdings are split by wallet: S.holdings/S.holdingsX are Company
+// positions, S.holdingsP/S.holdingsXP are Private ones. Control,
+// stake and value always use the combined position: both wallets
+// are yours.
+function holdMap(w) { if (w === 'private') { if (!S.holdingsP) S.holdingsP = {}; return S.holdingsP; } return S.holdings; }
+function holdMapX(w) { if (w === 'private') { if (!S.holdingsXP) S.holdingsXP = {}; return S.holdingsXP; } if (!S.holdingsX) S.holdingsX = {}; return S.holdingsX; }
+function holdQty(a3) { return (((S.holdings || {})[a3] || {}).qty || 0) + (((S.holdingsP || {})[a3] || {}).qty || 0); }
+function holdQtyX(id) { return (((S.holdingsX || {})[id] || {}).qty || 0) + (((S.holdingsXP || {})[id] || {}).qty || 0); }
+function holdPosCombined(a3) { const a = (S.holdings || {})[a3] || { qty: 0, cost: 0 }, b = (S.holdingsP || {})[a3] || { qty: 0, cost: 0 }; if (a.qty && b.qty && Math.sign(a.qty) !== Math.sign(b.qty)) return Math.abs(a.qty) >= Math.abs(b.qty) ? a : b; const q = a.qty + b.qty; return { qty: q, cost: q ? (a.cost * a.qty + b.cost * b.qty) / q : 0 }; }
+function holdPosCombinedX(id) { const a = (S.holdingsX || {})[id] || { qty: 0, cost: 0 }, b = (S.holdingsXP || {})[id] || { qty: 0, cost: 0 }; if (a.qty && b.qty && Math.sign(a.qty) !== Math.sign(b.qty)) return Math.abs(a.qty) >= Math.abs(b.qty) ? a : b; const q = a.qty + b.qty; return { qty: q, cost: q ? (a.cost * a.qty + b.cost * b.qty) / q : 0 }; }
+
 // ---------- market ----------
 function liq(c) { return c.price * c.shares * 0.003; }
 function impactFor(c, dollars) { return 0.1 * Math.sqrt(Math.abs(dollars) / liq(c)); }
 function marketOpen() { return !isWeekend(S.day); }
-function trade(a3, side, qty) {
+function trade(a3, side, qty, w) {
   qty = Math.floor(qty); if (!(qty > 0)) return 'Enter how many shares.';
   const c = S.co[a3]; if (!c.listed) return 'This company is private. It isn’t traded on the market.';
   if (!marketOpen()) return 'Markets are closed on weekends.';
+  w = w || curWallet();
   const sign = side === 'buy' || side === 'cover' ? 1 : -1;
   const imp = impactFor(c, qty * c.price), px = c.price * (1 + sign * imp / 2) * (1 + sign * 0.002);
-  const pos = S.holdings[a3] || { qty: 0, cost: 0 };
+  const map = holdMap(w);
+  const pos = map[a3] || { qty: 0, cost: 0 };
   if (side === 'sell' && pos.qty > 0) S.lastTrade = { a3, side, qty, price: 0, pnl: 0 };
   if (side === 'cover' && pos.qty < 0) S.lastTrade = { a3, side, qty, price: 0, pnl: 0 };
   if (S.lastTrade && S.lastTrade.a3 === a3 && (side === 'sell' || side === 'cover')) {
     const unit = side === 'sell' ? (px - pos.cost) : (pos.cost - px);
     S.lastTrade.price = px; S.lastTrade.pnl = Math.round(unit * qty); S.lastTrade.sym = c.sym;
   }
-  if (side === 'buy') { if (pos.qty < 0) return 'Cover your short first.'; if (pos.qty + qty > c.shares) return 'You can’t buy more shares than exist.'; if (qty * px > S.cash) return 'Not enough cash.'; pos.cost = (pos.cost * pos.qty + qty * px) / (pos.qty + qty); pos.qty += qty; S.cash -= qty * px; }
-  else if (side === 'sell') { if (pos.qty < qty) return 'You don’t own that many shares.'; pos.qty -= qty; S.cash += qty * px; }
-  else if (side === 'short') { if (pos.qty > 0) return 'Sell your shares first.'; if (qty * px > Math.max(0, netWorth()) * 0.5 - shortValue()) return 'You can short up to half your net worth.'; const n = -pos.qty; pos.cost = (pos.cost * n + qty * px) / (n + qty); pos.qty -= qty; S.cash += qty * px; }
-  else if (side === 'cover') { if (-pos.qty < qty) return 'You aren’t short that many shares.'; if (qty * px > S.cash) return 'Not enough cash.'; pos.qty += qty; S.cash -= qty * px; }
+  if (side === 'buy') { if (pos.qty < 0) return 'Cover your short first.'; if (holdQty(a3) + qty > c.shares) return 'You can’t buy more shares than exist.'; if (qty * px > walletCash(w)) return 'Not enough cash in this wallet.'; pos.cost = (pos.cost * pos.qty + qty * px) / (pos.qty + qty); pos.qty += qty; walletPay(w, qty * px); }
+  else if (side === 'sell') { if (pos.qty < qty) return 'You don’t own that many shares in this wallet.'; pos.qty -= qty; walletAdd(w, qty * px); }
+  else if (side === 'short') { if (pos.qty > 0) return 'Sell your shares first.'; if (qty * px > Math.max(0, netWorth()) * 0.5 - shortValue()) return 'You can short up to half your net worth.'; const n = -pos.qty; pos.cost = (pos.cost * n + qty * px) / (n + qty); pos.qty -= qty; walletAdd(w, qty * px); }
+  else if (side === 'cover') { if (-pos.qty < qty) return 'You aren’t short that many shares.'; if (qty * px > walletCash(w)) return 'Not enough cash in this wallet.'; pos.qty += qty; walletPay(w, qty * px); }
   const wasControlled = controlled(a3);
-  if (pos.qty === 0) delete S.holdings[a3]; else S.holdings[a3] = pos;
+  if (pos.qty === 0) delete map[a3]; else map[a3] = pos;
   c.price *= Math.exp(sign * imp); c.tmp -= sign * imp * 0.6;
   S.stats.trades++;
   c.tradedToday = (c.tradedToday || 0) + qty;
   if (!wasControlled && controlled(a3)) { gainControl(c, 'You now own a majority of'); }
-  if (pos.qty >= c.shares) takePrivate(c, 'You bought every share of');
+  if (holdQty(a3) >= c.shares) takePrivate(c, 'You bought every share of');
   if (wasControlled && !controlled(a3)) { c.ai = true; news('Business', `You sold control of ${c.name}.`, a3); }
   return null;
 }
+
 function gainControl(c, how) { c.ai = false; S.xp += 300; news('Business', `${how} ${c.name}. You run it now.`, c.a3); }
-function takePrivate(c, how) { c.listed = false; c.ai = false; S.holdings[c.a3] = { qty: c.shares, cost: S.holdings[c.a3] ? S.holdings[c.a3].cost : c.price }; S.stats.takeovers++; S.xp += 600; news('Business', `${how} ${c.name}. It is now fully yours and leaves the stock market.`, c.a3); }
+function takePrivate(c, how) { c.listed = false; c.ai = false; S.stats.takeovers++; S.xp += 600; news('Business', `${how} ${c.name}. It is now fully yours and leaves the stock market.`, c.a3); }
+
 function researchCost() { return Math.round(Math.max(1500, netWorth() * 0.0004) / 100) * 100; }
-function research(a3) {
-  const cost = researchCost(); if (S.cash < cost) return 'Not enough cash for research.';
-  S.cash -= cost;
+function research(a3, w) {
+  w = w || curWallet();
+  const cost = researchCost(); if (walletCash(w) < cost) return 'Not enough cash for research.';
+  walletPay(w, cost);
   const c = S.co[a3];
   // Research reveals what the market expects: next quarter's
   // earnings estimate, plus what the last report actually did.
@@ -563,26 +590,29 @@ function research(a3) {
   c.res = { day: S.day, expect, lastSurprise: c.lastReport ? c.lastReport.surprise : null, lastMove: c.lastReport ? c.lastReport.move : null, lastQ: c.lastReport ? c.lastReport.q : null };
   return null;
 }
+
 const intelOn = () => S.boosts.intel > S.day;
 const PATTERN_HINTS = { pump: 'Social media pump. These usually end in a dump.', squeeze: 'Short squeeze underway. Fast up, then fades.' };
 // Buy every remaining share at a premium. The board may say no.
-function takeoverCost(c, premium) { return (c.shares - Math.max(0, (S.holdings[c.a3] || { qty: 0 }).qty)) * c.price * (1 + premium); }
+function takeoverCost(c, premium) { return (c.shares - Math.max(0, holdQty(c.a3))) * c.price * (1 + premium); }
 function takeoverOdds(c, premium) {
   let p = 0.12 + premium * 1.25 + stake(c.a3) * 0.4;
   const rel = getRel(S.home, c.a3); if (rel > 50) p += 0.1; if (rel < -20) p -= 0.25;
   if (companyValue(c) > 5e10) p -= 0.15;
   return clamp(p, 0.03, 0.95);
 }
-function takeover(a3, premium) {
+function takeover(a3, premium, w) {
   const c = S.co[a3];
   if (!c.listed) return 'This company isn’t for sale on the market.';
   if (c.offerBlock > S.day) return `The board won't hear another offer until ${fmtDate(c.offerBlock)}.`;
-  const cost = takeoverCost(c, premium); if (S.cash < cost) return `You need ${fmtMoney(cost, true)} in cash.`;
+  w = w || curWallet();
+  const cost = takeoverCost(c, premium); if (walletCash(w) < cost) return `You need ${fmtMoney(cost, true)} in this wallet.`;
   if (rand() > takeoverOdds(c, premium)) { c.offerBlock = S.day + 60; c.price *= 1.06; news('Business', `${c.name}'s board rejected your takeover offer. Its stock jumped 6%.`, a3); return 'The board rejected your offer.'; }
-  S.cash -= cost;
+  walletPay(w, cost);
   takePrivate(c, 'Takeover complete: you bought');
   return null;
 }
+
 function marketDay() {
   const R = REGIMES[S.regime.type];
   const mkt = R.drift + gauss() * 0.008 * R.vol;
@@ -673,7 +703,13 @@ function goPublic(a3, pct) {
   const v = companyFairTotal(c);
   const sold = Math.floor(c.shares * pct);
   const gross = Math.round(sold * (v / c.shares)), fee = Math.round(gross * 0.07), proceeds = gross - fee;
-  S.cash += proceeds; S.holdings[a3].qty -= sold; c.listed = true; c.price = v / c.shares;
+  let left = sold, payC = 0, payP = 0;
+  const hc = (S.holdings || {})[a3], hp = (S.holdingsP || {})[a3];
+  const takeC = hc ? Math.min(hc.qty, left) : 0; if (hc) { hc.qty -= takeC; left -= takeC; payC += takeC; if (hc.qty === 0) delete S.holdings[a3]; }
+  const takeP = hp ? Math.min(hp.qty, left) : 0; if (hp) { hp.qty -= takeP; left -= takeP; payP += takeP; if (hp.qty === 0) delete S.holdingsP[a3]; }
+  if (left > 0) { if (!S.holdings[a3]) S.holdings[a3] = { qty: 0, cost: c.price }; S.holdings[a3].qty -= left; payC += left; }
+  S.cash += Math.round(proceeds * (payC / Math.max(1, sold))); ensurePerson().cash += Math.round(proceeds * (payP / Math.max(1, sold)));
+  c.listed = true; c.price = v / c.shares;
   S.stats.ipos++; S.xp += 500;
   news('Business', `${c.name} rings the opening bell! The IPO sold ${Math.round(pct * 100)}% for ${fmtMoney(proceeds, true)} after a 7% fee.`, a3);
   return null;
@@ -685,61 +721,52 @@ function acceptOffer(id) {
   const m = S.mail.find(x => x.id === id); if (!m || !m.offer || m.offer.done) return 'That offer has expired.';
   const c = S.co[m.offer.a3]; if (!controlled(c.a3)) return 'You no longer control that company.';
   const amount = stake(c.a3) * m.offer.price;
-  S.cash += amount; delete S.holdings[c.a3]; c.listed = true; c.ai = true; m.offer.done = 'accepted';
+  const qc = ((S.holdings || {})[c.a3] || {}).qty || 0, qp = ((S.holdingsP || {})[c.a3] || {}).qty || 0, qt = qc + qp;
+  if (qt > 0) { S.cash += Math.round(amount * qc / qt); ensurePerson().cash += Math.round(amount * qp / qt); }
+  delete S.holdings[c.a3]; if (S.holdingsP) delete S.holdingsP[c.a3]; c.listed = true; c.ai = true; m.offer.done = 'accepted';
   news('Business', `You sold ${c.name} for ${fmtMoney(amount, true)}.`, c.a3);
   return null;
 }
 
 // ---------- buildings ----------
-function buyBuilding(cityId, t) {
+function buyBuilding(cityId, t, w) {
   const lot = cityLots(cityId).find(l => l.t === t); if (!lot || lot.kind !== 'sale') return 'Not for sale anymore.';
-  if (S.cash < lot.price) return 'Not enough cash.';
-  S.cash -= lot.price; setLot(cityId, t, 'prop');
-  S.props.push({ id: uid(), city: cityId, t, units: lot.units, mrent: lot.mrent, rentLv: 1, cond: lot.cond, value: lot.price, paid: lot.price, occ: 0.7, income: 0, traffic: lot.traffic, size: lot.size });
+  w = w || curWallet();
+  if (walletCash(w) < lot.price) return 'Not enough cash in this wallet.';
+  walletPay(w, lot.price); setLot(cityId, t, 'prop');
+  S.props.push({ id: uid(), city: cityId, t, units: lot.units, mrent: lot.mrent, rentLv: 1, cond: lot.cond, value: lot.price, paid: lot.price, occ: 0.7, income: 0, traffic: lot.traffic, size: lot.size, wallet: w });
   S.xp += 80; news('Property', `You bought a ${lot.units}-unit building in ${W.cities[cityId].name}.`, W.cities[cityId].a3);
   return null;
 }
-function buildingName(arch) { return { house: 'House', rowhouse: 'Row house', brownstone: 'Brownstone', apartment: 'Apartment building', office: 'Office building', glass: 'Office tower', skyscraper: 'Skyscraper', warehouse: 'Warehouse', factory: 'Factory', bank: 'Bank', hotel: 'Hotel', gas: 'Gas station', shop: 'Shop' }[arch] || 'Building'; }
-function buildingIcon(arch) { return { house: '🏠', rowhouse: '🏠', brownstone: '🏠', apartment: '🏢', office: '🏢', glass: '🏙️', skyscraper: '🏙️', warehouse: '🏭', factory: '🏭', bank: '🏦', hotel: '🏨', gas: '⛽', shop: '🏪' }[arch] || '🏢'; }
-// Every building in a city, not just the ones marked FOR SALE or FOR
-// LEASE: price, units and rent from the tile itself, so tapping any
-// building in the city can buy it.
-function buildingLotForTile(cityId, tIdx) {
-  const city = W.cities[cityId], L = cityLayout(city), t = L.tiles[tIdx];
-  if (!t || t.kind !== 'lot') return null;
-  const w = city.wealth;
-  const units = t.arch === 'house' ? 1 : t.arch === 'rowhouse' || t.arch === 'brownstone' ? 2 : t.arch === 'warehouse' || t.arch === 'factory' ? 1 : t.arch === 'gas' ? 1 : Math.max(4, Math.round(t.floors * 1.8));
-  const mrent = Math.round(70 + 380 * Math.pow(w, 1.05));
-  const cap = 0.05 + (1 - Math.min(1, w)) * 0.04;
-  const mult = t.arch === 'skyscraper' ? 2.5 : t.arch === 'warehouse' || t.arch === 'factory' ? 1.4 : t.arch === 'gas' ? 1.2 : 1;
-  const price = Math.round(units * mrent * 52 / cap * mult / 1000) * 1000;
-  const size = t.arch === 'warehouse' || t.arch === 'factory' || t.floors > 12 ? 3 : t.floors > 4 ? 2 : 1;
-  return { t: tIdx, kind: 'building', traffic: t.traffic || 0, size, arch: t.arch, units, mrent, cond: 0.75, price, floors: t.floors, zone: t.zone };
-}
-function buyAnyBuilding(cityId, tIdx) {
+
+function buyAnyBuilding(cityId, tIdx, w) {
   if (typeof isGovCity === 'function' && isGovCity(W.cities[cityId])) return 'Capitals are government-only — no buildings for sale here.';
   const existing = cityLots(cityId).find(l => l.t === tIdx);
-  if (existing && existing.kind === 'sale') return buyBuilding(cityId, tIdx);
+  if (existing && existing.kind === 'sale') return buyBuilding(cityId, tIdx, w);
   if (existing && existing.kind === 'prop') return 'You already own this building.';
   if (existing && existing.kind === 'lease') return 'This lot is for lease — use BUILD STORE or LEASE instead.';
   const owner = S.co[W.cities[cityId].a3];
   if (owner && owner.locs.some(l => (l.city || owner.city) === cityId && l.t === tIdx)) return 'This is a company location, not for sale.';
   if (S.props.some(p => p.city === cityId && p.t === tIdx)) return 'You already own this building.';
   const lot = buildingLotForTile(cityId, tIdx); if (!lot) return 'Nothing to buy here.';
-  if (S.cash < lot.price) return 'Not enough cash.';
-  S.cash -= lot.price; setLot(cityId, tIdx, 'prop');
-  S.props.push({ id: uid(), city: cityId, t: tIdx, units: lot.units, mrent: lot.mrent, rentLv: 1, cond: lot.cond, value: lot.price, paid: lot.price, occ: 0.7, income: 0, traffic: lot.traffic, size: lot.size });
+  w = w || curWallet();
+  if (walletCash(w) < lot.price) return 'Not enough cash in this wallet.';
+  walletPay(w, lot.price); setLot(cityId, tIdx, 'prop');
+  S.props.push({ id: uid(), city: cityId, t: tIdx, units: lot.units, mrent: lot.mrent, rentLv: 1, cond: lot.cond, value: lot.price, paid: lot.price, occ: 0.7, income: 0, traffic: lot.traffic, size: lot.size, wallet: w });
   S.xp += 80; news('Property', `You bought a ${buildingName(lot.arch).toLowerCase()} in ${W.cities[cityId].name}.`, W.cities[cityId].a3);
   return null;
 }
+
 function sellBuilding(id) {
   const p = S.props.find(x => x.id === id); if (!p) return;
   if (p.loc) return 'Close the location in this building first.';
-  S.cash += p.value * 0.95; S.props = S.props.filter(x => x !== p); setLot(p.city, p.t, null);
+  walletAdd(p.wallet || 'company', p.value * 0.95); S.props = S.props.filter(x => x !== p); setLot(p.city, p.t, null);
   return null;
 }
+
 const renoCost = p => Math.round(p.value * (1 - p.cond) * 0.25 / 1000) * 1000 + 5000;
-function renovate(id) { const p = S.props.find(x => x.id === id); if (!p) return 'Building not found.'; const c = renoCost(p); if (S.cash < c) return 'Not enough cash.'; S.cash -= c; p.value += c * 0.8; p.cond = 1; return null; }
+function renovate(id) { const p = S.props.find(x => x.id === id); if (!p) return 'Building not found.'; const c = renoCost(p); const w = p.wallet || 'company'; if (walletCash(w) < c) return 'Not enough cash in this wallet.'; walletPay(w, c); p.value += c * 0.8; p.cond = 1; return null; }
+
 function propsWeek() {
   let total = 0;
   S.props.forEach(p => {
@@ -748,7 +775,7 @@ function propsWeek() {
     p.occ += (occT - p.occ) * 0.3;
     p.income = (p.loc ? Math.max(0, p.units - 1) : p.units) * p.mrent * p.rentLv * p.occ - p.value * 0.0004;
     p.cond = Math.max(0.2, p.cond - 0.0015);
-    total += p.income;
+    if (p.wallet === 'private') ensurePerson().cash += p.income; else total += p.income;
   });
   return total;
 }

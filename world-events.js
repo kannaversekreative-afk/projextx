@@ -124,7 +124,7 @@ function researchWar(plan) {
 function sellForWar() {
   // Sell 25% of every open holding at its current price, for war funds.
   let raised = 0, any = false;
-  for (const a3 in S.holdings) { const h = S.holdings[a3]; if (!h || h.qty <= 0) continue; const c = S.co[a3]; if (!c || !c.listed) continue; const qty = Math.floor(h.qty * 0.25); if (qty <= 0) continue; const proceeds = qty * c.price; h.qty -= qty; if (h.qty <= 0) delete S.holdings[a3]; S.cash += proceeds; raised += proceeds; any = true; }
+  for (const [w, map] of [['company', S.holdings], ['private', S.holdingsP || {}]]) { for (const a3 in map) { const h = map[a3]; if (!h || h.qty <= 0) continue; const c = S.co[a3]; if (!c || !c.listed) continue; const qty = Math.floor(h.qty * 0.25); if (qty <= 0) continue; const proceeds = qty * c.price; h.qty -= qty; if (h.qty <= 0) delete map[a3]; walletAdd(w, proceeds); raised += proceeds; any = true; } }
   if (!any) return 'Nothing to sell: you hold no listed stocks.';
   return null;
 }
@@ -417,10 +417,10 @@ function warDay(w) {
 function occupy(winner, loser) {
   const c = S.co[loser];
   if (winner === S.home) {
-    S.holdings[loser] = { qty: c.shares, cost: 0 }; c.listed = false; c.ai = false; S.stats.takeovers++; S.xp += 800;
+    S.holdings[loser] = { qty: c.shares - (((S.holdingsP || {})[loser] || {}).qty || 0), cost: 0 }; c.listed = false; c.ai = false; S.stats.takeovers++; S.xp += 800;
     news('War', `Victory. ${c.name} in ${cname(loser)} is now yours, and its ${fmtPop(country(loser).pop)} people count toward your nation.`, loser);
   } else if (controlled(loser) && loser !== S.home) {
-    delete S.holdings[loser]; c.ai = true; c.listed = true;
+    delete S.holdings[loser]; if (S.holdingsP) delete S.holdingsP[loser]; c.ai = true; c.listed = true;
     news('War', `${cname(winner)} seized ${c.name}. You lost your stake.`, loser);
   } else if (loser === S.home) {
     const lost = Math.floor(c.locs.length / 2); for (let i = 0; i < lost; i++) closeLoc(c, c.locs[c.locs.length - 1].id);
@@ -504,7 +504,7 @@ function countryDay(a3) {
     const occupier = c.occ;
     news('World', `${k.name} is liberated from ${cname(occupier)}. Celebrations in the streets.`, a3);
     shockCountry(a3, 'liberation'); c.occ = null; c.stab = 45; S.live = S.live.filter(e => e.title !== `Occupation of ${k.name}`);
-    if (occupier === S.home && controlled(a3)) { delete S.holdings[a3]; S.co[a3].listed = true; S.co[a3].ai = true; news('War', `You lost ${S.co[a3].name} when ${k.name} was liberated.`, a3); }
+    if (occupier === S.home && controlled(a3)) { delete S.holdings[a3]; if (S.holdingsP) delete S.holdingsP[a3]; S.co[a3].listed = true; S.co[a3].ai = true; news('War', `You lost ${S.co[a3].name} when ${k.name} was liberated.`, a3); }
   }
 }
 function homeBonus(kind) { let v = 0; country(S.home).proj.forEach(p => { if (p.until > S.day) { const d = PROJECTS.find(x => x.id === p.id); v += d[kind] || 0; } }); return v; }
@@ -732,7 +732,7 @@ function stepDay() {
   if (trading) marketDay();
   worldDay();
   if (trading) { for (const a3 in S.co) pushHist(S.co[a3].h, +S.co[a3].price.toFixed(2), S.day, S.co[a3].dayVol || 0); pushHist(S.idx.h, +S.idx.v.toFixed(2), S.day, 0); }
-  if (S.day % 91 === 45) { let d = 0; for (const a3 in S.holdings) { const c = S.co[a3], h = S.holdings[a3]; if (h.qty > 0 && !controlled(a3) && c.listed) d += h.qty * c.price * SECTORS[c.sector].div / 4; } if (d > 1) { S.cash += d; news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
+  if (S.day % 91 === 45) { let d = 0; const keys = [...new Set([...Object.keys(S.holdings || {}), ...Object.keys(S.holdingsP || {})])]; for (const a3 of keys) { const c = S.co[a3]; if (!c || !c.listed || controlled(a3)) continue; const qc = ((S.holdings || {})[a3] || {}).qty || 0, qp = ((S.holdingsP || {})[a3] || {}).qty || 0; if (qc > 0) { const p = qc * c.price * SECTORS[c.sector].div / 4; S.cash += p; d += p; } if (qp > 0) { const p = qp * c.price * SECTORS[c.sector].div / 4; ensurePerson().cash += p; d += p; } } if (d > 1) { news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
   if (S.day % 7 === 6) businessWeek();
   S.day++;

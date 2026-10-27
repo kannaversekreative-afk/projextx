@@ -67,7 +67,7 @@ function corpWire(c, text, short, major) {
   S.corpNews.unshift({ d: S.day, a3: c.a3, sym: c.sym, name: c.name, text });
   if (S.corpNews.length > 120) S.corpNews.length = 120;
   c.lastEvent = { day: S.day, short: short || text };
-  const held = ((S.holdings || {})[c.a3] || {}).qty || 0;
+  const held = holdQty(c.a3);
   if (major || held > 0 || corpTop20().indexOf(c.a3) >= 0) {
     if (typeof news === 'function') news('Business', text, c.a3);
   }
@@ -93,11 +93,11 @@ function quarterlyReport(c) {
   c.qProfit = 0;
   // Quarterly dividend, paid to holders.
   ensureDiv(c);
-  const held = ((S.holdings || {})[c.a3] || {}).qty || 0;
-  if (held > 0) {
-    const pay = Math.round(held * c.div / 4);
-    if (pay > 0) { S.cash += pay; c.lastDividendPay = pay; }
-  }
+  const heldC = ((S.holdings || {})[c.a3] || {}).qty || 0, heldP = ((S.holdingsP || {})[c.a3] || {}).qty || 0;
+  const payC = Math.round(heldC * c.div / 4), payP = Math.round(heldP * c.div / 4);
+  if (payC > 0) S.cash += payC;
+  if (payP > 0) ensurePerson().cash += payP;
+  if (payC + payP > 0) c.lastDividendPay = payC + payP;
   const big = Math.abs(move) >= 0.12;
   if ((held > 0 || big) && typeof news === 'function') {
     const verdict = first ? 'in its first reported quarter' : (surprise >= 0 ? `, beating estimates by ${(surprise * 100).toFixed(0)}%` : `, missing estimates by ${(-surprise * 100).toFixed(0)}%`);
@@ -167,8 +167,8 @@ function corpQuarterEvents(c) {
     if (targets.length) {
       const id = targets[0][0], b = targets[0][1];
       const val = b.value || 0;
-      const heldX = ((S.holdingsX || {})[id] || {}).qty || 0;
-      if (heldX > 0) { S.cash += Math.round(heldX * b.price * 1.15); delete S.holdingsX[id]; }
+      const heldXC = ((S.holdingsX || {})[id] || {}).qty || 0, heldXP = ((S.holdingsXP || {})[id] || {}).qty || 0;
+      if (heldXC + heldXP > 0) { S.cash += Math.round(heldXC * b.price * 1.15); ensurePerson().cash += Math.round(heldXP * b.price * 1.15); delete S.holdingsX[id]; if (S.holdingsXP) delete S.holdingsXP[id]; }
       delete S.extra[id];
       c.price = Math.max(0.5, c.price + (val * 0.5) / Math.max(1, c.shares || 1));
       corpWire(c, `${c.name} bought ${b.name} for ${fmtMoney(val, true)}.`, `buying ${b.name}`, true);
@@ -190,11 +190,12 @@ function extraQuarterlyReport(b) {
   b.lastReport = { q: quarterLabel(S.day), earnings, expect, surprise, move: first ? 0 : move, day: S.day };
   b.qExpect = Math.round(earnings * (1 + sectorGrowthRate(b.sector) * 0.25));
   b.qProfit = 0;
-  const held = ((S.holdingsX || {})[b.id] || {}).qty || 0;
-  if (held > 0) {
+  const heldC = ((S.holdingsX || {})[b.id] || {}).qty || 0, heldP = ((S.holdingsXP || {})[b.id] || {}).qty || 0;
+  if (heldC + heldP > 0) {
     const div = Math.max(0.01, b.price * sectorDivRate(b.sector));
-    const pay = Math.round(held * div / 4);
-    if (pay > 0) S.cash += pay;
+    const payC = Math.round(heldC * div / 4), payP = Math.round(heldP * div / 4);
+    if (payC > 0) S.cash += payC;
+    if (payP > 0) ensurePerson().cash += payP;
   }
   return b.lastReport;
 }

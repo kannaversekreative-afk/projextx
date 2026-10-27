@@ -909,27 +909,29 @@ function ensureExtraStock(b) {
   return b;
 }
 // Trade an extra stock, long only. Returns an error string, or null.
-function tradeExtra(id, side, qty) {
+function tradeExtra(id, side, qty, w) {
   const b = S.extra && S.extra[id]; if (!b) return 'Business not found.';
   ensureExtraStock(b);
   qty = Math.floor(+qty); if (!(qty > 0)) return 'Enter how many shares.';
   if (typeof marketOpen === 'function' && !marketOpen()) return 'Markets are closed on weekends.';
-  if (!S.holdingsX) S.holdingsX = {};
-  const pos = S.holdingsX[id] || { qty: 0, cost: 0 };
+  w = w || curWallet();
+  const map = holdMapX(w);
+  const pos = map[id] || { qty: 0, cost: 0 };
   if (side === 'buy') {
-    if (qty * b.price > S.cash) return 'Not enough cash.';
-    if (pos.qty + qty > b.shares) return 'You can’t buy more shares than exist.';
-    pos.cost = (pos.cost * pos.qty + qty * b.price) / (pos.qty + qty); pos.qty += qty; S.cash -= qty * b.price;
+    if (qty * b.price > walletCash(w)) return 'Not enough cash in this wallet.';
+    if (holdQtyX(id) + qty > b.shares) return 'You can’t buy more shares than exist.';
+    pos.cost = (pos.cost * pos.qty + qty * b.price) / (pos.qty + qty); pos.qty += qty; walletPay(w, qty * b.price);
   } else if (side === 'sell') {
-    if (pos.qty < qty) return 'You don’t own that many shares.';
-    pos.qty -= qty; S.cash += qty * b.price;
+    if (pos.qty < qty) return 'You don’t own that many shares in this wallet.';
+    pos.qty -= qty; walletAdd(w, qty * b.price);
   } else return 'Extra stocks trade buy and sell only.';
-  if (pos.qty === 0) delete S.holdingsX[id]; else S.holdingsX[id] = pos;
+  if (pos.qty === 0) delete map[id]; else map[id] = pos;
   b.tradedToday = (b.tradedToday || 0) + qty;
   if (typeof impactFor === 'function') { try { const imp = impactFor(b, qty * b.price); b.price = Math.max(0.5, b.price * Math.exp((side === 'buy' ? 1 : -1) * imp)); } catch (e) {} }
   if (typeof S !== 'undefined' && S.stats) S.stats.trades = (S.stats.trades || 0) + 1;
   return null;
 }
+
 function businessesInCountry(a3) {
   const out = [];
   if (S.co[a3]) out.push(S.co[a3]);

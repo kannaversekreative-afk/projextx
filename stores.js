@@ -160,7 +160,7 @@ function storeAddress(cityId, lotT) {
   const city = W.cities[cityId];
   return `${100 + (lotT % 900)} ${pick(STORE_STREETS)}, ${city ? city.name : ''}`;
 }
-function buildStore(cityId, lot, type) {
+function buildStore(cityId, lot, type, w) {
   ensureStores();
   if (typeof isGovCity === 'function' && isGovCity(W.cities[cityId])) return 'Capitals are government-only — build in another city.';
   const def = STORE_TYPES[type || 'coffee']; if (!def) return 'Unknown store type.';
@@ -169,9 +169,10 @@ function buildStore(cityId, lot, type) {
   if (S.stores.some(s => s.cityId === cityId && s.lotT === lotObj.t)) return 'That lot already has a store.';
   const rent = lotObj.rent || 2000, deposit = Math.round(rent * 10), buildCost = def.buildout || 25000;
   const total = deposit + buildCost;
-  if (S.cash < total) return `Needs ${fmtMoney(total, true)} (deposit ${fmtMoney(deposit, true)} + fit-out ${fmtMoney(buildCost, true)}).`;
-  S.cash -= total;
-  const st = { id: uid(), cityId, lotT: lotObj.t, type: type || 'coffee', level: 1, icon: def.icon,
+  w = w || curWallet();
+  if (walletCash(w) < total) return `Needs ${fmtMoney(total, true)} (deposit ${fmtMoney(deposit, true)} + fit-out ${fmtMoney(buildCost, true)}) in this wallet.`;
+  walletPay(w, total);
+  const st = { id: uid(), cityId, lotT: lotObj.t, type: type || 'coffee', level: 1, icon: def.icon, wallet: w,
     name: def.name + ' · ' + (W.cities[cityId] ? W.cities[cityId].name : ''),
     address: storeAddress(cityId, lotObj.t), rent, footTraffic: lotObj.traffic || 8000,
     manager: makeManager(1), staff: 4,
@@ -185,6 +186,7 @@ function buildStore(cityId, lot, type) {
   news('Business', `You opened ${st.name} at ${st.address}. Rent ${fmtMoney(rent)}/week.`, W.cities[cityId] ? W.cities[cityId].a3 : S.home);
   return null;
 }
+
 // Develop, don't just open: product levels raise what a product
 // captures, store levels raise the whole shop. Both cost cash and
 // pay Progress XP. Neither prints trillions — the math stays tied
@@ -194,8 +196,8 @@ function developProduct(storeId, idx) {
   const p = st.products[idx]; if (!p) return 'Product not found.';
   if ((p.lvl || 1) >= 5) return 'That product is fully developed (Lv 5).';
   const cost = productDevCost(p);
-  if (S.cash < cost) return `Developing costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; p.lvl = (p.lvl || 1) + 1; p.capture = +(p.capture * 1.08).toFixed(4);
+  const w = st.wallet || 'company'; if (walletCash(w) < cost) return `Developing costs ${fmtMoney(cost, true)} in this wallet.`;
+  walletPay(w, cost); p.lvl = (p.lvl || 1) + 1; p.capture = +(p.capture * 1.08).toFixed(4);
   gainXP(40, 'product');
   return null;
 }
@@ -205,8 +207,8 @@ function upgradeStore(storeId) {
   const next = (st.level || 1) + 1, need = storeUpgradeUnlock(next);
   if (progressLevel() < need) return `Store Lv ${next} unlocks at Progress Lv ${need}. You are Lv ${progressLevel()}.`;
   const cost = storeUpgradeCost(st);
-  if (S.cash < cost) return `Upgrading costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; st.level = next;
+  const w = st.wallet || 'company'; if (walletCash(w) < cost) return `Upgrading costs ${fmtMoney(cost, true)} in this wallet.`;
+  walletPay(w, cost); st.level = next;
   gainXP(60, 'upgrade');
   return null;
 }
@@ -290,7 +292,7 @@ function storesWeek() {
     st.weeks.unshift({ rev: Math.round(revenue), income: incomeR });
     if (st.weeks.length > 8) st.weeks.length = 8;
     st.totalRev += revenue; st.totalIncome += incomeR; st.weeksOpen++;
-    S.cash += incomeR;
+    if (st.wallet === 'private') ensurePerson().cash += incomeR; else S.cash += incomeR;
   }
 }
 function setStorePrice(storeId, idx, price) {
