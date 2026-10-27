@@ -910,11 +910,17 @@ const CityView = (() => {
   }
   function pmFit() {
     if (!pmViewport || !pm.iw) return;
-    pm.fit = Math.min(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih);
-    pm.s = pm.fit; pmApply();
+    // Cover, not contain: the picture fills the whole screen edge to
+    // edge with no bands top or bottom, and the cropped sides are
+    // reached by dragging. Mobile-first, so this is the default view.
+    pm.fit = Math.max(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih);
+    pm.s = pm.fit;
+    pm.x = (pmViewport.clientWidth - pm.iw * pm.s) / 2;
+    pm.y = (pmViewport.clientHeight - pm.ih * pm.s) / 2;
+    pmApply();
   }
   function pmBind() {
-    pmViewport.addEventListener('pointerdown', e => { if (!photoMode) return; pmViewport.setPointerCapture(e.pointerId); pmPts.set(e.pointerId, [e.clientX, e.clientY]); if (pmPts.size === 2) { const [a, b] = [...pmPts.values()]; pmPinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: pm.s }; } });
+    pmViewport.addEventListener('pointerdown', e => { if (!photoMode) return; try { pmViewport.setPointerCapture(e.pointerId); } catch (err) {} pmPts.set(e.pointerId, [e.clientX, e.clientY]); if (pmPts.size === 2) { const [a, b] = [...pmPts.values()]; pmPinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: pm.s }; } });
     pmViewport.addEventListener('pointermove', e => {
       if (!pmPts.has(e.pointerId)) return; const prev = pmPts.get(e.pointerId); pmPts.set(e.pointerId, [e.clientX, e.clientY]);
       if (pmPts.size === 2 && pmPinch) { const [a, b] = [...pmPts.values()]; const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pmPinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pmPinch.d, (a[0] + b[0]) / 2 - rect.left, (a[1] + b[1]) / 2 - rect.top); return; }
@@ -937,8 +943,8 @@ const CityView = (() => {
 
   return {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind();
-      pmViewport = el.querySelector('.pm-viewport'); pmImg = pmViewport ? pmViewport.querySelector('img') : null; pmZoomLabel = el.querySelector('.pm-zoom');
-      if (pmViewport) { el.querySelectorAll('[data-pm]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); const k = b.dataset.pm, cx = pmViewport.clientWidth / 2, cy = pmViewport.clientHeight / 2; if (k === 'in') pmZoomAt(pm.s * 1.5, cx, cy); else if (k === 'out') pmZoomAt(pm.s / 1.5, cx, cy); else if (k === 'reset') pmFit(); })); pmBind(); } },
+      pmViewport = el.querySelector('.pm-viewport'); pmImg = pmViewport ? pmViewport.querySelector('img') : null;
+      if (pmViewport) pmBind(); },
     open(id) {
       marsMode = false;
       city = W.cities[id];
