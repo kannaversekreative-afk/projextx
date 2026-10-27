@@ -155,6 +155,11 @@ function newGame(opt) {
     news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
     mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
   }
+  // City unlock (flow games only): one starting city, the rest $25,000 each.
+  if (s.flow && typeof startingCityFor === 'function') {
+    const start = startingCityFor(opt.home);
+    if (start != null) s.unlockedCities = [start];
+  }
   return s;
 }
 function tickerFor(name, used) {
@@ -742,6 +747,7 @@ function acceptOffer(id) {
 
 // ---------- buildings ----------
 function buyBuilding(cityId, t, w) {
+  if (typeof isCityUnlocked === 'function' && !isCityUnlocked(cityId)) return 'That city is locked — unlock it for $25,000 first.';
   const lot = cityLots(cityId).find(l => l.t === t); if (!lot || lot.kind !== 'sale') return 'Not for sale anymore.';
   w = w || curWallet();
   if (walletCash(w) < lot.price) return 'Not enough cash in this wallet.';

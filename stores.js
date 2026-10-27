@@ -206,6 +206,7 @@ function storeAddress(cityId, lotT) {
 }
 function buildStore(cityId, lot, type, w) {
   ensureStores();
+  if (typeof isCityUnlocked === 'function' && !isCityUnlocked(cityId)) return 'That city is locked — unlock it for $25,000 first.';
   if (typeof isGovCity === 'function' && isGovCity(W.cities[cityId])) return 'Capitals are government-only — build in another city.';
   const def = STORE_TYPES[type || 'coffee']; if (!def) return 'Unknown store type.';
   const lotObj = typeof lot === 'object' ? lot : (cityLots(cityId) || []).find(l => l.t === lot);

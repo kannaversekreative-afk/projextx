@@ -1376,6 +1376,12 @@ function landmarkNameFor(c) {
   return 'Landmark';
 }
 function enterCity(id) {
+  if (typeof isCityUnlocked === 'function' && !isCityUnlocked(id)) {
+    const c = W.cities[id];
+    const cost = (typeof CITY_UNLOCK_COST !== 'undefined') ? CITY_UNLOCK_COST : 25000;
+    openModal(`<h2>${c ? esc(c.name) : 'City'} is locked</h2><p class="muted">You start with one city unlocked. Unlock this one for ${fmtMoney(cost, true)} from business cash (you have ${fmtMoney(S.cash, true)}).</p><button class="btn3d orange wide" data-a="unlockCity" data-x="${id}">UNLOCK FOR ${fmtMoney(cost, true)}</button><button class="btn wide" data-a="closeModal">NOT NOW</button>`, 'sheet');
+    return;
+  }
   closePopup(); CityView.open(id); document.body.classList.add('in-city'); renderCityHUD(); tutCheck();
 }
 function leaveCity() {
@@ -3490,6 +3496,7 @@ const A = {
     closePopup(); CityView.refresh();
   },
   enterCity: x => { closeModal(); enterCity(+x); },
+  unlockCity: x => { const err = unlockCity(+x); if (err) { toast(err, 'bad'); return; } closeModal(); save(); renderHUD(); toast('City unlocked.', 'good'); },
   leaveCity: () => leaveCity(),
   cityFilter: () => {
     const f = ['all', 'lease', 'sale', 'mine'];
