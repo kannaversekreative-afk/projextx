@@ -7,6 +7,7 @@ const CityView = (() => {
   let el, canvas, ctx, layer, img, layout, city, view = { x: 0, y: 0, s: 1 }, ox = 0, oy = 0, W2 = 0, H2 = 0;
   let marsMode = false;
   let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], occluders = [], skyPlanes = [], animTimer = null, lastAnim = 0;
+  let photoMode = false, pmViewport = null, pmImg = null, pmZoomLabel = null, pm = { x: 0, y: 0, s: 1, fit: 1, iw: 0, ih: 0 }, pmPts = new Map(), pmPinch = null;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -831,20 +832,22 @@ const CityView = (() => {
   }
   const pts = new Map(); let pinch = null, downPos = null;
   function bind() {
-    el.addEventListener('pointerdown', e => { if (e.target.closest('.pin, button')) return; el.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 1) downPos = [e.clientX, e.clientY]; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s }; } });
+    el.addEventListener('pointerdown', e => { if (photoMode) return; if (e.target.closest('.pin, button')) return; el.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 1) downPos = [e.clientX, e.clientY]; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s }; } });
     el.addEventListener('pointermove', e => {
+      if (photoMode) return;
       if (!pts.has(e.pointerId)) return; const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
       if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; zoomAt(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); return; }
       view.x += e.clientX - prev[0]; view.y += e.clientY - prev[1]; apply();
     });
     const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
     el.addEventListener('pointerup', e => {
+      if (photoMode) { end(e); return; }
       const wasTap = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 8 && !e.target.closest('.pin, button');
       end(e); downPos = null;
       if (wasTap && city) tapTile(e);
     });
     el.addEventListener('pointercancel', end);
-    el.addEventListener('wheel', e => { e.preventDefault(); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+    el.addEventListener('wheel', e => { if (photoMode) return; e.preventDefault(); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
     window.addEventListener('resize', () => { if (city) apply(); });
   }
   function zoomAt(s, sx, sy) { const mx = (sx - view.x) / view.s, my = (sy - view.y) / view.s; view.s = s; apply(); view.x = sx - mx * view.s; view.y = sy - my * view.s; apply(); }
@@ -884,11 +887,65 @@ const CityView = (() => {
     } catch (err) {}
   }
 
+
+  // ---------- photo city maps ----------
+  // Cities with an entry in CITY_MAPS open a zoomable photo map instead
+  // of the generated isometric view. No pins, no lots, no tap-to-buy:
+  // nothing is built on a photo map yet.
+  function pmApply() {
+    if (!pmViewport || !pm.iw) return;
+    const vw = pmViewport.clientWidth, vh = pmViewport.clientHeight;
+    if (!vw || !vh) return;
+    pm.s = Math.max(pm.fit, Math.min(pm.fit * 6, pm.s));
+    const W = pm.iw * pm.s, H = pm.ih * pm.s;
+    pm.x = (W < vw) ? (vw - W) / 2 : Math.min(0, Math.max(vw - W, pm.x));
+    pm.y = (H < vh) ? (vh - H) / 2 : Math.min(0, Math.max(vh - H, pm.y));
+    pmImg.style.transform = `translate(${pm.x}px,${pm.y}px) scale(${pm.s})`;
+    if (pmZoomLabel) pmZoomLabel.textContent = Math.round(pm.s / pm.fit * 100) + '%';
+  }
+  function pmZoomAt(s, sx, sy) {
+    const mx = (sx - pm.x) / pm.s, my = (sy - pm.y) / pm.s;
+    pm.s = s; pmApply();
+    pm.x = sx - mx * pm.s; pm.y = sy - my * pm.s; pmApply();
+  }
+  function pmFit() {
+    if (!pmViewport || !pm.iw) return;
+    pm.fit = Math.min(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih);
+    pm.s = pm.fit; pmApply();
+  }
+  function pmBind() {
+    pmViewport.addEventListener('pointerdown', e => { if (!photoMode) return; pmViewport.setPointerCapture(e.pointerId); pmPts.set(e.pointerId, [e.clientX, e.clientY]); if (pmPts.size === 2) { const [a, b] = [...pmPts.values()]; pmPinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: pm.s }; } });
+    pmViewport.addEventListener('pointermove', e => {
+      if (!pmPts.has(e.pointerId)) return; const prev = pmPts.get(e.pointerId); pmPts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pmPts.size === 2 && pmPinch) { const [a, b] = [...pmPts.values()]; const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pmPinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pmPinch.d, (a[0] + b[0]) / 2 - rect.left, (a[1] + b[1]) / 2 - rect.top); return; }
+      pm.x += e.clientX - prev[0]; pm.y += e.clientY - prev[1]; pmApply();
+    });
+    const pmEnd = e => { pmPts.delete(e.pointerId); if (pmPts.size < 2) pmPinch = null; };
+    pmViewport.addEventListener('pointerup', pmEnd);
+    pmViewport.addEventListener('pointercancel', pmEnd);
+    pmViewport.addEventListener('wheel', e => { if (!photoMode) return; e.preventDefault(); const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pm.s * Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
+    pmViewport.addEventListener('dblclick', e => { if (!photoMode) return; const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pm.s >= pm.fit * 3 ? pm.fit : pm.s * 2, e.clientX - rect.left, e.clientY - rect.top); });
+    window.addEventListener('resize', () => { if (!photoMode || !pm.iw) return; const ratio = pm.s / pm.fit; pm.fit = Math.min(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih); pm.s = pm.fit * ratio; pmApply(); });
+  }
+  function openPhoto(src) {
+    photoMode = true; stopAnim(); layer.innerHTML = '';
+    el.classList.add('photo'); el.classList.add('open');
+    pmImg.src = src;
+    const go = () => { pm.iw = pmImg.naturalWidth || 1024; pm.ih = pmImg.naturalHeight || 1800; pmImg.style.width = pm.iw + 'px'; pmImg.style.height = pm.ih + 'px'; pmFit(); };
+    if (pmImg.complete && pmImg.naturalWidth) go(); else pmImg.onload = go;
+  }
+
   return {
-    init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind(); },
+    init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind();
+      pmViewport = el.querySelector('.pm-viewport'); pmImg = pmViewport ? pmViewport.querySelector('img') : null; pmZoomLabel = el.querySelector('.pm-zoom');
+      if (pmViewport) { el.querySelectorAll('[data-pm]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); const k = b.dataset.pm, cx = pmViewport.clientWidth / 2, cy = pmViewport.clientHeight / 2; if (k === 'in') pmZoomAt(pm.s * 1.5, cx, cy); else if (k === 'out') pmZoomAt(pm.s / 1.5, cx, cy); else if (k === 'reset') pmFit(); })); pmBind(); } },
     open(id) {
       marsMode = false;
-      city = W.cities[id]; layout = cityLayout(city); roofs = {}; render(); buildVehicles(); buildSkyPlanes(); startAnim();
+      city = W.cities[id];
+      const mapSrc = (typeof cityMapFor === 'function') ? cityMapFor(city) : null;
+      if (mapSrc) { openPhoto(mapSrc); return; }
+      photoMode = false; el.classList.remove('photo');
+      layout = cityLayout(city); roofs = {}; render(); buildVehicles(); buildSkyPlanes(); startAnim();
       el.classList.add('open');
       const vw = el.clientWidth, vh = el.clientHeight;
       view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
@@ -897,6 +954,7 @@ const CityView = (() => {
       pins(); apply();
     },
     openMars() {
+      photoMode = false; el.classList.remove('photo'); if (pmImg) pmImg.src = '';
       marsMode = true;
       city = { id: MARS_CITY_ID, name: 'Mars', a3: S.home, code: 'MARS', size: 0.5, port: false, wealth: 1, pop: 0 };
       layout = (typeof marsLayout === 'function') ? marsLayout() : cityLayout(city); roofs = {}; vehicles = []; skyPlanes = []; render();
@@ -907,12 +965,14 @@ const CityView = (() => {
       view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
       pins(); apply();
     },
-    close() { stopAnim(); marsMode = false; el.classList.remove('open'); city = null; img = null; },
-    refresh() { if (city) pins(); },
-    setFilter(f) { filter = f; pins(); },
+    close() { stopAnim(); marsMode = false; photoMode = false; el.classList.remove('open'); el.classList.remove('photo'); if (pmImg) pmImg.src = ''; city = null; img = null; },
+    refresh() { if (city && !photoMode) pins(); },
+    setFilter(f) { filter = f; if (!photoMode) pins(); },
     get filter() { return filter; },
     get city() { return city; },
     isOpen() { return !!city; },
+    isPhoto() { return photoMode; },
+    get pmState() { return pm; },
     isMars() { return marsMode; },
   };
 })();

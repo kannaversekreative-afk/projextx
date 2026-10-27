@@ -184,6 +184,17 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 #cityview.open { display: block; }
 #cityview canvas { position: absolute; inset: 0; }
 #cityview .pins { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#cityview.photo canvas, #cityview.photo .pins { display: none; }
+#cityview .photomap { display: none; position: absolute; inset: 0; background: #7fb8d8; overflow: hidden; touch-action: none; }
+#cityview.photo .photomap { display: block; }
+.pm-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.pm-viewport img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; }
+.pm-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 4px; align-items: center; background: rgba(255,255,255,0.94); border-radius: 20px; padding: 10px 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 2; max-width: calc(100vw - 32px); }
+.pm-row { display: flex; gap: 8px; align-items: center; }
+.pm-bar button { min-width: 44px; height: 44px; border: 1px solid #ccc; background: #fff; border-radius: 50%; font-size: 22px; font-weight: 800; cursor: pointer; }
+.pm-bar button[data-pm="reset"] { border-radius: 999px; padding: 0 14px; font-size: 13px; letter-spacing: 0.5px; }
+.pm-zoom { min-width: 56px; text-align: center; font-weight: 800; }
+.pm-note { font-size: 12px; color: #555; text-align: center; }
 #chud { z-index: 6; }
 .pin { position: absolute; transform: translate(-50%, -100%) scale(var(--inv, 1)); transform-origin: 50% 100%; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3)); }
 .pin::after { content: ""; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 18px solid #2f7cf6; margin-top: -1px; }
