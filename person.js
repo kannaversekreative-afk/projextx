@@ -494,6 +494,7 @@ function personWeek() {
   const P = ensurePerson();
   const salary = P.office ? P.office.salary : jobSalary(P.job);
   P.cash += salary;
+  if (salary > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ salary', amt: Math.round(salary) });
   P.job.weeks++;
   // College: weeks tick down, degree lands when they run out.
   if (P.college) {

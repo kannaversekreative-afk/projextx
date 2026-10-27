@@ -437,7 +437,7 @@ function occupy(winner, loser) {
     const heldC = ((S.holdings || {})[loser] || {}).qty || 0, heldP = ((S.holdingsP || {})[loser] || {}).qty || 0;
     const payC = Math.round(heldC * c.price), payP = Math.round(heldP * c.price);
     if (payC) S.cash += payC;
-    if (payP && typeof ensurePerson === 'function') ensurePerson().cash += payP;
+    if (payP && typeof ensurePerson === 'function') { ensurePerson().cash += payP; if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ buyout · ' + c.name, amt: payP }); }
     delete S.holdings[loser]; if (S.holdingsP) delete S.holdingsP[loser];
     if (c.office) delete c.office;
     c.ai = true; c.listed = true;
@@ -560,7 +560,7 @@ function diplomacy(a3) {
 
 // ---------- weekly business for every company ----------
 function businessWeek() {
-  let mineProfit = 0;
+  let mineProfit = 0, preIpoNet = 0;
   for (const a3 in S.co) {
     const c = S.co[a3], w = companyWeek(c);
     if (controlled(a3)) {
@@ -568,11 +568,12 @@ function businessWeek() {
       const boost = (typeof boardBoost === 'function') ? boardBoost(c) : 0;
       if (typeof execManagersWeek === 'function') { try { execManagersWeek(c); } catch (e) {} }
       const eb = (typeof execManagerBoost === 'function') ? execManagerBoost(c) : { boost: 0, cost: 0 };
-      const netP = w.profit - bc - eb.cost + Math.max(0, w.rev) * (boost + eb.boost);
+      const netP = c.bankrupt ? 0 : w.profit - bc - eb.cost + Math.max(0, w.rev) * (boost + eb.boost);
       c.weekProfitStreak = netP > 0 ? (c.weekProfitStreak || 0) + 1 : 0;
       if (!Array.isArray(c.weekNets)) c.weekNets = [];
       c.weekNets.push(Math.round(netP)); if (c.weekNets.length > 4) c.weekNets.shift();
       mineProfit += netP * stake(a3);
+      if (!c.listed) preIpoNet += netP * stake(a3);
     } else {
       // CPU boards cost and benefit like player boards, with salaries
       // scaled to company size (cpuBoardCost): full pay at $1B+ of
@@ -607,11 +608,25 @@ function businessWeek() {
   if (S.loan > 0) interest = S.loan * 0.08 / 52;
   if (S.cash < 0) overdraft = -S.cash * 0.2 / 52;
   const profit = mineProfit + rent + teamProfit + placedProfit - interest - overdraft;
-  S.cash += profit;
+  let personalProfit = 0, ceoSalary = 0;
+  if (!S.leader) {
+    // New money model: private-company net goes to your personal bank,
+    // not the business pot. Listed-company net stays in the company —
+    // it reaches you as salary (weekly) and dividends (quarterly).
+    // Rent, teams, placed buildings, interest and overdraft still land
+    // in the business pot, as before.
+    ceoSalary = (typeof weeklyCeoSalary === 'function') ? weeklyCeoSalary() : 0;
+    personalProfit = Math.round(preIpoNet + ceoSalary);
+    ensurePerson().cash += personalProfit;
+    S.cash += (profit - mineProfit);
+    if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ weekly profit', amt: personalProfit });
+  } else {
+    S.cash += profit;
+  }
   const own = mine(); let satW = 0, satN = 0;
   own.forEach(c => c.locs.forEach(l => { satW += l.sat * Math.max(1, l.cust); satN += Math.max(1, l.cust); }));
   if (satN > 1) S.rating = +(satW / satN).toFixed(2);
-  S.week = { profit, companies: mineProfit, rent, placed: placedProfit, interest, overdraft };
+  S.week = { profit, companies: mineProfit, rent, placed: placedProfit, interest, overdraft, personalProfit: Math.round(personalProfit), ceoSalary: Math.round(ceoSalary) };
   if (S.leader && typeof leaderWeek === 'function') leaderWeek();
   if (S.leader && typeof capitalWeek === 'function') { try { capitalWeek(); } catch (e) {} }
   if (typeof websiteWeek === 'function') { try { websiteWeek(); } catch (e) {} }
@@ -761,7 +776,7 @@ function stepDay() {
   if (trading) marketDay();
   worldDay();
   if (trading) { for (const a3 in S.co) pushHist(S.co[a3].h, +S.co[a3].price.toFixed(2), S.day, S.co[a3].dayVol || 0); pushHist(S.idx.h, +S.idx.v.toFixed(2), S.day, 0); }
-  if (S.day % 91 === 45) { let d = 0; const keys = [...new Set([...Object.keys(S.holdings || {}), ...Object.keys(S.holdingsP || {})])]; for (const a3 of keys) { const c = S.co[a3]; if (!c || !c.listed || controlled(a3)) continue; const qc = ((S.holdings || {})[a3] || {}).qty || 0, qp = ((S.holdingsP || {})[a3] || {}).qty || 0; if (qc > 0) { const p = qc * c.price * SECTORS[c.sector].div / 4; S.cash += p; d += p; } if (qp > 0) { const p = qp * c.price * SECTORS[c.sector].div / 4; ensurePerson().cash += p; d += p; } } if (d > 1) { news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
+  if (S.day % 91 === 45) { let d = 0; const keys = [...new Set([...Object.keys(S.holdings || {}), ...Object.keys(S.holdingsP || {})])]; for (const a3 of keys) { const c = S.co[a3]; if (!c || !c.listed || controlled(a3)) continue; const qc = ((S.holdings || {})[a3] || {}).qty || 0, qp = ((S.holdingsP || {})[a3] || {}).qty || 0; if (qc > 0) { const p = qc * c.price * SECTORS[c.sector].div / 4; S.cash += p; d += p; } if (qp > 0) { const p = qp * c.price * SECTORS[c.sector].div / 4; ensurePerson().cash += p; if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ dividend · ' + c.name, amt: Math.round(p) }); d += p; } } if (d > 1) { news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
   if (S.day % 7 === 6) businessWeek();
   S.day++;

@@ -367,6 +367,8 @@ function onlineEconomics(c) {
 function adsCost(c) { const w = Math.max(0.25, Math.pow(W.byA3[c.a3].wealth, 0.7)); return WEB_ADS.reduce((a, ad) => a + (c.web.ads[ad.id] ? ad.cost * w : 0), 0); }
 // One week for one company (AI or yours).
 function companyWeek(c, quiet) {
+  // Bankrupt companies earn nothing until they are rebuilt.
+  if (c.bankrupt) { c.week = { rev: 0, profit: 0, tax: 0, locs: 0, fleet: 0, online: 0, onlineRev: 0, visitors: 0, ads: 0, cust: 0 }; return c.week; }
   let rev = 0, profit = 0, satW = 0, satN = 0, cust = 0;
   c._staff = c.locs.reduce((a, l) => a + l.staff, 0);
   c.locs.forEach(l => {
@@ -399,10 +401,11 @@ function companyWeek(c, quiet) {
   // market's companies make their quarterly moves (see corpnews.js).
   c.qProfit = (c.qProfit || 0) + profit;
   if (typeof isQuarterEnd === 'function' && isQuarterEnd(S.day)) {
+    if (typeof payBoardDividend === 'function') payBoardDividend(c);
     if (typeof quarterlyReport === 'function') quarterlyReport(c);
     if (typeof corpQuarterEvents === 'function') corpQuarterEvents(c);
   }
-  c._staff = null; c.book = bookValue(c);
+  c._staff = null; c.book = Math.max(0, bookValue(c) - (c.bookDamage || 0));
   return c.week;
 }
 // CPU expansion, like a player would: first cover every city in the
@@ -551,6 +554,16 @@ function levelProgress() { const L = level(); const a = (L - 1) ** 2 * 120, b = 
 // and every spend action reads curWallet() at click time.
 function curWallet() { return (typeof UI !== 'undefined' && UI.wallet === 'private') ? 'private' : 'company'; }
 function walletCash(w) { const P = (typeof ensurePerson === 'function') ? ensurePerson() : null; return w === 'private' ? (P ? P.cash : 0) : S.cash; }
+// CEO salary, set at a board meeting: paid weekly into personal money.
+// Only companies you control, and never bankrupt ones.
+function weeklyCeoSalary() {
+  let t = 0;
+  for (const a3 in S.co) {
+    const c = S.co[a3];
+    if (c && !c.bankrupt && c.ceoSalary && typeof controlled === 'function' && controlled(a3)) t += c.ceoSalary / 52;
+  }
+  return t;
+}
 function walletPay(w, amt) { if (walletCash(w) < amt) return false; if (w === 'private') ensurePerson().cash -= amt; else S.cash -= amt; return true; }
 function walletAdd(w, amt) { if (w === 'private') ensurePerson().cash += amt; else S.cash += amt; }
 // Holdings are split by wallet: S.holdings/S.holdingsX are Company
@@ -718,13 +731,14 @@ function buyAddon(a3, id) {
   S.cash -= d.cost; c.web.addons[id] = true; return null;
 }
 // Sell part of a private company to the public.
-function goPublic(a3, pct) {
+function goPublic(a3, pct, valuation) {
   const e = requireControl(a3); if (e) return e;
   const c = S.co[a3]; if (c.listed) return 'Already listed.';
+  if (c.bankrupt) return 'Bankrupt companies cannot IPO.';
   if ((typeof boardFull === 'function') && !boardFull(c)) return 'IPO needs a full board room: hire all 5 board seats in Offices first.';
   if ((c.weekProfitStreak || 0) < 2) return `IPO needs 2 profitable weeks in a row. Current weekly streak: ${c.weekProfitStreak || 0}.`;
-  pct = clamp(pct != null ? pct : 1, 0.01, 1);
-  const v = companyFairTotal(c);
+  pct = clamp(pct != null ? pct : 1, 0.05, 1);
+  const v = (valuation != null && isFinite(valuation) && valuation > 0) ? Math.round(valuation) : companyFairTotal(c);
   const sold = Math.floor(c.shares * pct);
   const gross = Math.round(sold * (v / c.shares)), fee = Math.round(gross * 0.07), proceeds = gross - fee;
   let left = sold, payC = 0, payP = 0;
@@ -732,7 +746,13 @@ function goPublic(a3, pct) {
   const takeC = hc ? Math.min(hc.qty, left) : 0; if (hc) { hc.qty -= takeC; left -= takeC; payC += takeC; if (hc.qty === 0) delete S.holdings[a3]; }
   const takeP = hp ? Math.min(hp.qty, left) : 0; if (hp) { hp.qty -= takeP; left -= takeP; payP += takeP; if (hp.qty === 0) delete S.holdingsP[a3]; }
   if (left > 0) { if (!S.holdings[a3]) S.holdings[a3] = { qty: 0, cost: c.price }; S.holdings[a3].qty -= left; payC += left; }
-  S.cash += Math.round(proceeds * (payC / Math.max(1, sold))); ensurePerson().cash += Math.round(proceeds * (payP / Math.max(1, sold)));
+  // An IPO sells the company's shares: shares held in a wallet pay that
+  // wallet, and newly issued shares pay the company pot. Your personal
+  // share lands in your bank with a feed line.
+  const proceedsC = Math.round(proceeds * (payC / Math.max(1, sold)));
+  const proceedsP = Math.round(proceeds * (payP / Math.max(1, sold)));
+  S.cash += proceedsC; ensurePerson().cash += proceedsP;
+  if (proceedsP > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ IPO sale · ' + c.name, amt: proceedsP });
   c.listed = true; c.price = v / c.shares;
   S.stats.ipos++; S.xp += 500;
   news('Business', `${c.name} rings the opening bell! The IPO sold ${Math.round(pct * 100)}% for ${fmtMoney(proceeds, true)} after a 7% fee.`, a3);
@@ -746,7 +766,7 @@ function acceptOffer(id) {
   const c = S.co[m.offer.a3]; if (!controlled(c.a3)) return 'You no longer control that company.';
   const amount = stake(c.a3) * m.offer.price;
   const qc = ((S.holdings || {})[c.a3] || {}).qty || 0, qp = ((S.holdingsP || {})[c.a3] || {}).qty || 0, qt = qc + qp;
-  if (qt > 0) { S.cash += Math.round(amount * qc / qt); ensurePerson().cash += Math.round(amount * qp / qt); }
+  if (qt > 0) { S.cash += Math.round(amount * qc / qt); const pAmt = Math.round(amount * qp / qt); ensurePerson().cash += pAmt; if (pAmt > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ sale · ' + c.name, amt: pAmt }); }
   delete S.holdings[c.a3]; if (S.holdingsP) delete S.holdingsP[c.a3]; c.listed = true; c.ai = true; m.offer.done = 'accepted';
   news('Business', `You sold ${c.name} for ${fmtMoney(amount, true)}.`, c.a3);
   return null;

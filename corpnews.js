@@ -73,6 +73,35 @@ function corpWire(c, text, short, major) {
   }
 }
 
+// --- board-set dividend ----------------------------------------------
+// The board meeting sets a quarterly dividend as a percentage of the
+// company's value. It is paid to shareholders in proportion to their
+// stake; your share lands in your personal bank. Paying out more than
+// a year's profit eats the company's book value; paying it down to
+// nothing bankrupts the company. This replaces the automatic dividend
+// below for companies that have one (see the _boardDivPaid flag).
+function payBoardDividend(c) {
+  if (!c.divPct || c.bankrupt) return;
+  const st = (typeof stake === 'function') ? stake(c.a3) : 0;
+  if (st <= 0) return;
+  const payout = Math.round(companyValue(c) * c.divPct / 100);
+  if (payout <= 0) return;
+  const userAmt = Math.round(payout * st);
+  if (userAmt > 0) {
+    ensurePerson().cash += userAmt;
+    if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ dividend · ' + c.name, amt: userAmt });
+  }
+  const annual = Math.max(0, (c.avg || 0) * 52);
+  if (payout > annual) {
+    c.bookDamage = (c.bookDamage || 0) + (payout - annual);
+    if (bookValue(c) - c.bookDamage <= 0) {
+      c.bankrupt = true; c.avg = 0; c.book = 0;
+      if (typeof news === 'function') news('Business', c.name + ' paid out more than it could afford and went bankrupt.', c.a3);
+    }
+  }
+  c._boardDivPaid = S.day;
+}
+
 // --- quarterly reports (flagships) ----------------------------------
 function quarterlyReport(c) {
   if (!c.listed) { c.qProfit = 0; return null; }
@@ -91,13 +120,18 @@ function quarterlyReport(c) {
   c.lastReport = { q, earnings, expect, surprise, move: first ? 0 : move, day: S.day };
   c.qExpect = Math.round(earnings * (1 + sectorGrowthRate(c.sector) * 0.25));
   c.qProfit = 0;
-  // Quarterly dividend, paid to holders.
-  ensureDiv(c);
-  const heldC = ((S.holdings || {})[c.a3] || {}).qty || 0, heldP = ((S.holdingsP || {})[c.a3] || {}).qty || 0;
-  const payC = Math.round(heldC * c.div / 4), payP = Math.round(heldP * c.div / 4);
-  if (payC > 0) S.cash += payC;
-  if (payP > 0) ensurePerson().cash += payP;
-  if (payC + payP > 0) c.lastDividendPay = payC + payP;
+  // Quarterly dividend, paid to holders — unless the board already set
+  // this quarter's dividend at a board meeting (that payment replaces
+  // this automatic one, so nobody gets paid twice).
+  if (c._boardDivPaid !== S.day) {
+    ensureDiv(c);
+    const heldC = ((S.holdings || {})[c.a3] || {}).qty || 0, heldP = ((S.holdingsP || {})[c.a3] || {}).qty || 0;
+    const payC = Math.round(heldC * c.div / 4), payP = Math.round(heldP * c.div / 4);
+    if (payC > 0) S.cash += payC;
+    if (payP > 0) ensurePerson().cash += payP;
+    if (payP > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ dividend · ' + c.name, amt: payP });
+    if (payC + payP > 0) c.lastDividendPay = payC + payP;
+  }
   const big = Math.abs(move) >= 0.12;
   if ((heldC + heldP > 0 || big) && typeof news === 'function') {
     const verdict = first ? 'in its first reported quarter' : (surprise >= 0 ? `, beating estimates by ${(surprise * 100).toFixed(0)}%` : `, missing estimates by ${(-surprise * 100).toFixed(0)}%`);
@@ -168,7 +202,7 @@ function corpQuarterEvents(c) {
       const id = targets[0][0], b = targets[0][1];
       const val = b.value || 0;
       const heldXC = ((S.holdingsX || {})[id] || {}).qty || 0, heldXP = ((S.holdingsXP || {})[id] || {}).qty || 0;
-      if (heldXC + heldXP > 0) { S.cash += Math.round(heldXC * b.price * 1.15); ensurePerson().cash += Math.round(heldXP * b.price * 1.15); delete S.holdingsX[id]; if (S.holdingsXP) delete S.holdingsXP[id]; }
+      if (heldXC + heldXP > 0) { S.cash += Math.round(heldXC * b.price * 1.15); const pAmt = Math.round(heldXP * b.price * 1.15); ensurePerson().cash += pAmt; if (pAmt > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ buyout · ' + b.name, amt: pAmt }); delete S.holdingsX[id]; if (S.holdingsXP) delete S.holdingsXP[id]; }
       delete S.extra[id];
       c.price = Math.max(0.5, c.price + (val * 0.5) / Math.max(1, c.shares || 1));
       corpWire(c, `${c.name} bought ${b.name} for ${fmtMoney(val, true)}.`, `buying ${b.name}`, true);
@@ -196,6 +230,7 @@ function extraQuarterlyReport(b) {
     const payC = Math.round(heldC * div / 4), payP = Math.round(heldP * div / 4);
     if (payC > 0) S.cash += payC;
     if (payP > 0) ensurePerson().cash += payP;
+    if (payP > 0 && typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ dividend · ' + b.name, amt: payP });
   }
   return b.lastReport;
 }

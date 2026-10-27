@@ -1689,7 +1689,7 @@ PANELS.company = () => {
       ${F ? `<h5>Fleet</h5><div class="kv"><span>${F.levels[c.fleet].name}</span><b>${c.fleet < F.levels.length - 1 ? `<button class="btn" data-a="fleetUp" data-x="${c.a3}">Upgrade · ${fmtMoney(F.levels[c.fleet + 1].cost, true)}</button>` : 'Biggest there is'}</b></div>${c.fleet ? `<button class="btn" data-a="fleetSell" data-x="${c.a3}">Sell fleet level · +${fmtMoney(F.levels[c.fleet].cost * 0.6, true)}</button>` : ''}` : ''}
       <h5>Loans &amp; listing</h5>
       <div class="kv"><span>Your loan</span><b>${fmtMoney(S.loan, true)} · Bank will lend ${fmtMoney(maxLoan(), true)}</b></div>
-      <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs full board + 2 profitable weeks)</button>` : '<span class="muted small">Listed</span>'}</div>
+      <div class="row"><button class="btn" data-a="borrow">BORROW</button><button class="btn" data-a="repay">REPAY ALL</button><button class="btn" data-a="boardMeeting" data-x="${c.a3}">BOARD MEETING</button>${!c.listed ? `<button class="btn" data-a="ipo" data-x="${c.a3}">IPO (needs full board + 2 profitable weeks)</button>` : '<span class="muted small">Listed</span>'}</div>
       <h5>Website, stock &amp; tax</h5>
       <div class="kv"><span>Website</span><b>${WEB_TIERS[c.web.tier].name} · ${oe.visitors.toLocaleString()} visitors/week · ${fmtMoney(oe.profit, true)}/week</b></div>
       <div class="kv"><span>Tax in ${esc(cname(c.a3))}</span><b>${Math.round(country(c.a3).tax * 100)}% corporate — change it in Nation</b></div>
@@ -2336,6 +2336,50 @@ PANELS.calendar = () => {
     <div class="wcal-grid">${cells}</div>
     <div class="wcal-sel"><h4>${fmtDate(sel)}</h4>${selEvs.length ? selEvs.map(e => `<div class="card in"><b>${esc(e.title)}</b><p class="muted small">${esc(e.desc || '')}</p></div>`).join('') : '<p class="muted small">Nothing on this day.</p>'}</div></div>`);
 };
+// ---------- Board meeting ----------
+// Once a quarter, the CEO calls the board: set the quarterly dividend
+// (a percentage of company value), the CEO base salary, or both —
+// leaving one blank keeps it as is. The board votes on their ratings,
+// majority wins, and every member says why. Anything voted down keeps
+// its current value.
+function boardVoteFor(c, m, kind, val) {
+  const annual = Math.max(0, (c.avg || 0) * 52);
+  const loy = m.loy || 0, exp = m.exp || 0;
+  if (kind === 'div') {
+    const payout = val * companyValue(c) / 100;
+    const affordable = payout <= annual || val <= 25;
+    if (affordable && loy >= 40) return { yes: true, reason: 'The payout is affordable — backing your plan.' };
+    if (affordable) return { yes: true, reason: 'The numbers work.' };
+    if (exp >= 60) return { yes: false, reason: 'This payout is bigger than what we earn.' };
+    if (loy >= 75) return { yes: true, reason: 'Backing you, even though it stretches us.' };
+    return { yes: false, reason: 'Too big a payout for our earnings.' };
+  }
+  const affordable = val <= 250000 || val <= Math.max(annual * 0.25, 0);
+  if (affordable && loy >= 40) return { yes: true, reason: 'Fair pay for the job — backing your plan.' };
+  if (affordable) return { yes: true, reason: 'Reasonable salary.' };
+  if (exp >= 60) return { yes: false, reason: 'That salary is too high for our profit.' };
+  if (loy >= 75) return { yes: true, reason: 'Backing you, even though it stretches us.' };
+  return { yes: false, reason: 'Not convinced this helps the company.' };
+}
+PANELS.boardMeeting = () => {
+  const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : {};
+  const c = S.co[cur.a3] || S.co[S.home];
+  const back = `<button class="btn wide" data-a="boardBack" data-x="${c ? c.a3 : ''}">← Back</button>`;
+  if (!c) return panelShell('Board meeting', '', back + '<p class="muted small">No company here.</p>');
+  if (c.bankrupt) return panelShell('Board meeting', '', `<div class="card in"><b>${esc(c.name)}</b><p class="muted small">This company is bankrupt — it earns nothing until it is rebuilt.</p></div>${back}`);
+  const board = (typeof ensureBoard === 'function') ? ensureBoard(c) : [];
+  if (!board.length) return panelShell('Board meeting', '', `<div class="card in"><b>${esc(c.name)}</b><p class="muted small">No board yet — hire executives in Offices first, then call a meeting.</p></div>${back}`);
+  const q = quarterLabel(S.day);
+  if (c.lastBoardQ === q) {
+    const r = UI.boardResult && UI.boardResult.a3 === c.a3 ? UI.boardResult : null;
+    return panelShell('Board meeting', '', `<div class="card in"><b>${esc(c.name)}</b><p>Already held a board meeting this quarter. The next one opens next quarter.</p>${r ? `<p class="muted small">Last meeting: dividend ${r.divSet != null ? (r.divOk ? 'set to ' + r.divSet + '%' : 'voted down, kept at ' + (c.divPct || 0) + '%') : 'untouched'} · salary ${r.salSet != null ? (r.salOk ? 'set to ' + fmtMoney(r.salSet, true) : 'voted down, kept at ' + fmtMoney(c.ceoSalary || 0, true)) : 'untouched'}</p>` : ''}</div>${r ? `<h4>Votes</h4>${r.votes.map(v => `<div class="card in"><b>${esc(v.name)} · ${esc(v.role)}</b>${v.div != null ? `<p class="muted small">Dividend: ${v.div ? 'Yes' : 'No'} — ${esc(v.divReason)}</p>` : ''}${v.sal != null ? `<p class="muted small">Salary: ${v.sal ? 'Yes' : 'No'} — ${esc(v.salReason)}</p>` : ''}</div>`).join('')}` : ''}${back}`);
+  }
+  return panelShell('Board meeting', '', `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">Value ${fmtMoney(companyValue(c), true)} · Current dividend ${c.divPct || 0}% of value per quarter · Current CEO salary ${fmtMoney(c.ceoSalary || 0, true)}/yr</div></div>
+  <p class="muted small">Set a dividend, a salary, or both. Leave one blank to keep it as is. The board votes and majority wins.</p>
+  <label class="muted small">QUARTERLY DIVIDEND (% of company value)</label><input id="boardDiv" class="qty" type="number" min="0" max="100" placeholder="${c.divPct || 0}">
+  <label class="muted small">CEO BASE SALARY ($/yr)</label><input id="boardSal" class="qty" type="number" min="0" placeholder="${c.ceoSalary || 0}" style="width:160px">
+  <button class="btn3d orange wide" data-a="boardVote" data-x="${c.a3}">TAKE VOTES</button>${back}`);
+};
 PANELS.inbox = () => {
   S.mail.forEach(m => { m.read = true; });
   return panelShell('Messages', `${S.mail.length} messages · News below`,
@@ -2701,7 +2745,9 @@ PANELS.offices = () => {
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
     ${mgrSection(c)}
-    ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}
+    ${c.bankrupt ? '<p class="muted small">Bankrupt — this company earns nothing until it is rebuilt.</p>' : ''}
+    <button class="btn wide" data-a="boardMeeting" data-x="${c.a3}">BOARD MEETING</button>
+    ${c.bankrupt ? '' : c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at a valuation you set, selling 5–100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><div class="row"><label class="muted small">SELL %</label><input id="ipoPct-${c.a3}" class="qty" type="number" value="100" min="5" max="100"><label class="muted small">VALUATION</label><input id="ipoVal-${c.a3}" class="qty" type="number" value="${Math.round(companyFairTotal(c))}" style="width:140px"></div><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}
     <button class="btn" data-a="officeAd" data-x="${c.a3}">📣 ADVERTISING FOR THIS COMPANY</button></div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
   const teamCards = teams.map(t => `<div class="card in"><b>${esc(t.name)}</b><div class="muted small">${esc(t.cityName)} · Value ${fmtMoney(t.value, true)} · Rating ${(t.rating5 || 3).toFixed(1)} / 5</div>
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
@@ -2782,21 +2828,23 @@ function tradeIpoHTML() {
   }).join('') || '<p style="color:#8b949e">No private companies you control yet. Buy 50% of a stock to control it, then list it here.</p>';
   let form = '';
   if (sel) {
-    const v = companyFairTotal(sel), price = v / sel.shares;
+    const v = UI.tradeIpoVal != null ? UI.tradeIpoVal : companyFairTotal(sel), price = v / sel.shares;
     const pct = UI.tradeIpoPct != null ? UI.tradeIpoPct : 100;
     const sold = Math.floor(sel.shares * pct / 100), gross = Math.round(sold * price), fee = Math.round(gross * 0.07), proceeds = gross - fee;
     form = `<div class="wtrade-card"><h4 style="margin:0 0 8px">Launch ${esc(sel.name)}</h4>
     <div class="kv"><span>Price per share</span><b>${fmtMoney(price)}</b></div>
     <div class="kv"><span>Shares in company</span><b>${sel.shares.toLocaleString()}</b></div>
     <div class="kv"><span>Valuation</span><b>${fmtMoney(v, true)}</b></div>
-    <label style="color:#8b949e;font-size:12px">SELL %</label>
-    <div class="row"><input id="tradeIpoPct" class="qty" type="number" value="${pct}" min="1" max="100"><button class="wtrade-btn ghost" data-a="tradeIpoPctSet">Update</button></div>
+    <label style="color:#8b949e;font-size:12px">SELL % (5–100)</label>
+    <div class="row"><input id="tradeIpoPct" class="qty" type="number" value="${pct}" min="5" max="100"><button class="wtrade-btn ghost" data-a="tradeIpoPctSet">Update</button></div>
+    <label style="color:#8b949e;font-size:12px">VALUATION (you set this)</label>
+    <div class="row"><input id="tradeIpoVal" class="qty" type="number" value="${Math.round(v)}" style="width:170px"></div>
     <div class="kv"><span>Shares sold</span><b>${sold.toLocaleString()}</b></div>
     <div class="kv"><span>Gross</span><b>${fmtMoney(gross, true)}</b></div>
     <div class="kv"><span>Fee (7%)</span><b>${fmtMoney(fee, true)}</b></div>
     <div class="kv"><span>You receive</span><b>${fmtMoney(proceeds, true)}</b></div>
     <button class="wtrade-btn buy" style="width:100%;margin-top:10px" data-a="tradeIpoLaunch" data-x="${sel.a3}">LAUNCH IPO</button>
-    <p style="color:#8b949e;font-size:13px">Price follows today's valuation — it is set when you launch. Needs a full board and 2 profitable weeks.</p></div>`;
+    <p style="color:#8b949e;font-size:13px">Valuation is yours to set — price follows it. Needs a full board and 2 profitable weeks.</p></div>`;
   }
   return `<h4 class="wtrade-h">LAUNCH AN IPO</h4><p style="color:#8b949e">Pick a company you control, choose how much to sell, and launch it on the Worl Exchange.</p>${rows}${form}`;
 }
@@ -2932,7 +2980,7 @@ function moreSheet() {
 // Two home pages: real stuff (the game) and the rest (chat, calendar,
 // settings). The money tiles ride on the real-stuff page.
 const PHONE_PAGES = [
-  { name: 'Real stuff', wallets: ['private', 'company', 'country'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport'] },
+  { name: 'Real stuff', wallets: ['private'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport'] },
   { name: 'More', wallets: [], apps: ['tawk', 'calendar', 'settings', 'help'] },
 ];
 function phoneHTML() {
@@ -3370,8 +3418,8 @@ const A = {
   tradeTab: x => { UI.tradeTab = x; renderPanel(); },
   tradeRange: x => { UI.tradeRange = x; renderPanel(); },
   tradeIpoSel: x => { UI.tradeIpoCo = x; UI.tradeTab = 'ipo'; renderPanel(); },
-  tradeIpoPctSet: () => { const el = document.getElementById('tradeIpoPct'); if (el) UI.tradeIpoPct = Math.min(100, Math.max(1, parseFloat(el.value) || 100)); renderPanel(); },
-  tradeIpoLaunch: x => { const pct = (UI.tradeIpoPct != null ? UI.tradeIpoPct : 100) / 100; act(() => goPublic(x, pct), 'IPO complete!'); },
+  tradeIpoPctSet: () => { const el = document.getElementById('tradeIpoPct'); if (el) UI.tradeIpoPct = Math.min(100, Math.max(5, parseFloat(el.value) || 100)); const ve = document.getElementById('tradeIpoVal'); if (ve && parseFloat(ve.value) > 0) UI.tradeIpoVal = parseFloat(ve.value); renderPanel(); },
+  tradeIpoLaunch: x => { const pe = document.getElementById('tradeIpoPct'), ve = document.getElementById('tradeIpoVal'); const pct = pe ? clamp(parseFloat(pe.value) || 100, 5, 100) / 100 : (UI.tradeIpoPct != null ? UI.tradeIpoPct : 100) / 100; const val = ve ? parseFloat(ve.value) : (UI.tradeIpoVal != null ? UI.tradeIpoVal : null); act(() => goPublic(x, pct, val), 'IPO complete!'); },
   issueShares: x => {
     const c = S.co[x]; if (!c) return toast('Company not found', 'bad');
     const qty = Math.floor(+($('issueQty') ? $('issueQty').value : 0)); if (!qty || qty <= 0) return toast('Enter a share count', 'bad');
@@ -3558,7 +3606,53 @@ const A = {
   fleetSell: x => act(() => sellFleet(x), 'Fleet level sold'),
   borrow: () => act(() => borrow(Math.min(maxLoan(), Math.max(50000, maxLoan() / 4))), 'Loan taken'),
   repay: () => act(() => repay(Math.min(S.loan, Math.max(0, S.cash))), 'Loan repaid'),
-  ipo: x => { const el = document.getElementById('ipoPct'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => goPublic(x, pct), 'IPO complete!'); },
+  ipo: x => { const el = document.getElementById('ipoPct-' + x) || document.getElementById('ipoPct'); const ve = document.getElementById('ipoVal-' + x); const pct = el ? clamp(parseFloat(el.value) || 100, 5, 100) / 100 : 1; const val = ve ? parseFloat(ve.value) : null; act(() => goPublic(x, pct, val), 'IPO complete!'); },
+  boardMeeting: x => {
+    const c = S.co[x];
+    if (!c) return;
+    if (!controlled(x)) { toast('Only companies you control hold board meetings.', 'bad'); return; }
+    UI.boardReturn = (UI.modal === 'phone' && UI.phoneApp) ? UI.phoneApp : (UI.panel || 'offices');
+    UI.panel = 'boardMeeting'; UI.stack = [{ a3: x }];
+    if (UI.modal === 'phone' && document.querySelector('#phoneCard')) {
+      UI.phoneApp = 'boardMeeting';
+      const mbox = document.querySelector('#modal .mbox.phone'); if (mbox) mbox.innerHTML = phoneHTML();
+      renderPhoneApp();
+    } else { renderPanel(); }
+  },
+  boardBack: x => {
+    const back = UI.boardReturn || 'offices';
+    UI.panel = back; UI.stack = [];
+    if (UI.modal === 'phone' && document.querySelector('#phoneCard')) {
+      UI.phoneApp = back;
+      const mbox = document.querySelector('#modal .mbox.phone'); if (mbox) mbox.innerHTML = phoneHTML();
+      renderPhoneApp();
+    } else { renderPanel(); }
+  },
+  boardVote: x => {
+    const c = S.co[x]; if (!c) return;
+    if (c.lastBoardQ === quarterLabel(S.day)) { toast('Already held a meeting this quarter.', 'bad'); return; }
+    const board = (typeof ensureBoard === 'function') ? ensureBoard(c) : [];
+    if (!board.length) { toast('Hire a board first.', 'bad'); return; }
+    const divEl = document.getElementById('boardDiv'), salEl = document.getElementById('boardSal');
+    const divSet = divEl && divEl.value !== '' ? clamp(Math.round(parseFloat(divEl.value) || 0), 0, 100) : null;
+    const salSet = salEl && salEl.value !== '' ? Math.max(0, Math.round(parseFloat(salEl.value) || 0)) : null;
+    if (divSet == null && salSet == null) { toast('Set a dividend, a salary, or both.', 'bad'); return; }
+    const votes = board.map(m => {
+      const v = { name: m.name, role: m.role };
+      if (divSet != null) { const r = boardVoteFor(c, m, 'div', divSet); v.div = r.yes; v.divReason = r.reason; }
+      if (salSet != null) { const r = boardVoteFor(c, m, 'sal', salSet); v.sal = r.yes; v.salReason = r.reason; }
+      return v;
+    });
+    const majority = arr => arr.filter(Boolean).length > arr.length / 2;
+    const divOk = divSet != null ? majority(votes.map(v => v.div)) : null;
+    const salOk = salSet != null ? majority(votes.map(v => v.sal)) : null;
+    if (divOk) c.divPct = divSet;
+    if (salOk) c.ceoSalary = salSet;
+    c.lastBoardQ = quarterLabel(S.day);
+    UI.boardResult = { a3: x, divSet, salSet, divOk, salOk, votes };
+    if (UI.modal === 'phone' && document.querySelector('#phoneCard')) renderPhoneApp(); else renderPanel();
+    toast(divOk === false && salOk === false ? 'Board voted both down.' : divOk === false ? 'Dividend voted down — salary approved.' : salOk === false ? 'Salary voted down — dividend approved.' : 'Board approved.', divOk === false && salOk === false ? 'bad' : 'good');
+  },
   closeLoc: x => {
     const [a3, id] = x.split('|');
     act(() => { closeLoc(S.co[a3], id); return null; }, 'Location closed');

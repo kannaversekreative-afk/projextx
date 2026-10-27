@@ -1,10 +1,24 @@
 // ---------- Worl Bank ----------
 // The banking app, laid out like a modern bank app (original names
-// and art only): three accounts — Personal, Business, Country —
-// four quick actions, and your loans. Everything shown is real
-// in-game state: Personal is your own money, Business is company
-// money, Country is your office budget. There is no interest
-// mechanic in the game, so no APY is shown anywhere.
+// and art only): ONE account — Personal, your own money — plus your
+// loans, and profit-and-loss statistics for your business and your
+// country. Business and country are NOT bank accounts: they have no
+// balance you spend from, only profit and loss. Every week your
+// personal account shows + weekly profit; dividends land quarterly.
+// There is no interest mechanic in the game, so no APY is shown
+// anywhere.
+// Bank feed: every payment into your personal money is recorded here
+// (weekly profit, dividends, IPO sales), newest first, capped.
+function bankFeedPush(e) {
+  if (!Array.isArray(S.bankFeed)) S.bankFeed = [];
+  S.bankFeed.unshift(e);
+  if (S.bankFeed.length > 100) S.bankFeed.length = 100;
+}
+function bankFeedHTML(limit) {
+  const feed = (S.bankFeed || []).slice(0, limit);
+  if (!feed.length) return '<p class="wbank-note">No payments yet — your first weekly profit lands at the end of your first week.</p>';
+  return `<div class="list">${feed.map(e => `<div class="kv"><span>${fmtDate(e.d)} · ${esc(e.text)}</span><b>${e.amt >= 0 ? '+' + fmtMoney(e.amt, true) : fmtMoney(e.amt, true)}</b></div>`).join('')}</div>`;
+}
 // Account, routing and card numbers are randomized once per save and
 // kept in S.bankAcct — display only, they move no money.
 function bankDigits(n) {
@@ -45,11 +59,11 @@ function countryNote() {
   return 'Hold an office to get a country budget';
 }
 function bankAccounts() {
+  // Personal is the only account. Business and country are statistics
+  // (see the Business P&L and Country P&L views), never balances.
   const P = ensurePerson();
   return [
     { id: 'personal', name: 'Personal', bal: P.cash, note: 'Your own money · spend as Private' },
-    { id: 'business', name: 'Business', bal: S.cash, note: 'Company money · spend as Company' },
-    { id: 'country', name: 'Country', bal: countryBalance(), note: countryNote() },
   ];
 }
 function bankLoanTotals() {
@@ -75,8 +89,8 @@ function bankPanelHTML() {
     ${S.loan > 0 ? `<div class="wbank-loanrow"><span>Main loan</span><b>${fmtMoney(S.loan, true)} owed</b><button class="wbank-smallbtn" data-a="repay">Repay in full</button></div>` : ''}
     ${lt.loans.map(l => `<div class="wbank-loanrow"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || (S.loan > 0 ? '' : '<p class="wbank-note">No loans outstanding.</p>')}`;
   } else if (view === 'account') {
-    const sel = UI.bankAcctSel || 'business';
-    const a = bankAccounts().find(x => x.id === sel) || bankAccounts()[1];
+    const sel = UI.bankAcctSel || 'personal';
+    const a = bankAccounts().find(x => x.id === sel) || bankAccounts()[0];
     const num = acct[a.id] || {};
     body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
     <h3 class="wbank-h">${a.name} account</h3>
@@ -84,7 +98,8 @@ function bankPanelHTML() {
     <div class="wbank-numbox"><span>Account number</span><b>${num.account}</b></div>
     <div class="wbank-numbox"><span>Routing number</span><b>${num.routing}</b></div>
     ${a.id === 'personal' ? '<button class="btn" data-a="bankView" data-x="card">View card</button>' : ''}
-    <p class="wbank-note">Your in-game Worl Bank account. These numbers are display only.</p>`;
+    <p class="wbank-note">Your in-game Worl Bank account. These numbers are display only.</p>
+    <h3 class="wbank-h">Recent payments</h3>${bankFeedHTML(30)}`;
   } else if (view === 'card') {
     const grouped = acct.personal.card.replace(/(\d{4})(?=\d)/g, '$1 ');
     body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
@@ -134,6 +149,21 @@ function bankPanelHTML() {
       <h3 class="wbank-h">Your loans here</h3>
       ${my.map(l => `<div class="wbank-loanrow"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || '<p class="wbank-note">No loans from this bank yet.</p>'}`;
     }
+  } else if (view === 'bizpnl') {
+    const cos = (typeof mine === 'function') ? mine() : [];
+    const tot = cos.reduce((t, c) => t + ((c.week && c.week.profit) || 0), 0);
+    body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
+    <h3 class="wbank-h">Business profit and loss</h3><p class="wbank-note">Your companies are statistics, not a bank account. Their net comes to your personal money every week as + weekly profit.</p>
+    <div class="wbank-kv"><span>This week's company net</span><b>${fmtMoney(tot, true)}</b></div>
+    ${cos.map(c => `<div class="wbank-loanrow"><span><b>${esc(c.name)}</b><small>${c.listed ? 'Listed' : 'Private'} · Value ${fmtMoney(companyValue(c), true)}</small></span><b>${fmtMoney((c.week && c.week.profit) || 0, true)}/week</b></div>`).join('') || '<p class="wbank-note">No companies you control yet.</p>'}`;
+  } else if (view === 'countrypnl') {
+    const cs = country(S.home);
+    body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
+    <h3 class="wbank-h">Country profit and loss</h3><p class="wbank-note">Your country is statistics, not a bank account. ${esc(countryNote())}</p>
+    <div class="wbank-kv"><span>Budget</span><b>${fmtMoney(countryBalance(), true)}</b></div>
+    <div class="wbank-kv"><span>Tax revenue so far</span><b>${fmtMoney(cs.taxRev || 0, true)}</b></div>
+    <div class="wbank-kv"><span>Corporate tax</span><b>${Math.round(cs.tax * 100)}%</b></div>
+    <div class="wbank-kv"><span>Stability</span><b>${Math.round(cs.stab)}/100</b></div>`;
   } else {
     const accts = bankAccounts();
     body = `<div class="wbank-cards">${accts.map(a => `<button class="wbank-tile" data-a="bankAcct" data-x="${a.id}"><b>${a.name}</b><span>${fmtMoney(a.bal, true)}</span><small>${esc(a.note)}</small></button>`).join('')}</div>
@@ -146,8 +176,11 @@ function bankPanelHTML() {
     <div class="wbank-cards">
       <button class="wbank-tile" data-a="bankView" data-x="loan"><b>Loans</b><span>${lt.count === 0 ? 'No loans' : `${lt.count} loan${lt.count === 1 ? '' : 's'} · ${fmtMoney(lt.remaining, true)} left`}</span><small>${lt.weekly > 0 ? fmtMoney(lt.weekly) + '/week' : 'View loans →'}</small></button>
       <button class="wbank-tile" data-a="bankView" data-x="citybanks"><b>City banks</b><span>Bank of every city</span><small>Loans on approval, profit and loss →</small></button>
+      <button class="wbank-tile" data-a="bankView" data-x="bizpnl"><b>Business P&L</b><span>Profit and loss, not a balance</span><small>Your companies →</small></button>
+      <button class="wbank-tile" data-a="bankView" data-x="countrypnl"><b>Country P&L</b><span>Budget and tax, not a balance</span><small>Your country →</small></button>
     </div>
-    ${lt.count > 0 ? `<div class="wbank-next"><b>Up next: loan payment ${fmtMoney(lt.weekly)}/week</b><span>${lt.loans.reduce((t, l) => t + l.weeksLeft, 0)} payments left across your loans</span></div>` : `<div class="wbank-next"><b>Up next: take your first loan</b><span>Borrow to build, repay weekly from your cash</span></div>`}`;
+    ${lt.count > 0 ? `<div class="wbank-next"><b>Up next: loan payment ${fmtMoney(lt.weekly)}/week</b><span>${lt.loans.reduce((t, l) => t + l.weeksLeft, 0)} payments left across your loans</span></div>` : `<div class="wbank-next"><b>Up next: take your first loan</b><span>Borrow to build, repay weekly from your cash</span></div>`}
+    <h3 class="wbank-h">Recent payments</h3>${bankFeedHTML(8)}`;
   }
   return panelShell('Bank', 'Worl Bank — your money, loans, and career.',
     `<div class="wbank">${head}${body}</div>`);
