@@ -2905,8 +2905,9 @@ function phoneHTML() {
   // The phone frame: home grid, or one app on its screen. No X button
   // anywhere - tapping outside the phone goes back (to the grid from
   // an app, to the map from the grid), and Apps goes to the grid.
-  const unread = (S.mail || []).filter(m => !m.read).length;
-  const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
+  // Top row, like a real phone: date top-left, notch centred, nothing
+  // top-right. No mail indicator here (mail still lives in the Web app).
+  const toprow = `<div class="phone-toprow"><span>${fmtDate(S.day)}</span><div class="phone-notch"></div><span></span></div>`;
   // Home-screen layout: 4-across icon tiles, pages with dots, and a
   // bottom bar (dock) pinned at the bottom of the grid AND of every
   // app. The dock's first, bottom-left slot is Home — tapping it
@@ -2926,10 +2927,9 @@ function phoneHTML() {
     const apps = pdef.apps.map(k => MENU_ITEMS.find(m => m[0] === k)).filter(Boolean);
     const dollar = pdef.wallet ? `<button class="phone-app" data-a="bankWallet" data-x="${pdef.wallet}"><span class="phone-app-ic" style="background:#12a150">$</span><span class="phone-app-label">${pdef.wallet === 'private' ? 'Personal $' : pdef.wallet === 'company' ? 'Business $' : 'Country $'}</span></button>` : '';
     const dots = `<div class="phone-dots">${PHONE_PAGES.map((p, i) => `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="${p.name}"></button>`).join('')}</div>`;
-    return `<div class="phone-notch"></div>${status}<div class="phone-pagetitle">${pdef.name}</div><div class="phone-grid">${dollar}${apps.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
+    return `${toprow}<div class="phone-grid">${dollar}${apps.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
   }
-  const entry = MENU_ITEMS.find(m => m[0] === UI.phoneApp);
-  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><span></span><b>${esc(entry ? entry[2] : (UI.phoneApp === 'profile' ? 'You' : UI.phoneApp === 'departures' ? 'Airport' : UI.phoneApp === 'web' ? 'Web' : UI.phoneApp))}</b><span></span></div><div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
+  return `${toprow}<div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
 }
 function openMenuPopup() {
   // The phone: every menu item is an app on a home screen. Tapping
