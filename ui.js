@@ -1776,7 +1776,7 @@ PANELS.profile = () => {
   const you = (S.you || { name: 'Founder' });
   const mineCount = (typeof mine === 'function') ? mine().length : 0;
   const job = P.job || { track: 'civilian', rank: 0, weeks: 0 };
-  const ladder = jobLadder(job.track);
+  const ladder = jobLadder(job.track, typeof companyForJob === 'function' ? companyForJob(job) : null);
   const cur = ladder[job.rank] || ladder[0];
   const next = ladder[job.rank + 1];
   const bar = (label, v) => `<div class="kv"><span>${label}</span><b>${Math.round(v)}/100</b></div><div style="background:#dbeafe;height:10px;border-radius:5px;margin:2px 0 8px"><div style="width:${Math.round(v)}%;background:#2563eb;height:10px;border-radius:5px"></div></div>`;
@@ -1792,10 +1792,15 @@ PANELS.profile = () => {
     <p class="muted small">Invest moves your money into your business. Pay yourself moves business money to you.</p></div>
     <div class="card in"><h4>💼 Career</h4>
     <div class="kv"><span>Job</span><b>${esc(cur.title)} · ${fmtMoney(cur.salary, true)}/week · ${job.weeks} weeks</b></div>
-    ${next ? `<button class="btn" data-a="personPromo">Ask for promotion to ${esc(next.title)} (needs ${next.fame} fame, ${next.weeks} weeks)</button>` : '<p class="muted small">Top of this career.</p>'}
+    ${job.track === 'company' && typeof companyForJob === 'function' && companyForJob(job) ? `<div class="kv"><span>Company</span><b>${esc(companyForJob(job).name)} · Value ${fmtMoney(companyValueForJob(job), true)}${job.valueAtPromo ? ` · At last promotion ${fmtMoney(job.valueAtPromo, true)}` : ''}</b></div><p class="muted small">Analyst and above: promotion needs the company to double since your last promotion — and it jumps you, not just one step. Lose more than half the company's value and you are fired.</p>` : ''}
+    ${next ? `<button class="btn" data-a="personPromo">Ask for promotion to ${esc(next.title)} (needs ${job.track === 'company' && job.rank >= 3 ? 'company to double, ' : `${next.fame} fame, `}${next.weeks} weeks)</button>` : '<p class="muted small">Top of this career.</p>'}
+    ${job.track !== 'company' ? `<button class="btn" data-a="personApplyCompany" data-x="${S.home}">Apply for a job at ${esc(cname(S.home))}'s main company</button><p class="muted small">Company jobs are not automatic: a company losing money is not hiring. Entry is coffee / fast food level, then manager, then analyst in the office, then on to CEO.</p>` : ''}
     <div class="row wrap"><button class="btn small" data-a="personJoinAgency" data-x="dom">Join ${esc(agencyOf(S.home)[0])}</button><button class="btn small" data-a="personJoinAgency" data-x="for">Join ${esc(agencyOf(S.home)[1])}</button><button class="btn small" data-a="personEnlist">Enlist in the military</button></div>
     ${office ? `<div class="kv"><span>Office</span><b>${esc(office.title)} · ${fmtMoney(office.salary, true)}/week</b></div><button class="btn" data-a="policy">Announce policy (office budget)</button>` : ''}
     <p class="muted small">Jobs pay you every week. Agencies cut your risk of getting caught. The military opens the General advisor.</p></div>
+    <div class="card in"><h4>🎓 College</h4>
+    ${P.college ? `<div class="kv"><span>Studying</span><b>${esc(P.college.name)} · ${P.college.weeksLeft} weeks left</b></div>` : `<p class="muted small">College is across from the capital. Associate unlocks manager work and a mayor run, Bachelor unlocks analyst work, governor and congress runs, Master unlocks director work and a president run.</p><div class="row wrap">${COLLEGE_DEGREES.map(d => `<button class="btn small" data-a="personEnrollCollege" data-x="${d.id}">${esc(d.name)} · ${fmtMoney(d.cost, true)} · ${d.weeks} weeks${d.req ? ` · Needs ${esc(COLLEGE_DEGREES.find(x => x.id === d.req).name)}` : ''}${(P.degrees || []).includes(d.id) ? ' ✓' : ''}</button>`).join('')}</div>`}
+    ${(P.degrees || []).length ? `<div class="kv"><span>Degrees</span><b>${P.degrees.map(id => esc((COLLEGE_DEGREES.find(x => x.id === id) || {}).name || id)).join(', ')}</b></div>` : ''}</div>
     <div class="card in"><h4>🏠 Your assets</h4>
     <div class="kv"><span>Buildings</span><b>${(S.props || []).length} · ${fmtMoney(propValue(), true)}</b></div>
     <div class="kv"><span>Rating</span><b>${(S.rating || 0).toFixed(1)} / 5</b></div>
@@ -3344,6 +3349,8 @@ const A = {
   personInvest: x => { act(() => transferToBusiness(x === 'all' ? 'all' : +x), 'Invested in your business'); tutCheck(); },
   personPay: x => act(() => transferToPersonal(x === 'all' ? 'all' : +x), 'Paid yourself'),
   personPromo: () => act(() => promoteJob(), 'Promoted!'),
+  personApplyCompany: x => act(() => applyCompanyJob(x), 'Hired!'),
+  personEnrollCollege: x => act(() => enrollCollege(x), 'Enrolled!'),
   personJoinAgency: x => act(() => joinAgency(x), 'Joined the agency'),
   personEnlist: () => act(() => enlistMilitary(), 'Enlisted'),
   cabType: x => { UI.cabHire = { type: x }; if (typeof cabCandidates === 'function') cabCandidates(x); renderPanel(); },

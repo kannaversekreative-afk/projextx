@@ -29,6 +29,20 @@ function defaultPerson() {
     ranOnce: false,
   };
 }
+// Assistant-decided values (Nicholas: "idk, up to you" for Q1, "you decide" for Q5).
+// Employee life path: an employee starts with $5,000 personal money.
+// Next city unlock: $25,000. These are the life-path values; existing
+// leader/tycoon starts ($250,000 personal) are unchanged.
+const EMPLOYEE_START_CASH = 5000;
+const CITY_UNLOCK_COST = 25000;
+// College, across from the capital. Associate unlocks manager-level
+// work and a mayor run; Bachelor unlocks analyst work, governor and
+// congress runs; Master unlocks director work and a president run.
+const COLLEGE_DEGREES = [
+  { id: 'assoc', name: 'Associate Degree', weeks: 104, cost: 10000, req: null },
+  { id: 'bachelor', name: "Bachelor's Degree", weeks: 208, cost: 25000, req: 'assoc' },
+  { id: 'master', name: "Master's Degree", weeks: 104, cost: 20000, req: 'bachelor' }
+];
 function clampMeter(v) { return Math.max(0, Math.min(100, Math.round(v || 0))); }
 function ensurePerson() {
   if (typeof S === 'undefined' || !S) return defaultPerson();
@@ -128,24 +142,106 @@ const AGENCIES = { USA: ['FBI', 'CIA'], GBR: ['MI5', 'MI6'], RUS: ['FSB', 'SVR']
 function agencyOf(a3) { return AGENCIES[a3] || ['Domestic Intelligence', 'Foreign Intelligence']; }
 
 // ---------- jobs ----------
-function jobLadder(track) {
+function companyForJob(job) {
+  if (!job || !job.company) return null;
+  try {
+    if (typeof S !== 'undefined' && S) {
+      if (S.co && S.co[job.company]) return S.co[job.company];
+      if (S.extra && S.extra[job.company]) return S.extra[job.company];
+    }
+  } catch (e) {}
+  return null;
+}
+function companyValueForJob(job) {
+  const c = companyForJob(job);
+  if (!c) return 0;
+  try { return typeof companyValue === 'function' ? companyValue(c) : (c.price || 0) * (c.shares || 0); } catch (e) { return 0; }
+}
+function jobLadder(track, company) {
+  if (track === 'company') {
+    const sec = company ? (company.sector || '') : '';
+    const entry = sec.includes('Coffee') ? 'Barista' : (sec.includes('Restaurant') || sec.includes('Fast')) ? 'Cashier' : 'Entry Associate';
+    return [
+      { title: entry, salary: 400, fame: 0, weeks: 0 },
+      { title: 'Shift Lead', salary: 650, fame: 5, weeks: 8 },
+      { title: 'Store Manager', salary: 1100, fame: 10, weeks: 26 },
+      { title: 'Analyst', salary: 2000, fame: 15, weeks: 52 },
+      { title: 'Senior Analyst', salary: 3500, fame: 20, weeks: 78 },
+      { title: 'Sr. Manager', salary: 6000, fame: 25, weeks: 104 },
+      { title: 'Director', salary: 12000, fame: 35, weeks: 156 },
+      { title: 'VP', salary: 25000, fame: 45, weeks: 208 },
+      { title: 'CEO', salary: 60000, fame: 60, weeks: 260 }
+    ];
+  }
   const ag = agencyOf(S.home);
   if (track === 'agency-dom') return [{ title: ag[0] + ' Agent', salary: 1500, fame: 10, weeks: 0 }, { title: ag[0] + ' Special Agent', salary: 2500, fame: 25, weeks: 26 }, { title: ag[0] + ' Director', salary: 5000, fame: 45, weeks: 52 }];
   if (track === 'agency-for') return [{ title: ag[1] + ' Officer', salary: 1500, fame: 10, weeks: 0 }, { title: ag[1] + ' Senior Officer', salary: 2500, fame: 25, weeks: 26 }, { title: ag[1] + ' Director', salary: 5000, fame: 45, weeks: 52 }];
   if (track === 'military') return [{ title: 'Private', salary: 500, fame: 0, weeks: 0 }, { title: 'Sergeant', salary: 1000, fame: 10, weeks: 26 }, { title: 'Officer', salary: 2000, fame: 20, weeks: 52 }, { title: 'General', salary: 5000, fame: 40, weeks: 104 }];
   return [{ title: 'Factory worker', salary: 600, fame: 0, weeks: 0 }, { title: 'Shift lead', salary: 900, fame: 10, weeks: 4 }, { title: 'Supervisor', salary: 1400, fame: 15, weeks: 12 }, { title: 'Manager', salary: 2200, fame: 20, weeks: 26 }, { title: 'Executive', salary: 4000, fame: 30, weeks: 52 }];
 }
-function jobTitle(job) { const l = jobLadder(job.track); return (l[job.rank] || l[0]).title; }
-function jobSalary(job) { const l = jobLadder(job.track); return (l[job.rank] || l[0]).salary; }
+function jobTitle(job) { const l = jobLadder(job.track, companyForJob(job)); return (l[job.rank] || l[0]).title; }
+function jobSalary(job) { const l = jobLadder(job.track, companyForJob(job)); return (l[job.rank] || l[0]).salary; }
 function promoteJob() {
   const P = ensurePerson();
-  const l = jobLadder(P.job.track);
+  const l = jobLadder(P.job.track, companyForJob(P.job));
   if (P.job.rank >= l.length - 1) return 'Already at the top of this career.';
   const next = l[P.job.rank + 1];
+  // Company career: time gets you to Analyst (rank 3). After that,
+  // performance decides — and doubling the company jumps you, it
+  // does not just level you up one step. Doubling is hard on purpose:
+  // it needs the company's value to actually double since your last promotion.
+  if (P.job.track === 'company') {
+    if (P.job.weeks < next.weeks) return `Need ${next.weeks} weeks in this job for ${next.title} (you have ${P.job.weeks}).`;
+    if (P.job.rank >= 3) {
+      const cur = companyValueForJob(P.job), base = P.job.valueAtPromo || cur;
+      if (!cur || cur < base * 2) return `Analyst-level promotion needs the company to double since your last promotion (now ${fmtMoney(cur, true)}, need ${fmtMoney(base * 2, true)}).`;
+      const jump = Math.min(2, l.length - 1 - P.job.rank);
+      P.job.rank += jump; P.job.weeks = 0; P.job.valueAtPromo = cur;
+      if (typeof news === 'function') news('Person', `You jumped to ${l[P.job.rank].title} after doubling the company.`, S.home);
+      return null;
+    }
+    P.job.rank++; P.job.weeks = 0;
+    if (P.job.rank === 3) P.job.valueAtPromo = companyValueForJob(P.job);
+    if (typeof news === 'function') news('Person', `You were promoted to ${next.title}.`, S.home);
+    return null;
+  }
   if (P.fame < next.fame) return `Need ${next.fame} fame for ${next.title} (you have ${Math.round(P.fame)}).`;
   if (P.job.weeks < next.weeks) return `Need ${next.weeks} weeks in this career for ${next.title} (you have ${P.job.weeks}).`;
   P.job.rank++; P.job.weeks = 0;
   if (typeof news === 'function') news('Person', `You were promoted to ${next.title}.`, S.home);
+  return null;
+}
+// Apply for a company job — NOT automatic. A company that is losing
+// money is not hiring, and you cannot hold two company jobs at once.
+// Entry jobs need no degree; the company you apply to is the one you work for.
+function applyCompanyJob(key) {
+  const P = ensurePerson();
+  if (P.job && P.job.track === 'company') return 'You already have a company job. Quit it first to apply elsewhere.';
+  let c = null;
+  try {
+    if (S.co && S.co[key]) c = S.co[key];
+    else if (S.extra && S.extra[key]) c = S.extra[key];
+  } catch (e) {}
+  if (!c) return 'That company is not hiring right now.';
+  const wk = c.week || {};
+  if (wk.profit != null && wk.profit < 0) return `${c.name} is losing money and is not hiring right now.`;
+  const v = companyValueForJob({ company: key });
+  P.job = { track: 'company', rank: 0, weeks: 0, company: key, valueAtPromo: v, startValue: v };
+  if (typeof news === 'function') news('Person', `You were hired at ${c.name}.`, S.home);
+  return null;
+}
+function enrollCollege(id) {
+  const P = ensurePerson();
+  const d = COLLEGE_DEGREES.find(x => x.id === id);
+  if (!d) return 'That degree does not exist.';
+  if (P.college) return `You are already studying for ${P.college.name}.`;
+  if (!Array.isArray(P.degrees)) P.degrees = [];
+  if (P.degrees.includes(id)) return `You already have a ${d.name}.`;
+  if (d.req && !P.degrees.includes(d.req)) return `You need a ${COLLEGE_DEGREES.find(x => x.id === d.req).name} first.`;
+  if (P.cash < d.cost) return `You need ${fmtMoney(d.cost, true)} for a ${d.name} (you have ${fmtMoney(P.cash, true)}).`;
+  P.cash -= d.cost;
+  P.college = { id: d.id, name: d.name, weeksLeft: d.weeks };
+  if (typeof news === 'function') news('Person', `You enrolled in college for a ${d.name}.`, S.home);
   return null;
 }
 // Find a job: switch career track. Agency and military switches reuse
@@ -348,6 +444,31 @@ function personWeek() {
   const salary = P.office ? P.office.salary : jobSalary(P.job);
   P.cash += salary;
   P.job.weeks++;
+  // College: weeks tick down, degree lands when they run out.
+  if (P.college) {
+    P.college.weeksLeft--;
+    if (P.college.weeksLeft <= 0) {
+      if (!Array.isArray(P.degrees)) P.degrees = [];
+      P.degrees.push(P.college.id);
+      if (typeof news === 'function') news('Person', `You earned your ${P.college.name}.`, S.home);
+      P.college = null;
+    }
+  }
+  // Company career firing: if the company you work for has lost more
+  // than half its value since you were hired, you are fired. This is
+  // the proxy until analyst decision-making lands — then your own
+  // decisions will be what loses (or makes) the money.
+  if (P.job && P.job.track === 'company') {
+    const c = companyForJob(P.job);
+    if (!c) {
+      P.job = { track: 'civilian', rank: 0, weeks: 0 };
+      if (typeof news === 'function') news('Person', 'Your company job ended — that company is gone.', S.home);
+    } else if (P.job.startValue && companyValueForJob(P.job) < P.job.startValue * 0.5) {
+      const name = c.name;
+      P.job = { track: 'civilian', rank: 0, weeks: 0 };
+      if (typeof news === 'function') news('Person', `You were fired from ${name} after the company lost more than half its value.`, S.home);
+    }
+  }
   if (P.office) {
     const o = P.office;
     officeAddTreasury(o, Math.round(officeScopeGdp(o) * 0.00002));
