@@ -11,14 +11,11 @@ const UI = { panel: null, stack: [], modal: null, phoneApp: null, phoneStack: []
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const upCls = x => x >= 0 ? 'up' : 'down';
-// Time does NOT move on its own, and there is no age limit. The game
-// year only moves on the fixed Age bar at the bottom: + ages up one year
-// (free, runs stepYear()), − ages down one year (ad-gated, restores the
-// year snapshot taken before the last Age up, session only, up to 10
-// years back). Swiping the Age bar right / left does the same. Vehicles
+// Time does NOT move on its own, and there is no age limit. Time only
+// moves one week at a time: tap the date at the top right and press
+// YES. There is no year advance — weeks are the only step. Vehicles
 // animate on the map's own requestAnimationFrame loop, independent of
-// game time, so they keep moving while the player waits between Age
-// presses. A player can live 100 years, or 1000.
+// game time, so they keep moving while the player waits between weeks.
 const DAY_MS_BY_SPEED = [0, 0, 0, 0];
 const IC = {
   more: '<svg viewBox="0 0 28 28"><circle cx="6" cy="14" r="2.6" fill="currentColor"/><circle cx="14" cy="14" r="2.6" fill="currentColor"/><circle cx="22" cy="14" r="2.6" fill="currentColor"/></svg>',
@@ -994,13 +991,6 @@ async function boot() {
   let paperX = null;
   $('paper').addEventListener('pointerdown', e => { paperX = e.clientX; });
   $('paper').addEventListener('pointerup', e => { if (paperX == null) return; const dx = e.clientX - paperX; paperX = null; if (Math.abs(dx) > 70 && $('paper').classList.contains('open')) flipPaper(dx < 0 ? 1 : -1); });
-  // Swipe the fixed Age bar right to age up, left to age down (ad-gated).
-  // This only fires on the Age bar itself, never on the map, so swiping
-  // to pan the map still works. A tap on + / − is handled by the click
-  // handler, not by this, because a tap moves less than 70 px.
-  let ageX = null;
-  $('hud').addEventListener('pointerdown', e => { if (e.target.closest('.agebar')) ageX = e.clientX; });
-  $('hud').addEventListener('pointerup', e => { if (ageX == null) return; const dx = e.clientX - ageX; ageX = null; if (Math.abs(dx) > 70) { if (dx > 0) A.ageUp(); else A.ageDown(); } });
   // Swipe the phone home grid left or right to change pages, like a
   // real home screen. Listened on #modal because the grid itself is
   // re-rendered on every page change. Only the grid swipes — apps
@@ -2506,7 +2496,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
-    const src = { pro: 'minigames/pro.html?v=20261026dt', college: 'minigames/college.html?v=20261026dt', baseball: 'minigames/baseball.html?v=20261026dt' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026du', college: 'minigames/college.html?v=20261026du', baseball: 'minigames/baseball.html?v=20261026du' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
@@ -2979,7 +2969,7 @@ PANELS.mode = () => {
 };
 PANELS.help = () => {
   return panelShell('Help', '',
-    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves on the Age bar at the bottom, one year at a time (+ free, − needs an ad, swipe the bar right / left), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
+    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves one week at a time (tap the date at the top right, press YES), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
     <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
 };
 // Every menu item, shared by the hamburger popup and the old More
@@ -3070,7 +3060,6 @@ function openDateModal() {
   const recent = e.history.slice(0, 8);
   openModal(`<h2>DONE THIS WEEK?</h2><p>Are you done with your business this week?</p>
   <div class="row gap"><button class="btn3d wide" data-a="dateYes">YES</button><button class="btn wide" data-a="dateNo">NO</button></div>
-  <button class="btn wide" data-a="ageYear" style="margin-top:10px">Advance one year instead</button>
   <h3 style="margin-top:18px">Calendar</h3>
   <div class="menu-list">${evs.map(v => `<div class="srow" style="cursor:default"><span class="avatar">🗓️</span><span class="sname"><b>${esc(v.title)}</b><span class="muted">${fmtDate(v.day)}${v.day - S.day > 0 ? ` · in ${v.day - S.day} days` : ''}</span></span></div>`).join('')}</div>
   ${recent.length ? `<h3 style="margin-top:18px">Last earnings reports</h3><div class="menu-list">${recent.map(r => `<div class="srow" style="cursor:default"><span class="avatar">📊</span><span class="sname"><b>${esc(r.name)}</b><span class="muted">${fmtDate(r.day)} · profit ${fmtMoney(r.profit, true)} · ${r.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(Math.round(r.surprise * 100))}%${r.move ? ` · shares ${r.move >= 0 ? '+' : ''}${r.move}%` : ''}</span></span></div>`).join('')}</div>` : `<p class="muted small">No earnings reports yet — the first quarter lands 13 weeks in.</p>`}`, 'sheet');
@@ -3365,7 +3354,6 @@ const A = {
   dateModal: () => openDateModal(),
   dateYes: () => { closeModal(); A.ageWeek(); },
   dateNo: () => closeModal(),
-  ageYear: () => { closeModal(); A.ageUp(); },
   layers: () => openLayersModal(),
   layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),
@@ -3728,39 +3716,6 @@ const A = {
       <div class="row"><button class="btn flex" data-a="renovate" data-x="${p.id}">RENOVATE ${fmtMoney(renoCost(p), true)}</button><button class="btn flex" data-a="sellBld" data-x="${p.id}">SELL</button></div></div>`, 'sheet');
   },
   shopBuy: x => act(() => claimShop(x), 'Claimed!'),
-  ageUp: () => {
-    if (UI.aging) return; UI.aging = true;
-    openModal(`<div class="card in"><h3>Aging a year…</h3><p class="muted small">Simulating a full year of the world. This takes a moment.</p></div>`, 'center');
-    setTimeout(() => {
-      try { ageUp(); pushPaperEdition(); save(); renderHUD(); if (S.over) { gameOver(); return; } if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD(); openPaper(0); }
-      catch (e) { toast('Age up failed. Try again.', 'bad'); }
-      finally { UI.aging = false; }
-    }, 50);
-  },
-  ageDown: () => {
-    if (!canAgeDown()) return toast('No earlier year to go back to in this session. Age up first, then age down.', 'bad');
-    if (window.AD_TIMER) clearInterval(window.AD_TIMER);
-    openModal(`<div class="card in"><h3>Ad required to age down</h3><p class="muted small">Age up is free. Age down needs an ad. Watch this sponsor card, then you can go back one year.</p>
-      <div class="card in sponsored"><span class="tagp">SPONSORED</span><h4>☕ Skyline Coffee</h4><p class="muted small">Fuel for late-night tycoons. A fictional in-game sponsor — no real ad network is connected yet.</p></div>
-      <p class="muted small" id="adCount">Ad ends in 5s…</p>
-      <button class="btn3d orange wide" id="adContinue" data-a="doAgeDown" disabled>Watching ad…</button></div>`, 'sheet');
-    let left = 5;
-    window.AD_TIMER = setInterval(() => {
-      left -= 1;
-      const el = document.getElementById('adCount'), btn = document.getElementById('adContinue');
-      if (!el || !btn) { clearInterval(window.AD_TIMER); return; }
-      if (left <= 0) { el.textContent = 'Ad finished.'; btn.disabled = false; btn.textContent = 'Continue — go back a year'; clearInterval(window.AD_TIMER); }
-      else el.textContent = `Ad ends in ${left}s…`;
-    }, 1000);
-  },
-  doAgeDown: () => {
-    if (window.AD_TIMER) clearInterval(window.AD_TIMER);
-    closeModal();
-    const err = ageDown();
-    if (err) return toast(err, 'bad');
-    save(); renderHUD(); if (UI.panel) renderPanel(); if (CityView.isOpen()) renderCityHUD();
-    toast(`Went back a year — now ${yearOf(S.day)}.`, 'good');
-  },
   companyExpand: x => { UI.expandedCompany = (UI.expandedCompany === x ? null : x); renderPanel(); },
   countryMarkets: x => { closePopup(); UI.q = cname(x); UI.cat = 'All'; openPanel('markets'); },
   claimDaily: () => {
