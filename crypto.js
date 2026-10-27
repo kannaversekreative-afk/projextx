@@ -10,13 +10,20 @@
 // 30 points on the chart) and the bet settles on the final price:
 // guess right and win pays 2x the stake (stake back + equal winnings);
 // an exact tie refunds the stake.
-//   The 30-second move follows a CoinMarket price process (below):
-//   stochastic volatility that mean-reverts, heavy-tailed Student-t
-//   returns, and rare random jumps. It has NO drift and NO memory in
-//   direction — past ticks never predict the next tick's direction —
-//   so there is no pattern to learn and no way to beat it except
-//   bankroll luck. That replaces the old regime model (bull/bear
-//   drifts made the outcome nearly certain once the drift showed).
+//   THE BET IS ONE COIN FLIP ON DIRECTION. At bet time a single
+//   fair coin is flipped (up/down, 50/50). The 30-second move that
+//   follows is the show: it runs the CoinMarket price process below
+//   (stochastic volatility, heavy-tailed Student-t returns, rare
+//   jumps), then the path is mirrored around the start price if its
+//   endpoint lands on the wrong side of the flip — mirroring keeps
+//   the path's shape and magnitude exactly, only its direction is
+//   forced to match the flip. So how far the price moves does not
+//   matter and never affects the payout: the coin flip decides win
+//   or loss, the price is just what you watch. This is NOT a stock:
+//   no exact price matters, no price needs revealing — direction
+//   only. That replaces the old regime model (bull/bear drifts made
+//   the outcome nearly certain once the drift showed) and the pure
+//   random-walk version (which only landed NEAR 50/50 by emergence).
 //   TIME MAPPING (the one judgment call): the model is calibrated in
 //   real market time, where one second moves the price ~0.009% —
 //   invisible across 30 seconds. So one game second advances the
@@ -141,14 +148,23 @@ function cryptoCoinState(id) { const cr = ensureCrypto(); if (!cr.coins[id]) { c
 // coin's state — so volatility clusters from one movement to the next
 // instead of resetting to base every bet. The path is generated at
 // bet time and revealed one tick a second; exp() keeps every price
-// positive, so no floor is needed.
-function cryptoGenPath(coinId, start) {
+// positive, so no floor is needed. The flip decides the endpoint:
+// if the path's final price lands on the wrong side of the flip, the
+// whole path is mirrored around the start price (log-mirror: each
+// price p becomes start*start/p), which preserves every move's size
+// exactly and only reverses direction. Exact ties (final == start)
+// stay ties — the mirror of the start price is itself.
+function cryptoGenPath(coinId, start, flip) {
   const st = cryptoCoinState(coinId);
   const market = new CoinMarket(start);
   if (isFinite(st.vol) && st.vol > 0) market.volatility = st.vol;
   const path = [];
   for (let i = 0; i < CRYPTO_MOVE_SECS; i++) path.push(market.tick(CRYPTO_MARKET_HOURS_PER_TICK).price);
   st.vol = market.volatility;
+  const last = path[path.length - 1];
+  if ((flip === 'up' && last < start) || (flip === 'down' && last > start)) {
+    for (let i = 0; i < path.length; i++) path[i] = start * start / path[i];
+  }
   return path;
 }
 
@@ -168,9 +184,14 @@ function cryptoPlaceBet(coinId, dir, stake) {
   if (S.cash < 0) S.cash = 0;
   cr.lastStake = stake;
   const now = Date.now();
-  const bet = { id: uid(), coinId: def.id, dir, stake, startPrice: st.price, placedAt: now, endsAt: now + CRYPTO_MOVE_SECS * 1000, settled: false, result: null, settlePrice: null, settledAt: null };
+  // The single coin flip for this bet: up or down, exactly 50/50.
+  // The path is then forced to land on the flipped side (mirrored
+  // if needed), so settlement on final vs start always agrees with
+  // the flip — the flip is the bet, the path is the show.
+  const flip = Math.random() < 0.5 ? 'up' : 'down';
+  const bet = { id: uid(), coinId: def.id, dir, stake, startPrice: st.price, flip, placedAt: now, endsAt: now + CRYPTO_MOVE_SECS * 1000, settled: false, result: null, settlePrice: null, settledAt: null };
   cr.bets.unshift(bet);
-  st.moving = { betId: bet.id, path: cryptoGenPath(def.id, st.price), step: 0, endsAt: bet.endsAt };
+  st.moving = { betId: bet.id, path: cryptoGenPath(def.id, st.price, flip), step: 0, endsAt: bet.endsAt };
   cryptoStartMoveTimer();
   return null;
 }
@@ -262,11 +283,11 @@ function cryptoPanelHTML() {
     <div class="trade-head"><div><div class="big">${fmtMoney(st.price)}</div><div class="${upCls(chg)}">${fmtPct(chg)} since creation${st.moving ? ` · MOVING ${cryptoCountdownSec(st.moving)} left` : ' · still — bet to move it'}</div></div></div>
     ${hist.length >= 2 ? lineChart(hist, { h: 160 }) : '<p class="muted small">No movement yet — place a bet and the chart draws the 30-second move live.</p>'}
     <p class="muted small">Chart shows every price this coin has had, starting at its creation price. A coin only moves during its 30-second bet window.</p></div>
-    <div class="card in"><h4>Bet on ${def.sym}</h4><p class="muted small">Guess up or down. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
+    <div class="card in"><h4>Bet on ${def.sym}</h4><p class="muted small">Call up or down — one coin flip decides it. How far the price moves doesn't matter. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
     <div class="row"><span class="muted small" style="min-width:90px">Stake $</span><input id="cryptoStake" class="search" type="number" min="1" step="1" value="${stakeVal}"></div>
     <div class="row wrap"><button class="btn3d orange flex" data-a="cryptoPlace" data-x="up">BET UP ▲</button><button class="btn3d orange flex" data-a="cryptoPlace" data-x="down">BET DOWN ▼</button></div>
     ${st.moving ? `<p class="muted small">${def.sym} is moving — wait ${cryptoCountdownSec(st.moving)} for it to settle before betting on it again.</p>` : ''}</div>
     <div class="card in"><h4>Open bets (${pending.length})</h4>${pending.map(betRow).join('') || '<p class="muted small">No open bets.</p>'}</div>
     <div class="card in"><h4>Recent results · Won ${cr.won} · Lost ${cr.lost}</h4>${done.map(betRow).join('') || '<p class="muted small">Nothing settled yet.</p>'}</div>
-    <p class="muted small">How the price moves: stochastic volatility that drifts back toward its base, heavy-tailed price jumps, and rare market shocks — with no drift and no memory in direction, so past ticks never predict the next one. One game second is one market hour, which is why 30 seconds moves the price a few percent instead of a fraction of a cent.</p>`);
+    <p class="muted small">Each bet is a single coin flip on direction: up or down. The 30-second price move is the show — it can swing a bunch, but only the final direction counts. The move itself runs a stochastic-volatility price model with heavy tails and rare jumps; one game second is one market hour, which is why 30 seconds moves the price a few percent instead of a fraction of a cent.</p>`);
 }
