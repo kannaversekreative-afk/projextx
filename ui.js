@@ -5,7 +5,7 @@
 'use strict';
 
 let W = null, S = null;
-const UI = { panel: null, stack: [], modal: null, placing: false, hire: null, q: '', cat: 'All', starOnly: false,
+const UI = { panel: null, stack: [], modal: null, phoneApp: null, phoneStack: [], inPhone: false, placing: false, hire: null, q: '', cat: 'All', starOnly: false,
   range: '1Y', tradeRange: '1Y', web: { view: 'home', q: '', a3: null }, pick: null,
   mode: 'normal', color: LOGO_COLORS[0], acc: 0, lastPanel: 0, lastDraw: 0, lastSave: 0, expandedCompany: null, companyInit: false };
 const $ = id => document.getElementById(id);
@@ -288,16 +288,87 @@ function openModal(html, kind) {
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
-function closeModal() { UI.modal = null; $('modal').innerHTML = ''; }
+function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phoneStack = []; UI.panel = null; UI.stack = []; } UI.modal = null; $('modal').innerHTML = ''; }
+// ---------- the phone: every app opens INSIDE it, never as a page ----------
+// Phone grid taps call openPanel while the phone modal is open, so this
+// is the one interception point: instead of closing the phone and
+// opening a full #panel page, the app renders into the phone's own
+// screen (#phoneCard). UI.phoneApp is the app on the phone screen;
+// UI.phoneStack is the chain of apps opened from inside apps, so a
+// back step returns to the previous app, not the map. Panels opened
+// from anywhere else (HUD pill, map, city) still use the #panel page.
 function openPanel(name, args) {
+  if (UI.modal === 'phone') {
+    if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
+    UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
+    const mbox = document.querySelector('#modal .mbox.phone');
+    if (mbox) mbox.innerHTML = phoneHTML();
+    renderPhoneApp(); renderHUD(); return;
+  }
   closeModal(); if (CityView.isOpen()) leaveCity();
   UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
-function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
+function phoneToGrid() {
+  UI.phoneApp = null; UI.panel = null; UI.stack = []; UI.phoneStack = [];
+  const mbox = document.querySelector('#modal .mbox.phone');
+  if (mbox) mbox.innerHTML = phoneHTML();
+  renderHUD();
+}
+function closePanel() {
+  if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); }
+  if (UI.modal === 'phone' && UI.phoneApp) {
+    if (UI.phoneStack.length) {
+      const prev = UI.phoneStack.pop();
+      UI.phoneApp = prev.panel; UI.panel = prev.panel; UI.stack = prev.stack;
+      const mbox = document.querySelector('#modal .mbox.phone');
+      if (mbox) mbox.innerHTML = phoneHTML();
+      renderPhoneApp();
+    } else phoneToGrid();
+    renderHUD(); return;
+  }
+  UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD();
+}
 function panelShell(title, sub, body) {
+  // Inside the phone there is no white header and no X: the phone's
+  // own app bar (← Apps + app name) is the header, and tapping
+  // outside the phone (or ← Apps) is how you leave.
+  if (UI.inPhone) return `<div class="panel-body">${body}</div>`;
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
+}
+// Render the app currently on the phone screen. Same HTML-equality
+// skip as renderPanel: if nothing changed, the DOM (and the scroll
+// position inside the phone) is left untouched by the heartbeat.
+function renderPhoneApp() {
+  const card = document.querySelector('#phoneCard');
+  if (!card || !UI.phoneApp || !S) return;
+  UI.lastPanel = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const cur = UI.stack.length ? UI.stack[UI.stack.length - 1] : null;
+  if (UI.phoneApp === 'stock' && !cur) { UI.phoneApp = 'markets'; UI.panel = 'markets'; UI.stack = []; }
+  if (UI.phoneApp === 'extraStock' && !cur) { UI.phoneApp = 'markets'; UI.panel = 'markets'; UI.stack = []; }
+  const prevTop = card.scrollTop;
+  const prevKey = UI.lastPanelKey;
+  const key = UI.phoneApp + '|' + UI.stack.length + '|' + (cur ? (cur.a3 || cur) : '');
+  UI.inPhone = true;
+  let html = '';
+  try {
+    if (UI.phoneApp === 'stock' && cur) html = tradeView(cur.a3);
+    else if (UI.phoneApp === 'extraStock' && cur) html = tradeViewExtra(cur);
+    else if (PANELS[UI.phoneApp]) html = PANELS[UI.phoneApp]();
+    else html = '<div class="card in"><p class="muted">That screen is not ready yet.</p></div>';
+  } catch (e) {
+    html = '<div class="card in"><h3>That screen hit a problem</h3><p class="muted small">' + esc(String(e && e.message || e)) + '</p><button class="btn3d orange wide" data-a="closePanel">CLOSE</button></div>';
+  }
+  UI.inPhone = false;
+  if (html === UI.lastPanelHTML && key === prevKey) return;
+  UI.lastPanelHTML = html; UI.lastPanelKey = key;
+  card.innerHTML = html;
+  if (key === prevKey && prevTop > 0) card.scrollTop = Math.max(0, Math.min(prevTop, card.scrollHeight - card.clientHeight));
+  if (UI.phoneApp === 'markets' && UI.marketsScroll != null) {
+    card.scrollTop = Math.max(0, Math.min(UI.marketsScroll, card.scrollHeight - card.clientHeight));
+    UI.marketsScroll = null;
+  }
 }
 // Re-render the open panel UNLESS the player is typing in it. An
 // unguarded re-render replaces the focused input mid-edit: the typed
@@ -306,10 +377,12 @@ function panelShell(title, sub, body) {
 // this way; async callbacks (price refresh, settle) must too — that
 // unguarded path is what made a later Crypto stake edit not stick live.
 function renderPanelUnlessTyping() {
-  if (typeof document !== 'undefined' && document.querySelector && document.querySelector('#panel input:focus')) return;
+  if (typeof document !== 'undefined' && document.querySelector && (document.querySelector('#panel input:focus') || document.querySelector('#phoneCard input:focus') || document.querySelector('#phoneCard textarea:focus'))) return;
   renderPanel();
 }
 function renderPanel() {
+  // An app open on the phone screen re-renders there, never into #panel.
+  if (UI.modal === 'phone' && UI.phoneApp) { renderPhoneApp(); return; }
   if (!UI.panel || !S) { $('panel').innerHTML = ''; $('panel').classList.remove('open'); UI.lastPanelHTML = null; UI.lastPanelKey = null; return; }
   // Throttle stamp for the frame loop: loop() re-renders the open panel
   // at most every 1500ms. This stamp used to never be updated, so the
@@ -403,7 +476,7 @@ function renderHUD() {
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
-  if (UI.panel) $('panel').classList.add('open');
+  if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
 function renderCityHUD() {
   // Idempotent rewrite — this is the Leave city fix. The frame loop calls
@@ -1311,7 +1384,7 @@ function loop(now) {
       // every 250ms, resetting a scrolled popup to the top just like
       // the panel bug. The wrapper above also preserves scroll position.
       if (UI.popup && now - (UI.lastPopup || 0) > 1500) { UI.lastPopup = now; renderPopup(); }
-      if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus')) renderPanel();
+      if (UI.panel && now - UI.lastPanel > 1500 && !document.querySelector('#panel input:focus') && !document.querySelector('#phoneCard input:focus') && !document.querySelector('#phoneCard textarea:focus')) renderPanel();
     }
     if (S.over) { save(); gameOver(); }
   }
@@ -1569,6 +1642,7 @@ function webHomeHTML() {
 PANELS.tawk = () => tawkPanelHTML();
 PANELS.radio = () => radioPanelHTML();
 PANELS.karma = () => karmaPanelHTML();
+PANELS.newsapp = () => newsPanelHTML();
 PANELS.ads = () => adsPanelHTML();
 PANELS.web = () => {
   const w = UI.web;
@@ -2325,7 +2399,7 @@ PANELS.help = () => {
 // sheet. The popup is the new home for all of these now that the
 // bottom bar is gone.
 const MENU_ITEMS = [
-  ['leader', ICONS.leader, 'Leader'], ['news', ICONS.news, 'News'], ['markets', ICONS.markets, 'Markets'],
+  ['leader', ICONS.leader, 'Leader'], ['newsapp', ICONS.news, 'News'], ['markets', ICONS.markets, 'Markets'],
   ['airport', ICONS.airport, 'Airport'],
   ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'], ['country', '🗺️', 'Your Country'],
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'],
@@ -2343,15 +2417,25 @@ function moreSheet() {
 // The phone replaces the More menu: a phone frame with every menu
 // item as an app icon on a home screen. Tapping an app opens the
 // same panel (or paper) the old menu opened.
+function phoneHTML() {
+  // The phone frame: home grid, or one app on its screen. No X button
+  // anywhere - tapping outside the phone goes back (to the grid from
+  // an app, to the map from the grid), and Apps goes to the grid.
+  const unread = (S.mail || []).filter(m => !m.read).length;
+  const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span><span>${fmtMoney(S.cash)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
+  if (!UI.phoneApp) {
+    const apps = MENU_ITEMS.map(([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic">${ic}</span><span class="phone-app-label">${t}</span></button>`).join('');
+    return `<div class="phone-notch"></div>${status}<div class="phone-grid">${apps}</div>`;
+  }
+  const entry = MENU_ITEMS.find(m => m[0] === UI.phoneApp);
+  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><button data-a="phoneBack">\u2190 Apps</button><b>${esc(entry ? entry[2] : UI.phoneApp)}</b><span></span></div><div id="phoneCard" class="phone-card" data-stop></div>`;
+}
 function openMenuPopup() {
   // The phone: every menu item is an app on a home screen. Tapping
-  // an app opens the same panel (or paper) the old More menu opened.
-  const apps = MENU_ITEMS.map(([x, ic, t]) => `<button class="phone-app" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="phone-app-ic">${ic}</span><span class="phone-app-label">${t}</span></button>`).join('');
-  const unread = (S.mail || []).filter(m => !m.read).length;
-  openModal(`<div class="phone-notch"></div>
-  <div class="phone-status"><span>${fmtDate(S.day)}</span><span>${fmtMoney(S.cash)}</span>${unread ? `<span>✉️ ${unread}</span>` : ''}</div>
-  <div class="phone-grid">${apps}</div>
-  <button class="phone-close" data-a="closeModal">✕ CLOSE</button>`, 'phone');
+  // an app opens it INSIDE this phone, on the screen above.
+  UI.phoneApp = null; UI.phoneStack = []; UI.panel = null; UI.stack = [];
+  $('panel').innerHTML = ''; $('panel').classList.remove('open');
+  openModal(phoneHTML(), 'phone');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
 // ---------- date modal: Done this week? + calendar ----------
@@ -2528,7 +2612,19 @@ const A = {
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
   panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; if (x === 'web') UI.web = { view: 'home', q: '', a3: null }; openPanel(x); },
   closePanel: () => closePanel(),
-  panelBack: () => { UI.stack.pop(); renderPanel(); },
+  panelBack: () => {
+    if (UI.stack.length) { UI.stack.pop(); renderPanel(); return; }
+    if (UI.modal === 'phone' && UI.phoneApp) {
+      if (UI.phoneStack.length) {
+        const prev = UI.phoneStack.pop();
+        UI.phoneApp = prev.panel; UI.panel = prev.panel; UI.stack = prev.stack;
+        const mbox = document.querySelector('#modal .mbox.phone');
+        if (mbox) mbox.innerHTML = phoneHTML();
+      } else phoneToGrid();
+    }
+    renderPanel();
+  },
+  phoneBack: () => { phoneToGrid(); },
   closePopup: () => closePopup(),
   vehicleCard: x => openVehicleCard(x),
   watchVehicle: x => openWatch(x),
@@ -2576,9 +2672,19 @@ const A = {
   radioSearch: () => { const inp = document.getElementById('radioSearch'); UI.radioQuery = inp ? inp.value.trim() : ''; UI.radioView = 'home'; renderPanel(); },
   radioSleep: x => { const m = parseInt(x, 10) || 0; UI.radioSleepMin = m; UI.radioSleepUntil = m > 0 ? Date.now() + m * 60000 : null; UI.radioSlept = false; renderPanel(); },
   karmaYear: x => { UI.karmaYear = UI.karmaYear === x ? null : x; renderPanel(); },
+  newsView: x => { UI.newsView = x; UI.newsSection = null; renderPanel(); },
+  newsSection: x => { UI.newsSection = x; renderPanel(); },
+  newsSearch: () => { const inp = document.getElementById('newsSearch'); UI.newsQuery = inp ? inp.value.trim() : ''; UI.newsView = 'search'; renderPanel(); },
+  newsPaper: () => { openPaper(); },
   paperEdPrev: () => flipEdition(1),
   paperEdNext: () => flipEdition(-1),
-  scrim: (x, el, e) => { if (e.target === el && (UI.modal === 'sheet' || UI.modal === 'menu')) closeModal(); },
+  scrim: (x, el, e) => {
+    if (e.target !== el) return;
+    // Clicking outside the phone: from an app, back to the phone grid;
+    // from the grid, back to the map. No X button needed for either.
+    if (UI.modal === 'phone') { if (UI.phoneApp) phoneToGrid(); else closeModal(); return; }
+    if (UI.modal === 'sheet' || UI.modal === 'menu') closeModal();
+  },
   closeModal: () => { closeModal(); if (S && S.over) gameOver(); },
   speed: x => { S.speed = +x; renderHUD(); },
   skipMenu: () => skipMenu(),
