@@ -2438,14 +2438,14 @@ function sportDayTabs() {
 }
 function sportGameCard(g, dayOff) {
   const status = dayOff < 0 ? 'Final' : dayOff > 0 ? 'Upcoming · ' + fmtDate(S.day + dayOff * 7) : g.period;
-  const side = (t, s, first) => `<button class="wsport-side" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo" style="background:${t.color}">${esc(t.logo)}</span><span class="wsport-tname">${esc(t.name)}</span>${dayOff > 0 ? '' : `<b class="wsport-score">${s}</b>`}</button>`;
+  const side = (t, s, first) => `<button class="wsport-side" data-a="sportTeam" data-x="${t.id}">${sportBadge(t, 32)}<span class="wsport-tname">${esc(t.name)}</span>${dayOff > 0 ? '' : `<b class="wsport-score">${s}</b>`}</button>`;
   return `<div class="wsport-card">${side(g.away, g.as, true)}<span class="wsport-status">${esc(status)}</span>${side(g.home, g.hs, false)}</div>`;
 }
 function sportStandingsHTML(lg) {
   const favs = sportFavs();
   const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
   const pct = t => (t.wins + t.losses) ? (t.wins / (t.wins + t.losses)).toFixed(3).replace(/^0/, '') : '.000';
-  return `<div class="wsport-stand"><div class="wsport-stand-head"><span>#</span><span>Team</span><span>W</span><span>L</span><span>PCT</span><span></span></div>${sorted.map((t, i) => `<div class="wsport-stand-row"><span>${i + 1}</span><button class="wsport-stand-team" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo sm" style="background:${t.color}">${esc(t.logo)}</span>${esc(t.name)}</button><span>${t.wins}</span><span>${t.losses}</span><span>${pct(t)}</span><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button></div>`).join('')}</div>`;
+  return `<div class="wsport-stand"><div class="wsport-stand-head"><span>#</span><span>Team</span><span>W</span><span>L</span><span>PCT</span><span></span></div>${sorted.map((t, i) => `<div class="wsport-stand-row"><span>${i + 1}</span><button class="wsport-stand-team" data-a="sportTeam" data-x="${t.id}">${sportBadge(t, 24)}${esc(t.name)}</button><span>${t.wins}</span><span>${t.losses}</span><span>${pct(t)}</span><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button></div>`).join('')}</div>`;
 }
 function sportScoresHTML() {
   ensureSports();
@@ -2472,7 +2472,7 @@ function sportScoresHTML() {
     let teamRows = '';
     if (q) {
       const teams = leagues.flatMap(l => l.teams.filter(t => t.name.toLowerCase().includes(q)).map(t => ({ t, l })));
-      teamRows = `<h4 class="wsport-h">Teams</h4>${teams.map(({ t, l }) => `<div class="wsport-lgrow"><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button><button class="wsport-lgbtn" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo sm" style="background:${t.color}">${esc(t.logo)}</span><span><b>${esc(t.name)}</b><small>${esc(l.name)} · ${t.wins}W - ${t.losses}L</small></span><span>›</span></button></div>`).join('') || '<p class="muted small">No teams match.</p>'}`;
+      teamRows = `<h4 class="wsport-h">Teams</h4>${teams.map(({ t, l }) => `<div class="wsport-lgrow"><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button><button class="wsport-lgbtn" data-a="sportTeam" data-x="${t.id}">${sportBadge(t, 24)}<span><b>${esc(t.name)}</b><small>${esc(l.name)} · ${t.wins}W - ${t.losses}L</small></span><span>›</span></button></div>`).join('') || '<p class="muted small">No teams match.</p>'}`;
     }
     return panelShell('Worl Sports', '',
       `<div class="wsport"><div class="wsport-leaguehead"><button class="wsport-back" data-a="sportView" data-x="scores">← Scores</button><span class="wsport-pill">My Leagues</span><span></span></div>
@@ -2502,9 +2502,9 @@ function sportScoresHTML() {
 // from this menu so nothing that was here is lost.
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
-  if (UI.mgGame === 'pro' || UI.mgGame === 'college') {
-    const src = UI.mgGame === 'pro' ? 'minigames/pro.html?v=20261026di' : 'minigames/college.html?v=20261026di';
-    const title = UI.mgGame === 'pro' ? 'Pro Football' : 'College Football';
+  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
+    const src = { pro: 'minigames/pro.html?v=20261026dm', college: 'minigames/college.html?v=20261026dm', baseball: 'minigames/baseball.html?v=20261026dm' }[UI.mgGame];
+    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
   if (UI.mgGame === 'battle') return OLD_MINIGAMES_PANEL();
@@ -2513,9 +2513,19 @@ PANELS.minigames = () => {
     <p class="muted small">Franchise, MyGM and My Team. Real nicknames only: Ravens, Cowboys, Packers.</p>
     <button class="btn3d orange wide" data-a="mgplay" data-x="college">🎓 COLLEGE FOOTBALL · Hashmark College</button>
     <p class="muted small">States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.</p>
+    <button class="btn3d orange wide" data-a="mgplay" data-x="baseball">⚾ BASEBALL · Pennant GM</button>
+    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
     <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
     <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · baseball &amp; basketball leagues</button></div>`);
 };
+// Team shield badge: same logo as the Mini Games baseball teams (abbr on a
+// shield in the team's colours). Falls back to the old letter/color for
+// pre-shared saves, and follows the owner's logo/color pickers (t.logo/t.color).
+function sportBadge(team, s) {
+  s = s || 32; const ab = esc(team.logo || team.abbr || '?');
+  const c1 = team.color || team.c1 || '#334155', c2 = team.c2 || '#ffffff';
+  return `<svg width="${s}" height="${Math.round(s * 1.12)}" viewBox="0 0 40 45" style="flex:none" aria-hidden="true"><path d="M20 1.5 37.5 7v15.5c0 10.5-7.6 17.6-17.5 21-9.9-3.4-17.5-10.5-17.5-21V7z" fill="${c1}" stroke="${c2}" stroke-width="2.2"/><text x="20" y="27" text-anchor="middle" font-weight="700" font-size="${ab.length > 3 ? 10.5 : 12.5}" fill="${c2}">${ab}</text></svg>`;
+}
 PANELS.sports = () => {
   ensureSports();
   const teamId = UI.stack[0];
@@ -2529,7 +2539,7 @@ PANELS.sports = () => {
     let body = `<div class="row wrap">${tabBtns}</div>`;
     if (tab === 'franchise') {
       const fin = t.finance || sportFinance(t);
-      body += `<div class="card in"><div class="row between"><div><b>${esc(t.name)}</b><div class="muted small">${lg.name} · ${place <= 5 ? 'East' : 'West'} Division · Season ${lg.seasonYear}</div></div><span class="avatar" style="background:${t.color}">${esc(t.logo)}</span></div>
+      body += `<div class="card in"><div class="row between"><div><b>${esc(t.name)}</b><div class="muted small">${lg.name} · ${place <= 5 ? 'East' : 'West'} Division · Season ${lg.seasonYear}</div></div>${sportBadge(t, 44)}</div>
       <div class="stats3 box"><div><span>Record</span><b>${t.wins}W - ${t.losses}L</b></div><div><span>Place</span><b>${place} / ${lg.teams.length}</b></div><div><span>Value</span><b>${fmtMoney(t.value, true)}</b></div></div>
       <p class="muted small">${esc(t.name)} is a professional ${lg.short.toLowerCase()} team in ${esc(t.cityName)}. Stadium: ${esc(t.stadium.name)}, ${t.stadium.capacity.toLocaleString()} seats, level ${t.stadium.level}. Owner: ${mine ? 'You' : 'Independent club'}.</p>
       <h4>History</h4>${t.history.map(h => `<div class="kv"><span>${h.year} ${h.champion ? '🏆 Champion' : 'Regular season'}</span><b>${h.place}${h.place === 1 ? 'st' : h.place === 2 ? 'nd' : h.place === 3 ? 'rd' : 'th'} · ${h.wins}-${h.losses}</b></div>`).join('') || '<p class="muted small">No seasons played yet. Age a year to play a season.</p>'}

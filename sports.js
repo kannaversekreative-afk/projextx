@@ -12,7 +12,29 @@ const SPORT_LEAGUES = [
   { id: 'basket', name: 'World Basketball League', short: 'Basketball', icon: '🏀',
     positions: ['PG', 'SG', 'SF', 'PF', 'C'] },
 ];
-const SPORT_MASCOTS = ['Wolves', 'Falcons', 'Sharks', 'Eagles', 'Lions', 'Bears', 'Hawks', 'Tigers', 'Panthers', 'Storm', 'Comets', 'Rangers', 'Vipers', 'Ospreys', 'Cyclones', 'Mustangs', 'Otters', 'Foxes', 'Bisons', 'Jaguars'];
+// Shared team identities with the Mini Games (baseball minigame uses the same
+// 30 names, abbreviations, colours and shield logos). The two games are NOT
+// connected: no shared saves or state, just the same teams to recognise.
+// Worl teams keep their real city for stadium/mechanics; the team NAME is the
+// shared mascot-only name, like pro football nicknames. New games only: old
+// saves keep the city + mascot names they were created with.
+const SHARED_SPORT_TEAMS = [
+  ['Admirals','ADM','#1d4f91','#f2c14e'],['Barons','BAR','#9b1c2e','#f4f1ea'],
+  ['Bluejays','BLJ','#0f6b4f','#e8b33a'],['Bombers','BOM','#2b2d42','#ef5b5b'],
+  ['Captains','CAP','#5b2a86','#f2a541'],['Clippers','CLI','#00627a','#ff8c42'],
+  ['Copperheads','COP','#7a1f1f','#c9a227'],['Dukes','DUK','#14213d','#fca311'],
+  ['Express','EXP','#2d6a4f','#d8f3dc'],['Foxhounds','FOX','#3a0ca3','#4cc9f0'],
+  ['Gulls','GUL','#b5179e','#f7f7f7'],['Herons','HER','#264653','#e9c46a'],
+  ['Ironmen','IRN','#c1121f','#003049'],['Jackalopes','JCK','#023e8a','#90e0ef'],
+  ['Knights','KNI','#6a040f','#ffba08'],['Larks','LAR','#1b4332','#95d5b2'],
+  ['Lumberjacks','LUM','#3d405b','#f2cc8f'],['Mallards','MAL','#0b6e4f','#f0a202'],
+  ['Mariners','MAR','#283618','#dda15e'],['Miners','MIN','#9d0208','#e5e5e5'],
+  ['Monarchs','MON','#073b4c','#06d6a0'],['Mudcats','MUD','#5f0f40','#fb8b24'],
+  ['Nighthawks','NHK','#22223b','#c9ada7'],['Owls','OWL','#1a759f','#d9ed92'],
+  ['Pelicans','PEL','#7b2cbf','#e0aaff'],['Pilots','PIL','#d62828','#fcbf49'],
+  ['Pioneers','PIO','#003566','#ffc300'],['Quakes','QUA','#8338ec','#ffbe0b'],
+  ['Rattlers','RAT','#0a9396','#ee9b00'],['Redbirds','RDB','#370617','#f48c06'],
+];
 const SPORT_COLORS = ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#1f5fd0', '#8a5a2b', '#334155'];
 const SPORT_LOGOS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'M', 'R', 'S', 'T', 'W', '★', '◆'];
 const FIRST_NAMES = ['James', 'Marcus', 'Liam', 'Noah', 'Ethan', 'Lucas', 'Owen', 'Caleb', 'Diego', 'Kenji', 'Felix', 'Hugo', 'Mateo', 'Andre', 'Tomas', 'Ravi', 'Yusuf', 'Leo', 'Max', 'Eli', 'Jonas', 'Victor', 'Sam', 'Dario', 'Nico', 'Rene', 'Omar', 'Ivan', 'Piotr', 'Anders'];
@@ -56,12 +78,12 @@ function sportTeamCities() {
   for (const c of caps) if (out.length < 10 && !out.includes(c)) out.push(c);
   return out;
 }
-function makeSportTeam(league, city, mascot, color, usedNames) {
+function makeSportTeam(league, city, entry, usedNames) {
   const cityName = city.name;
-  const name = cityName + ' ' + mascot;
+  const name = entry[0], mascot = entry[0], color = entry[2];
   const cap = clamp(Math.round(18000 + Math.sqrt(city.pop) * 12), 20000, 55000);
   const team = { id: league.id + '-' + city.id, league: league.id, cityId: city.id, a3: city.a3,
-    name, mascot, color, logo: mascot[0], cityName,
+    name, mascot, color, c1: entry[2], c2: entry[3], abbr: entry[1], logo: entry[1], cityName,
     stadium: { name: cityName + ' Park', capacity: cap, level: 1 },
     owner: 'AI', value: 0, wins: 0, losses: 0, history: [], champions: 0,
     players: [], finance: null, finHist: [], ipo: null, lastNet: 0, profitStreak: 0, board: [], weekNets: [], weekStreak: 0, rating5: 3.0 };
@@ -75,7 +97,7 @@ function ensureSports() {
     const used = new Set();
     const leagues = SPORT_LEAGUES.map(l => {
       const cities = sportTeamCities();
-      const teams = cities.map((c, i) => makeSportTeam(l, c, SPORT_MASCOTS[(i * 3) % SPORT_MASCOTS.length], SPORT_COLORS[i % SPORT_COLORS.length], used));
+      const teams = cities.map((c, i) => makeSportTeam(l, c, SHARED_SPORT_TEAMS[i % SHARED_SPORT_TEAMS.length], used));
       return { id: l.id, name: l.name, short: l.short, icon: l.icon, teams,
         freeAgents: [], draftClass: [], seasonYear: yearOf(S.day), champion: null };
     });
@@ -96,6 +118,8 @@ function ensureSports() {
       if (!isFinite(t.weekStreak)) t.weekStreak = 0;
       if (!isFinite(t.rating5)) t.rating5 = 3.0;
       if (!t.history) t.history = [];
+      if (!t.abbr) t.abbr = t.logo || t.name.slice(0, 3).toUpperCase();
+      if (!t.c1) t.c1 = t.color; if (!t.c2) t.c2 = '#ffffff';
       if (t.value == null || !isFinite(t.value)) t.value = 150000000;
       t.players.forEach(p => { if (!p.stats) p.stats = {}; if (!isFinite(p.salary)) p.salary = sportSalary(p.rating || 60); });
     });
