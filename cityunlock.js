@@ -9,15 +9,16 @@
 //   fully open — this never locks a city you already had.
 // - Only home-country cities are gated. Foreign expansion still
 //   follows the existing flow rule (office + full board), on top.
-// - The starting city is the largest non-capital city in your home
-//   country (for the USA, New York — not Washington, D.C., which is
-//   government-only). The capital itself costs $25,000 like any
-//   other city, which is the progression into politics.
+// - The starting city is the largest non-government city in your home
+//   country (for the USA, New York). A government-only capital costs
+//   $25,000 like any other city, which is the progression into politics.
 function startingCityFor(a3) {
   const cities = (W.cities || []).filter(c => c.a3 === a3);
   if (!cities.length) return null;
-  const cap = W.byA3[a3] ? W.byA3[a3].capital : null;
-  const playable = cities.filter(c => c.id !== cap);
+  // Start in the largest non-government city, not simply non-capital:
+  // a reassigned capital (e.g. New York for the USA) is commercial, so
+  // it stays the starting city.
+  const playable = cities.filter(c => !(typeof isGovCity === 'function' && isGovCity(c)));
   const pool = playable.length ? playable : cities;
   pool.sort((x, y) => y.pop - x.pop);
   return pool[0].id;

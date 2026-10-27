@@ -122,7 +122,9 @@ function officeTreasuryStart(o) {
 function isGovCity(city) {
   if (!city || typeof W === 'undefined') return false;
   const k = W.byA3[city.a3];
-  return !!(k && k.capital === city.id);
+  // A reassigned capital (a picture city standing in for a deleted real
+  // capital) is not government-only — it stays commercial.
+  return !!(k && k.capital === city.id && !city.reassignedCapital);
 }
 function govBuildingsFor(a3) {
   const ag = agencyOf(a3);

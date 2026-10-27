@@ -10,56 +10,6 @@ const CityView = (() => {
   let photoMode = false, pmViewport = null, pmImg = null, pmZoomLabel = null, pm = { x: 0, y: 0, s: 1, fit: 1, iw: 0, ih: 0 }, pmPts = new Map(), pmPinch = null;
   let pmStage = null;
 
-  // ---------- Kenney sprites (Havana only) ----------
-  // kenney-sprites.js (CC0, kenney.nl) loads before this file. Images
-  // are preloaded at script load so they are ready by the time any
-  // city opens; any sprite that is not loaded yet falls back to the
-  // code-drawn building, so Havana never renders blank.
-  const kenneyImgs = {};
-  if (typeof KENNEY_SPRITES !== 'undefined') Object.keys(KENNEY_SPRITES).forEach(k => { const im = new Image(); im.src = KENNEY_SPRITES[k].src; kenneyImgs[k] = im; });
-  const kenneyReady = k => !!(KENNEY_SPRITES && KENNEY_SPRITES[k] && kenneyImgs[k] && kenneyImgs[k].complete && kenneyImgs[k].naturalWidth);
-  function kenneyPick(t) {
-    if (!city || city.name !== 'Havana' || typeof KENNEY_SPRITES === 'undefined' || typeof KENNEY_TALL === 'undefined' || typeof KENNEY_SINGLE === 'undefined') return null;
-    const r = mulberry(Math.floor(t.seed * 1e9) + 5);
-    const list = (t.arch === 'house' || t.arch === 'rowhouse' || t.arch === 'brownstone' || t.floors <= 1) ? KENNEY_SINGLE : KENNEY_TALL;
-    const key = list[Math.floor(r() * list.length)];
-    if (!kenneyReady(key)) return null;
-    return { key, sp: KENNEY_SPRITES[key], im: kenneyImgs[key] };
-  }
-  // Draw a Kenney building on lot t, anchored by its bottom-centre on
-  // the tile's south corner (the plinth's bottom point), scaled so its
-  // width fills the tile. Returns the pin point above the roof, or
-  // null when no sprite is ready (caller falls back to code drawing).
-  function drawKenney(c, t) {
-    const k = kenneyPick(t); if (!k) return null;
-    const dw = TW, dh = k.sp.h * (TW / k.sp.w);
-    const cen = P(t.x + 0.5, t.y + 0.5), bot = P(t.x + 1, t.y + 1);
-    c.drawImage(k.im, cen[0] - dw / 2, bot[1] - dh, dw, dh);
-    return [cen[0], bot[1] - dh - 4];
-  }
-  function kenneyHeight(t) {
-    const k = kenneyPick(t); return k ? k.sp.h * (TW / k.sp.w) : null;
-  }
-  // Small Kenney decor, bottom-anchored at a tile point (x, y in tile
-  // coords): a tree of height h, or a streetlight of height h.
-  function drawKenneyDecor(c, key, x, y, h) {
-    if (!kenneyReady(key)) return false;
-    const sp = KENNEY_SPRITES[key], w = sp.w * (h / sp.h), p = P(x, y);
-    c.drawImage(kenneyImgs[key], p[0] - w / 2, p[1] - h, w, h);
-    return true;
-  }
-  // Kenney ground slab for one tile: the block's top point sits on the
-  // tile's top corner, so its diamond lands exactly on the game's
-  // diamond and its sides hang below it like a real Kenney block.
-  // Returns false when the sprite is not ready (caller falls back).
-  function drawKenneyGround(c, t, key) {
-    if (!kenneyReady(key)) return false;
-    const sp = KENNEY_SPRITES[key], dw = TW, dh = sp.h * (TW / sp.w), n = P(t.x, t.y);
-    c.drawImage(kenneyImgs[key], n[0] - dw / 2, n[1], dw, dh);
-    return true;
-  }
-  const KENNEY_GROUND = { water: 'gwater', beach: 'gbeach', road: 'groad', plaza: 'glot', park: 'gpark', lot: 'glot' };
-
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
   const P = (x, y) => [ox + (x - y) * TW / 2, oy + (x + y) * TH / 2];
@@ -73,8 +23,7 @@ const CityView = (() => {
     diamond(c, t.x, t.y, '#5b6470');
     roadMarks(c, t, T);
   }
-  // Road markings only (no fill): used on top of a Kenney road slab
-  // in Havana, where the slab replaces the flat diamond.
+  // Road markings only (no fill):
   function roadMarks(c, t, T) {
     const N = layout.N, isR = (x, y) => { const q = T[y * N + x]; return q && q.kind === 'road'; };
     const h = isR(t.x - 1, t.y) || isR(t.x + 1, t.y), v = isR(t.x, t.y - 1) || isR(t.x, t.y + 1);
@@ -82,8 +31,6 @@ const CityView = (() => {
       c.fillStyle = 'rgba(255,255,255,0.78)';
       for (let i = 0; i < 5; i++) { const f = 0.15 + i * 0.16; [[[f, 0.04], [f + 0.08, 0.04], [f + 0.08, 0.18], [f, 0.18]], [[f, 0.82], [f + 0.08, 0.82], [f + 0.08, 0.96], [f, 0.96]], [[0.04, f], [0.18, f], [0.18, f + 0.08], [0.04, f + 0.08]], [[0.82, f], [0.96, f], [0.96, f + 0.08], [0.82, f + 0.08]]].forEach(q => poly(c, q.map(([a, b]) => P(t.x + a, t.y + b)), c.fillStyle)); }
       c.fillStyle = '#ffe9a3'; const l1 = P(t.x + 0.08, t.y + 0.08), l2 = P(t.x + 0.92, t.y + 0.92); c.beginPath(); c.arc(l1[0], l1[1], 2.2, 0, 7); c.arc(l2[0], l2[1], 2.2, 0, 7); c.fill();
-      // Havana: a Kenney streetlight on the corner instead of a dot.
-      if (city && city.name === 'Havana') drawKenneyDecor(c, 'light', t.x + 0.92, t.y + 0.92, 26);
       // Traffic light pole at the corner.
       const [tx, ty] = P(t.x + 0.95, t.y + 0.05); c.fillStyle = '#333'; c.fillRect(tx - 1, ty - 12, 2, 12);
       ['#e5484d', '#ffd166', '#12a150'].forEach((col, i) => { c.fillStyle = col; c.beginPath(); c.arc(tx, ty - 16 - i * 3, 1.6, 0, 7); c.fill(); });
@@ -99,11 +46,7 @@ const CityView = (() => {
     diamond(c, t.x, t.y, '#cfc9b8'); // sidewalk border around every lot
     diamond(c, t.x, t.y, '#e8e2d0', 0.04);
     const green = t.arch === 'house' || t.arch === 'rowhouse' || t.kind === 'park';
-    if (city && city.name === 'Havana' && t.kind !== 'park') {
-      // The dg four-quadrant ground tints are retired: Kenney pastel
-      // buildings sit on one warm sand ground across the whole city.
-      diamond(c, t.x, t.y, '#e8dcc0', 0.07);
-    } else diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
+    diamond(c, t.x, t.y, t.kind === 'park' ? '#6fbf5a' : green ? '#a5d97a' : t.zone === 'downtown' ? '#d2d6da' : '#bcd6a8', 0.07);
     if (t.arch === 'warehouse' || t.arch === 'factory' || (t.arch === 'shop' && t.seed > 0.6)) { // parking
       diamond(c, t.x, t.y, '#a4aab0', 0.1);
       c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.8;
@@ -188,12 +131,6 @@ const CityView = (() => {
     else if (style.cap === 'spire') { poly(c, [[x - 4, y], [x + 4, y], [x, y - 18]], a); }
   }
   function building(c, t) {
-    // Havana draws Kenney sprite buildings, not code boxes: the
-    // sprite pick is seeded per lot, so every lot keeps the same
-    // building every time the city opens. If a sprite is not ready,
-    // fall through to the code building below (which still carries
-    // the dg quadrant colours as a fallback).
-    if (city && city.name === 'Havana') { const top = drawKenney(c, t); if (top) return top; }
     // Every city draws in its country's style, not the generic
     // palette: wall colours and roof colour come from the design the
     // layout computed (the country's CAPITAL_STYLES entry), so all
@@ -207,20 +144,6 @@ const CityView = (() => {
       t = Object.assign({}, t, { color: style.w[Math.floor(rr() * style.w.length)], roof: style.r });
     }
     const r = mulberry(Math.floor(t.seed * 1e9)), x = t.x, y = t.y;
-    if (city && city.name === 'Havana') {
-      // Four sections, four code-only looks, split by the central avenues
-      // (x=12, y=12 are roads, so no lot straddles a boundary). Draw-time
-      // only: the layout, lots and saves are untouched.
-      const q = t.x < 12 ? (t.y < 12 ? 0 : 2) : (t.y < 12 ? 1 : 3);
-      const QP = [
-        ['#f2c6b6', '#f6e2a9', '#fbe7d0', '#e8cfe0', '#ffd9a0'],
-        ['#ffffff', '#a8d8ea', '#ffe29a', '#a8e6cf', '#f2f2f2'],
-        ['#7fa8c9', '#5b8fb5', '#9ab8c9', '#c9d4de', '#6f97ba'],
-        ['#d5e8cf', '#e4ecd6', '#c9d3b0', '#f2ead8', '#b7d7a8'],
-      ];
-      const QR = ['#a63a2e', '#e8e2d2', '#4f5b66', '#7a5a3c'];
-      t = Object.assign({}, t, { color: QP[q][Math.floor(r() * QP[q].length)], roof: QR[q] });
-    }
     const k = t.arch === 'warehouse' ? 0.08 : t.arch === 'glass' || t.arch === 'skyscraper' ? 0.13 : 0.15;
     const x0 = x + k, y0 = y + k, x1 = x + 1 - k, y1 = y + 1 - k;
     if (t.arch === 'house') return house(c, t, r);
@@ -412,8 +335,7 @@ const CityView = (() => {
   function park(c, t, r) {
     if (t.seed > 0.75) { const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#4fb6d8'; c.beginPath(); c.ellipse(mx, my, TW * 0.25, TH * 0.22, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1; c.stroke(); }
     c.strokeStyle = '#efe6cf'; c.lineWidth = 3; const a = P(t.x, t.y + 0.5), b = P(t.x + 1, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 6, b[0], b[1]); c.stroke();
-    if (city && city.name === 'Havana') { for (let i = 0; i < 3; i++) { const tx = t.x + 0.15 + r() * 0.7, ty = t.y + 0.15 + r() * 0.7; if (!drawKenneyDecor(c, 'tree', tx, ty, 34)) tree(c, tx, ty, 0.85 + r() * 0.45); } }
-    else for (let i = 0; i < 3; i++) tree(c, t.x + 0.15 + r() * 0.7, t.y + 0.15 + r() * 0.7, 0.85 + r() * 0.45);
+    for (let i = 0; i < 3; i++) tree(c, t.x + 0.15 + r() * 0.7, t.y + 0.15 + r() * 0.7, 0.85 + r() * 0.45);
     for (let i = 0; i < 5; i++) { const [fx, fy] = P(t.x + 0.1 + r() * 0.8, t.y + 0.1 + r() * 0.8); c.fillStyle = ['#ff8fa3', '#ffd166', '#ffffff'][i % 3]; c.beginPath(); c.arc(fx, fy, 1.8, 0, 7); c.fill(); }
     const [bx, by] = P(t.x + 0.5, t.y + 0.2); c.fillStyle = '#7a5a3c'; c.fillRect(bx - 7, by - 2, 14, 3); c.fillRect(bx - 7, by + 8, 14, 3);
     // Flower beds and a tiny playground slide.
@@ -716,26 +638,7 @@ const CityView = (() => {
     for (let i = 0; i < 4; i++) waveLine(H2 - 14 - i * 18 - wr() * 6);
     waveLine(880 + wr() * 40); waveLine(1030 + wr() * 40);
     // pass 1: ground
-    if (city && city.name === 'Havana') {
-      // Whole-city Kenney ground, drawn back-to-front so each block's
-      // sides sit correctly behind the block in front of it. Markings
-      // and plaza/water life are drawn back on top of the slabs, so
-      // streets keep their dashes and crosswalks and the plaza keeps
-      // its fountain. Any slab that is not ready falls back to the
-      // flat ground for that tile, so the city never renders blank.
-      [...T].sort((a, b) => (a.x + a.y) - (b.x + b.y) || a.x - b.x).forEach(t => {
-        const key = KENNEY_GROUND[t.kind] || 'glot';
-        if (drawKenneyGround(c, t, key)) {
-          if (t.kind === 'road') roadMarks(c, t, T);
-          else if (t.kind === 'plaza') plazaMarks(c, t);
-          else if (t.kind === 'water') waterMarks(c, t);
-        } else if (t.kind === 'water') water(c, t);
-        else if (t.kind === 'beach') beach(c, t);
-        else if (t.kind === 'road') road(c, t, T);
-        else if (t.kind === 'plaza') plazaGround(c, t);
-        else lotGround(c, t);
-      });
-    } else T.forEach(t => {
+T.forEach(t => {
       if (t.kind === 'water') water(c, t); else if (t.kind === 'beach') beach(c, t); else if (t.kind === 'road') road(c, t, T);
       else if (t.kind === 'plaza') plazaGround(c, t); else lotGround(c, t);
     });
@@ -745,7 +648,7 @@ const CityView = (() => {
     const vL = P(0, N), vB = P(N, N), vR = P(N, 0);
     c.beginPath(); c.moveTo(vL[0], vL[1]); c.lineTo(vB[0], vB[1]); c.lineTo(vR[0], vR[1]); c.stroke();
     // pass 2: shadows
-    T.forEach(t => { if (t.kind === 'lot' && t.arch !== 'house') { const h = Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2)); const sh = (city && city.name === 'Havana' && kenneyHeight(t) != null) ? kenneyHeight(t) : h; shadowOf(c, t.x + 0.15, t.y + 0.15, t.x + 0.85, t.y + 0.85, t.arch === 'warehouse' ? 25 : sh); } });
+    T.forEach(t => { if (t.kind === 'lot' && t.arch !== 'house') { const h = Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2)); const sh = h; shadowOf(c, t.x + 0.15, t.y + 0.15, t.x + 0.85, t.y + 0.85, t.arch === 'warehouse' ? 25 : sh); } });
     // pass 3: objects back to front
     const objs = [];
     T.forEach(t => {
@@ -756,7 +659,6 @@ const CityView = (() => {
         // a car driving behind it hides instead of driving over its roof.
         const kk = (t.arch === 'warehouse' || t.arch === 'factory') ? 0.08 : (t.arch === 'glass' || t.arch === 'skyscraper') ? 0.13 : 0.15;
         let hh = t.arch === 'house' ? 10 + t.floors * 8.5 : Math.min(300, 6 + t.floors * (t.arch === 'shop' ? 11 : 8.2));
-        if (city && city.name === 'Havana') { const kh = kenneyHeight(t); if (kh != null) hh = kh; }
         const A2 = P(t.x + kk, t.y + kk), B2 = P(t.x + 1 - kk, t.y + kk), C2 = P(t.x + 1 - kk, t.y + 1 - kk), D2 = P(t.x + kk, t.y + 1 - kk);
         occluders.push([D2, C2, B2, up(B2, hh), up(A2, hh), up(D2, hh)]);
       }

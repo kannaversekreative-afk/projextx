@@ -65,17 +65,6 @@ function buildWorld(data) {
     c.size = Math.max(0.3, Math.min(1.3, (Math.log10(c.pop) - 4.3) / 2.7));
     W.cities.push(c); k.capital = c.id;
   });
-  // Taiwan is a real economy and the world's semiconductor leader, even
-  // though it is not a UN member, so the UN-based playable flag excludes
-  // it and it has no capital city in the data. Give it Taipei as a
-  // capital and make it playable, or "Taiwan semiconductors" is moot.
-  const twn = W.byA3['TWN'];
-  if (twn && twn.capital == null) {
-    const c = { id: W.cities.length, name: 'Taipei', code: 'TPE', a3: 'TWN', lat: 25.032, lon: 121.565, x: projX(121.565), y: projY(25.032), pop: 2600000, port: 1 };
-    c.size = Math.max(0.3, Math.min(1.3, (Math.log10(c.pop) - 4.3) / 2.7));
-    W.cities.push(c); twn.capital = c.id;
-  }
-  if (twn) twn.playable = true;
   // Major cities, not towns: for the real world only (a generated
   // Random World already brings its own extra cities, and its a3 codes
   // do not match real ones, so this is a no-op there). Capitals are
@@ -90,6 +79,19 @@ function buildWorld(data) {
       W.cities.push(c);
     });
   }
+  // Picture-only world (2026-10-27): a country whose real capital was
+  // deleted but which still has a picture city keeps that picture city
+  // as its in-game capital, so the country stays playable and its
+  // picture cities are not orphaned. That city is NOT government-only
+  // (see isGovCity) — it stays commercial, like it was before.
+  // Countries with no picture city at all keep capital = null and are
+  // not playable until a picture city is added for them.
+  if (!data) W.countries.forEach(k => {
+    if (k.capital == null) {
+      const first = W.cities.find(c => c.a3 === k.a3);
+      if (first) { k.capital = first.id; first.reassignedCapital = true; }
+    }
+  });
   // Mark capitals, then split each country's real population and GDP
   // across its cities (capital included), weighted by metro population.
   // The cities together always add up to the country total, so the

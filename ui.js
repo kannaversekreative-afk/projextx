@@ -1114,13 +1114,13 @@ function startPick() {
 function renderPick() {
   const a3 = UI.pick.a3, k = a3 && W.byA3[a3];
   const q = (UI.pq || '').trim().toLowerCase();
-  const list = q ? W.countries.filter(c => c.playable && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
+  const list = q ? W.countries.filter(c => c.playable && c.capital != null && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
   $('hud').innerHTML = `<div class="pick-top card"><b>Pick your country</b><span class="muted">Tap a country on the map, or search.</span>
     <input id="csearch" class="search" placeholder="Search countries" value="${esc(UI.pq || '')}" autocomplete="off">
     <div class="sugg">${list.map(c => `<button class="chip" data-a="pickCountry" data-x="${c.a3}">${c.flag} ${esc(c.name)}</button>`).join('')}</div></div>
   ${k ? `<div class="pick-card card">
     <div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(k.name)}</h2><div class="muted">${esc(k.sub)} · ${fmtPop(k.pop0)} people</div></div></div>
-    <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP per person</span><b>${fmtMoney(k.gdp0 * 1e6 / k.pop0, true)}</b></div><div><span>Neighbours</span><b>${k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).length}</b></div></div>
+    <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP per person</span><b>${fmtMoney(k.gdp0 * 1e6 / k.pop0, true)}</b></div><div><span>Neighbours</span><b>${k.nb.filter(n => W.byA3[n] && W.byA3[n].playable && W.byA3[n].capital != null).length}</b></div></div>
     <p class="muted small">${k.wealth > 1.2 ? 'Rich market: high prices and high rents.' : k.wealth > 0.6 ? 'Middle-income market: balanced costs.' : 'Developing market: cheap to start, fast population growth.'} ${k.nb.length === 0 ? 'An island: safe from land invasion.' : ''}</p>
     <button class="btn3d orange wide" data-a="confirmCountry">START IN ${esc(k.name.toUpperCase())}</button></div>` : ''}`;
 }
@@ -2061,7 +2061,7 @@ const countryBody = () => {
 };
 const nationBody = () => {
   const cs = country(S.home), k = W.byA3[S.home];
-  const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).map(n => {
+  const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable && W.byA3[n].capital != null).map(n => {
     const rel = getRel(S.home, n), err = canAttack(n);
     const wp = warPlanScore({ target: n, army: 100, navy: 100, air: 100, approachBonus: 0.15, research: false });
     return `<div class="kv"><span>${W.byA3[n].flag} ${esc(cname(n))} · Relations ${rel}</span><span><button class="btn small" data-a="diplomacy" data-x="${n}">${fmtMoney(diplomacyCost(n), true)}</button> ${err ? `<span class="muted small">${esc(err)}</span>` : `<button class="btn small" data-a="warPlan" data-x="${n}">PLAN ATTACK (${Math.round(wp.winP * 100)}%)</button>`}</span></div>`;
@@ -2393,7 +2393,7 @@ PANELS.shop = () => {
 PANELS.search = () => {
   const q = (UI.sq || '').trim().toLowerCase();
   const cos = Object.values(S.co).filter(c => !q || c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q)).slice(0, 20);
-  const cts = W.countries.filter(c => c.playable && (!q || c.name.toLowerCase().includes(q))).slice(0, 20);
+  const cts = W.countries.filter(c => c.playable && c.capital != null && (!q || c.name.toLowerCase().includes(q))).slice(0, 20);
   return panelShell('Search', 'Companies and countries',
     `<input id="ssearch" class="search" placeholder="Search anything" value="${esc(UI.sq || '')}" autocomplete="off">
     <h4>Companies</h4><div class="list">${cos.map(c => `<button class="srow" data-a="stock" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${c.sym}</b><small>${esc(c.name)}</small></span></button>`).join('') || '<p class="muted small">No matches.</p>'}</div>

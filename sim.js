@@ -60,7 +60,10 @@ function newGame(opt) {
       stab: clamp(48 + k.wealth * 14 + gauss() * 12, 12, 95), mil: Math.sqrt(k.gdp0) * (0.6 + rand() * 0.8), tax: +(0.15 + rand() * 0.2).toFixed(2),
       incTax: 0.20, vat: 0.05, taxRev: 0,
       milLv: { air: lv, navy: k.coastal ? lv : 0, army: lv }, rel: {}, war: null, occ: null, drift: 0, fx: [], proj: [], nextElect: Math.floor(rand() * 1600), boom: 0, unrest: 0, treasury: k.gdp0 * 1e6 * 0.05, debt: k.gdp0 * 1e6 * 0.54, lastWeek: null };
-    k.nb.forEach(b => { if (W.byA3[b] && W.byA3[b].playable) cs.rel[b] = Math.round(clamp(30 + gauss() * 25, -40, 90)); });
+    // Relations only with countries actually in the game (playable =
+    // has a city). A neighbour whose city was deleted is not in
+    // S.countries, and worldDay would crash reading its state.
+    k.nb.forEach(b => { if (W.byA3[b] && W.byA3[b].playable && W.byA3[b].capital != null) cs.rel[b] = Math.round(clamp(30 + gauss() * 25, -40, 90)); });
     s.countries[k.a3] = cs;
   });
   for (const a in s.countries) for (const b in s.countries[a].rel) if (s.countries[b]) s.countries[b].rel[a] = s.countries[a].rel[b];
