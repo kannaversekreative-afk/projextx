@@ -271,8 +271,9 @@ function signFreeAgent(teamId, playerId) {
   if (!p) return 'That player is no longer available.';
   if (t.players.length >= 16) return 'Roster is full (16). Trade or release a player first.';
   const bonus = Math.round(p.salary * p.yrs * 0.10);
-  if (S.cash < bonus) return `Signing bonus ${fmtMoney(bonus, true)} needed.`;
-  S.cash -= bonus; lg.freeAgents = lg.freeAgents.filter(x => x.id !== playerId);
+  const w = t.wallet || 'company';
+  if (walletCash(w) < bonus) return `Signing bonus ${fmtMoney(bonus, true)} needed.`;
+  walletPay(w, bonus); lg.freeAgents = lg.freeAgents.filter(x => x.id !== playerId);
   t.players.push(p); return null;
 }
 function draftSportPlayer(teamId, playerId) {
@@ -289,9 +290,10 @@ function tradeSportPlayer(teamId, outId, targetId, inId, cashOffer) {
   const out = t.players.find(p => p.id === outId), inn = target.players.find(p => p.id === inId);
   if (!out || !inn) return 'Player not found.';
   const gap = inn.rating - out.rating, sweet = cashOffer || 0;
-  if (sweet > S.cash) return 'You do not have that cash to offer.';
+  const w = t.wallet || 'company';
+  if (sweet > walletCash(w)) return 'You do not have that cash to offer.';
   if (gap > 2 && sweet < gap * 500000) return `They want at least ${fmtMoney(gap * 500000, true)} cash on top for that gap.`;
-  S.cash -= sweet; if (sweet) { /* cash goes to the other club, not to the player */ }
+  walletPay(w, sweet); if (sweet) { /* cash goes to the other club, not to the player */ }
   t.players = t.players.filter(p => p.id !== outId); t.players.push(inn);
   target.players = target.players.filter(p => p.id !== inId); target.players.push(out);
   return null;
@@ -317,7 +319,7 @@ function sportIpo(teamId, pct) {
   pct = clamp(pct != null ? pct : 1, 0.01, 1);
   const totalShares = 1000000, price = Math.max(1, Math.round(t.value / totalShares));
   const gross = Math.round(t.value * pct), fee = Math.round(gross * 0.07), proceeds = gross - fee;
-  S.cash += proceeds;
+  walletAdd(t.wallet || 'company', proceeds);
   t.ipo = { totalShares, price, publicShares: Math.round(totalShares * pct), yourShares: Math.round(totalShares * (1 - pct)) };
   if (pct >= 0.999) t.owner = 'public';
   news('Sports', `${t.name} went public at ${fmtMoney(price)} a share. You sold ${Math.round(pct * 100)}% for ${fmtMoney(proceeds, true)} after a 7% fee.`, t.a3);
@@ -328,14 +330,15 @@ function sportTradeShares(teamId, side, qty) {
   qty = Math.floor(qty); if (!qty || qty <= 0) return 'Enter a share count.';
   const price = Math.max(1, Math.round(t.value / t.ipo.totalShares));
   t.ipo.price = price;
+  const w = t.wallet || 'company';
   if (side === 'buy') {
     const cost = qty * price;
-    if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+    if (walletCash(w) < cost) return `Costs ${fmtMoney(cost, true)}.`;
     if (qty > t.ipo.publicShares) return 'Not that many public shares available.';
-    S.cash -= cost; t.ipo.publicShares -= qty; t.ipo.yourShares += qty;
+    walletPay(w, cost); t.ipo.publicShares -= qty; t.ipo.yourShares += qty;
   } else {
     if (qty > t.ipo.yourShares) return 'You do not own that many shares.';
-    S.cash += qty * price; t.ipo.yourShares -= qty; t.ipo.publicShares += qty;
+    walletAdd(w, qty * price); t.ipo.yourShares -= qty; t.ipo.publicShares += qty;
   }
   return null;
 }

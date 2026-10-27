@@ -1060,9 +1060,9 @@ function sectorEraWeek() {
     const s = LEADER_SECTOR_BY_NAME[b.sector]; if (!s || !s.to || yr <= s.to) return;
     b.value = Math.max(1e5, b.value * (1 - 0.10 / 52));
     if (yr > s.to + 10) {
-      const held = (S.holdingsX && S.holdingsX[b.id] && S.holdingsX[b.id].qty) || 0;
+      const held = holdQtyX(b.id);
       if (held > (b.shares || 0) / 2) return;
-      if (rand() < 0.02) { delete S.extra[b.id]; if (S.holdingsX) delete S.holdingsX[b.id]; if (typeof news === 'function') news('Economy', b.name + ' has closed as ' + b.sector + ' fades away.'); }
+      if (rand() < 0.02) { delete S.extra[b.id]; if (S.holdingsX) delete S.holdingsX[b.id]; if (S.holdingsXP) delete S.holdingsXP[b.id]; if (typeof news === 'function') news('Economy', b.name + ' has closed as ' + b.sector + ' fades away.'); }
     }
   });
 }

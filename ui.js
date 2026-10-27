@@ -3136,7 +3136,7 @@ const A = {
     toast(`Issued ${qty.toLocaleString()} shares, raised ${fmtMoney(raised, true)}`, 'good'); save(); renderPanel();
   },
   sportLeague: x => { ensureSports(); S.sports.tab = x; UI.stack = []; renderPanel(); },
-  sportTeam: x => { pushPanel(x); },
+  sportTeam: x => { UI.stack = [x]; renderPanel(); },
   sportDay: x => { UI.sportDay = parseInt(x, 10) || 0; UI.sportView = UI.sportView || 'scores'; renderPanel(); },
   sportView: x => { UI.sportView = x; renderPanel(); },
   sportLeagueView: x => { UI.sportView = 'league'; UI.sportLg = x; renderPanel(); },

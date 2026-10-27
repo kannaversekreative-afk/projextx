@@ -99,7 +99,7 @@ function quarterlyReport(c) {
   if (payP > 0) ensurePerson().cash += payP;
   if (payC + payP > 0) c.lastDividendPay = payC + payP;
   const big = Math.abs(move) >= 0.12;
-  if ((held > 0 || big) && typeof news === 'function') {
+  if ((heldC + heldP > 0 || big) && typeof news === 'function') {
     const verdict = first ? 'in its first reported quarter' : (surprise >= 0 ? `, beating estimates by ${(surprise * 100).toFixed(0)}%` : `, missing estimates by ${(-surprise * 100).toFixed(0)}%`);
     news('Business', `${c.name} reports ${q} earnings ${fmtMoney(earnings, true)}${verdict}. ${c.sym} ${move >= 0 ? '+' : ''}${(move * 100).toFixed(1)}%.`, c.a3);
   }
