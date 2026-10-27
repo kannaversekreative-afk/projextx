@@ -38,10 +38,6 @@ const MapView = (() => {
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
-    c.strokeStyle = COL.grid; c.lineWidth = 1 / v.s; c.beginPath();
-    for (let lon = -180; lon <= 180; lon += 15) { c.moveTo(projX(lon), 0); c.lineTo(projX(lon), MAP_H); }
-    for (let lat = -45; lat <= 75; lat += 15) { c.moveTo(0, projY(lat)); c.lineTo(MAP_W, projY(lat)); }
-    c.stroke();
     const [x0, y0] = toMap(0, 0), [x1, y1] = toMap(vw, vh);
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
