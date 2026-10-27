@@ -19,7 +19,7 @@ const CAPITAL_LANDMARKS = {
   NIC: { n: 'National Palace of Culture', t: 'palace', e: '🏛️', c: ['#e8dcc4', '#c9a86a'] },
   CRI: { n: 'National Theatre', t: 'palace', e: '🎭', c: ['#e8dcc4', '#8a7a5a'] },
   PAN: { n: 'Metropolitan Cathedral', t: 'cathedral', e: '⛪', c: ['#d8d2c2'] },
-  CUB: { n: 'El Capitolio', t: 'dome', e: '🏛️', c: ['#efe9dc', '#f6f1e4', '#b9b0a0'] },
+  CUB: { n: 'El Capitolio', t: 'dome', e: '🏛️', c: ['#f7ead2', '#ffd166', '#c9971f'] },
   JAM: { n: 'Devon House', t: 'palace', e: '🏠', c: ['#f2e2c4', '#3a5a40'] },
   HTI: { n: 'National Palace', t: 'palace', e: '🏛️', c: ['#f2f2f2', '#2f7cf6'] },
   DOM: { n: 'Alcázar de Colón', t: 'castle', e: '🏰', c: ['#c9b49a', '#7a5a3c'] },

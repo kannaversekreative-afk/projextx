@@ -8,7 +8,7 @@ const CityView = (() => {
   let marsMode = false;
   let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], occluders = [], skyPlanes = [], animTimer = null, lastAnim = 0;
   let photoMode = false, pmViewport = null, pmImg = null, pmZoomLabel = null, pm = { x: 0, y: 0, s: 1, fit: 1, iw: 0, ih: 0 }, pmPts = new Map(), pmPinch = null;
-  let pmStage = null, panoMode = false, panoTimer = null, panoVehs = [], panoBtn = null;
+  let pmStage = null;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -59,8 +59,9 @@ const CityView = (() => {
     if ((t.x + t.y) % 3 === 0) { const [vx, vy] = P(t.x + 0.82, t.y + 0.2); c.fillStyle = '#ff6b2c'; c.fillRect(vx - 7, vy - 6, 14, 7); c.fillStyle = '#fff'; c.fillRect(vx - 7, vy - 9, 14, 3); }
   }
   function water(c, t) {
-    diamond(c, t.x, t.y, '#2aa8d8');
-    diamond(c, t.x, t.y, '#3db5e0', 0.12);
+    const hav = city && city.name === 'Havana';
+    diamond(c, t.x, t.y, hav ? '#358fb8' : '#2aa8d8');
+    diamond(c, t.x, t.y, hav ? '#4aa8cc' : '#3db5e0', 0.12);
     c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1; const a = P(t.x + 0.25, t.y + 0.5), b = P(t.x + 0.6, t.y + 0.5); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo((a[0] + b[0]) / 2, a[1] - 3, b[0], b[1]); c.stroke();
     if (t.seed > 0.85) { // a little boat on the water
       const [mx, my] = P(t.x + 0.5, t.y + 0.5); c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(mx, my, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e5484d'; c.fillRect(mx - 1, my - 9, 2, 9);
@@ -152,8 +153,8 @@ const CityView = (() => {
       g = box(c, x0, y0, x1, y1, h, t.color);
       if (t.arch === 'glass') glassFaces(c, g, t.color, h);
       else if (t.arch === 'office' || t.arch === 'bank') { const rows = Math.max(1, Math.round(h / floorH)); [[g.D, g.C], [g.C, g.B]].forEach(([a, b]) => { for (let i = 0; i < rows; i++) { const yb = -(i * floorH + 2.5), yt = yb - 4.2; poly(c, [[a[0], a[1] + yb], [b[0], b[1] + yb], [b[0], b[1] + yt], [a[0], a[1] + yt]], 'rgba(42,74,110,0.62)'); } });
-        const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < 0.45) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
-      else if (t.arch === 'apartment' || t.arch === 'hotel') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < 0.25 ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
+        const ea = lerp(g.D, g.C, 0.35), eb = lerp(g.D, g.C, 0.65); poly(c, [ea, eb, up(eb, 10), up(ea, 10)], 'rgba(20,30,40,0.35)'); const lit = lerp(g.D, g.C, 0.5); for (let i = 0; i < rows; i++) if (r() < (city && city.name === 'Havana' ? 0.7 : 0.45)) { c.fillStyle = 'rgba(255,232,170,0.9)'; c.fillRect(lit[0] - 6, lit[1] - (i * floorH + 6.5), 5, 3.5); } }
+      else if (t.arch === 'apartment' || t.arch === 'hotel') { const rows = Math.max(1, Math.round(h / floorH)); faceGrid(c, g.D, g.C, h, rows, 4, (ri, ki) => r() < (city && city.name === 'Havana' ? 0.5 : 0.25) ? 'rgba(255,232,170,0.9)' : 'rgba(55,70,85,0.62)'); faceGrid(c, g.C, g.B, h, rows, 4, 'rgba(45,58,72,0.62)');
         for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.25), b = lerp(g.D, g.C, 0.75); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1; c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1); c.lineTo(b[0], b[1] - i * floorH - 1); c.stroke(); }
         c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; for (let i = 1; i < rows; i += 2) { const a = lerp(g.D, g.C, 0.1), b = lerp(g.D, g.C, 0.9); c.beginPath(); c.moveTo(a[0], a[1] - i * floorH - 1.5); c.lineTo(b[0], b[1] - i * floorH - 1.5); c.stroke(); } }
       else if (t.arch === 'shop') shopFront(c, g, t, h);
@@ -611,9 +612,12 @@ const CityView = (() => {
     // Sky above the city, sea around it: the gradient runs sky blue to
     // sea blue, so the ground outside the city diamond reads as water
     // on every side, not a green void. Tiles cover the diamond itself.
+    const havana = city && city.name === 'Havana';
     const sky = c.createLinearGradient(0, 0, 0, H2);
-    sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#a8d8e8'); sky.addColorStop(1, '#2e8fc7');
+    if (havana) { sky.addColorStop(0, '#ffd9a0'); sky.addColorStop(0.45, '#ffb37a'); sky.addColorStop(1, '#2e7fa8'); }
+    else { sky.addColorStop(0, '#7ec3f2'); sky.addColorStop(0.45, '#a8d8e8'); sky.addColorStop(1, '#2e8fc7'); }
     c.fillStyle = sky; c.fillRect(0, 0, W2, H2);
+    if (havana) { const sg = c.createRadialGradient(W2 * 0.78, 110, 10, W2 * 0.78, 110, 130); sg.addColorStop(0, 'rgba(255,246,200,0.95)'); sg.addColorStop(0.35, 'rgba(255,220,150,0.55)'); sg.addColorStop(1, 'rgba(255,220,150,0)'); c.fillStyle = sg; c.beginPath(); c.arc(W2 * 0.78, 110, 130, 0, 7); c.fill(); }
     const cr = mulberry(hashStr('clouds:' + city.code + city.name));
     for (let i = 0; i < 6; i++) {
       const cx = cr() * W2, cy = 30 + cr() * Math.max(60, oy - 100);
@@ -690,6 +694,7 @@ const CityView = (() => {
         }
       }
     } catch (e) {}
+    if (havana) { c.fillStyle = 'rgba(255,180,90,0.10)'; c.fillRect(0, 0, W2, H2); }
   }
 
 
@@ -942,83 +947,9 @@ const CityView = (() => {
     view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
     const [cx, cy] = P(layout.landmark.x + 1.5, layout.landmark.y + 1.5);
     view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
+    if (city && city.name === 'Havana') { view.s = 1; view.x = vw / 2 - cx * view.s; view.y = Math.round(vh * 0.62) - cy * view.s; }
     pins(); apply();
   }
-  // ---------- Havana living panorama ----------
-  // Wide illustrated panorama with REAL moving traffic on top. The
-  // picture itself has no cars, boats or people painted in, so
-  // everything that moves is a live element, not a frozen pixel.
-  // The Malecón road runs diagonally across the picture, from about
-  // 58% height at the left edge to 22% at the right edge.
-  function panoRoadY(x) { return pm.ih * (0.58 - 0.36 * (x / pm.iw)); }
-  function panoTrafficEl() { return el ? el.querySelector('#pmTraffic') : null; }
-  function clearPano() {
-    stopPanoAnim(); panoMode = false;
-    const t = panoTrafficEl(); if (t) t.innerHTML = '';
-    if (panoBtn) { panoBtn.remove(); panoBtn = null; }
-    panoVehs = [];
-  }
-  function openPano() {
-    photoMode = true; panoMode = true; stopAnim(); layer.innerHTML = '';
-    el.classList.add('photo'); el.classList.add('open');
-    pmImg.src = HAVANA_PANO_SRC;
-    const go = () => { pm.iw = pmImg.naturalWidth || 2240; pm.ih = pmImg.naturalHeight || 1120; pmImg.style.width = pm.iw + 'px'; pmImg.style.height = pm.ih + 'px'; if (pmStage) { pmStage.style.width = pm.iw + 'px'; pmStage.style.height = pm.ih + 'px'; } pmFit(); buildPanoTraffic(); startPanoAnim(); };
-    if (pmImg.complete && pmImg.naturalWidth) go(); else pmImg.onload = go;
-    if (!panoBtn) {
-      panoBtn = document.createElement('button');
-      panoBtn.className = 'pano-city-btn'; panoBtn.textContent = '🏙️ City view';
-      panoBtn.addEventListener('pointerdown', e => e.stopPropagation());
-      panoBtn.addEventListener('click', e => { e.stopPropagation(); clearPano(); openCode(); });
-      el.appendChild(panoBtn);
-    }
-  }
-  function panoMk(kind, cls, html, x, speed, dir, lane, hw, hh) {
-    const t = panoTrafficEl(); if (!t) return null;
-    const d = document.createElement('div'); d.className = 'pv ' + cls; d.innerHTML = html;
-    t.appendChild(d);
-    const v = { el: d, kind, x, speed, dir, lane, hw, hh };
-    panoVehs.push(v); return v;
-  }
-  function buildPanoTraffic() {
-    const t = panoTrafficEl(); if (!t) return; t.innerHTML = ''; panoVehs = [];
-    const W = pm.iw, rnd = Math.random;
-    const carCols = ['#ff5d8f', '#2ec4b6', '#ffd166', '#ff7b54', '#f8f9fa', '#7fb3ff', '#e5484d'];
-    for (let i = 0; i < 10; i++) {
-      const dir = i % 2 ? -1 : 1, col = carCols[i % carCols.length];
-      panoMk('car', 'pv-car', `<span class="pv-body" style="background:${col}"></span><span class="pv-cab"></span>`, rnd() * W, 70 + rnd() * 50, dir, (i % 2 ? -1 : 1) * 16, 28, 13);
-    }
-    for (let i = 0; i < 6; i++) {
-      const dir = i % 2 ? -1 : 1;
-      panoMk('boat', 'pv-boat', `<span class="pv-hull"></span><span class="pv-cab2"></span><span class="pv-wake"></span>`, rnd() * W, 35 + rnd() * 25, dir, [0.10, 0.18, 0.30][i % 3], 32, 13);
-    }
-    const pplCols = ['#e5484d', '#2f7cf6', '#ffd166', '#2ec4b6', '#ff7b54', '#8b5cf6'];
-    for (let i = 0; i < 14; i++) {
-      const dir = i % 2 ? -1 : 1;
-      const v = panoMk('person', 'pv-person', '', rnd() * W, 14 + rnd() * 10, dir, -36, 5, 8);
-      if (v) v.el.style.background = pplCols[i % pplCols.length];
-    }
-  }
-  function panoLaneY(v) {
-    if (v.kind === 'boat') return pm.ih * v.lane;
-    return panoRoadY(v.x) + v.lane;
-  }
-  function startPanoAnim() {
-    if (panoTimer) return;
-    let last = performance.now();
-    panoTimer = setInterval(() => {
-      const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
-      panoVehs.forEach(v => {
-        v.x += v.dir * v.speed * dt;
-        if (v.x > pm.iw + 90) v.x = -90; if (v.x < -90) v.x = pm.iw + 90;
-        const y = panoLaneY(v);
-        let rot = 0;
-        if (v.kind === 'car') rot = v.dir === 1 ? -10 : 170;
-        else if (v.kind === 'boat' && v.dir === -1) rot = 180;
-        v.el.style.transform = `translate(${v.x - v.hw}px,${y - v.hh}px) rotate(${rot}deg)`;
-      });
-    }, 50);
-  }
-  function stopPanoAnim() { if (panoTimer) { clearInterval(panoTimer); panoTimer = null; } }
   function openPhoto(src) {
     photoMode = true; stopAnim(); layer.innerHTML = '';
     el.classList.add('photo'); el.classList.add('open');
@@ -1035,14 +966,11 @@ const CityView = (() => {
     open(id) {
       marsMode = false;
       city = W.cities[id];
-      clearPano();
-      if (city.a3 === 'CUB' && city.name === 'Havana' && typeof HAVANA_PANO_SRC === 'string') { openPano(); return; }
       const mapSrc = (typeof cityMapFor === 'function') ? cityMapFor(city) : null;
       if (mapSrc) { openPhoto(mapSrc); return; }
       openCode();
     },
     openMars() {
-      clearPano();
       photoMode = false; el.classList.remove('photo'); if (pmImg) pmImg.src = '';
       marsMode = true;
       city = { id: MARS_CITY_ID, name: 'Mars', a3: S.home, code: 'MARS', size: 0.5, port: false, wealth: 1, pop: 0 };
@@ -1054,7 +982,7 @@ const CityView = (() => {
       view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
       pins(); apply();
     },
-    close() { stopAnim(); clearPano(); marsMode = false; photoMode = false; el.classList.remove('open'); el.classList.remove('photo'); if (pmImg) pmImg.src = ''; city = null; img = null; },
+    close() { stopAnim(); marsMode = false; photoMode = false; el.classList.remove('open'); el.classList.remove('photo'); if (pmImg) pmImg.src = ''; city = null; img = null; },
     refresh() { if (city && !photoMode) pins(); },
     setFilter(f) { filter = f; if (!photoMode) pins(); },
     get filter() { return filter; },
