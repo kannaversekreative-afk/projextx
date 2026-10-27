@@ -1487,6 +1487,7 @@ PANELS.markets = () => {
   return panelShell('Markets', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`,
     `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
     <button class="btn small" data-a="panel" data-x="etf">ETFs — baskets of core businesses</button>
+    <button class="btn small" data-a="panel" data-x="economy">Economy — farms → factories → shops</button>
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
     <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
     <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
@@ -1837,6 +1838,26 @@ PANELS.etf = () => {
     `<div class="card in"><h4>CREATE AN ETF — IPO IT</h4><p class="muted small">Pick a basket. You become the manager and earn the 0.50%/yr fee as a price drag — no cash windfall, because you do not own the basket. Finance companies do the same, and CPU finance companies launch their own over time.</p>
     <div class="row wrap">${ETF_GROUPS.map(g => `<button class="btn small" data-a="etfCreate" data-x="${g.id}">${esc(g.name)} ETF</button>`).join('')}</div></div>
     ${rows || '<p class="muted small">No ETFs yet. Create one above, or wait for a finance company to launch one.</p>'}
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
+PANELS.economy = () => {
+  const s = (typeof supplyFor === 'function') ? supplyFor(S.home) : { farmCost: 1, shopDemand: 1, farmOut: 0, factoryOut: 0, shopOut: 0 };
+  const owner = (typeof realEstateOwner === 'function') ? realEstateOwner(S.home) : null;
+  const rent = (S.lastRent || {})[S.home] || 0;
+  const all = Object.keys(S.supply || {}).map(a3 => ({ a3, ...S.supply[a3] })).filter(x => x.farmCost > 1.2 || x.shopDemand < 0.85);
+  return panelShell(`Economy — ${cname(S.home)}`, 'Farms → factories → shops, plus who owns the ground.',
+    `<div class="card in"><h4>🌾 FARMS → 🏭 FACTORIES → 🏪 SHOPS</h4>
+    <div class="kv"><span>Farm output this week</span><b>${fmtMoney(s.farmOut, true)}</b></div>
+    <div class="kv"><span>Factory output this week</span><b>${fmtMoney(s.factoryOut, true)}</b></div>
+    <div class="kv"><span>Shop sales this week</span><b>${fmtMoney(s.shopOut, true)}</b></div>
+    <div class="kv"><span>Factory costs next week</span><b>${(s.farmCost * 100).toFixed(0)}% ${s.farmCost > 1 ? '— farm shortage' : s.farmCost < 1 ? '— farm surplus' : ''}</b></div>
+    <div class="kv"><span>Shop demand next week</span><b>${(s.shopDemand * 100).toFixed(0)}% ${s.shopDemand < 1 ? '— factory shortage' : s.shopDemand > 1 ? '— factory surplus' : ''}</b></div>
+    <p class="muted small">Sectors still run on their own — this chain only moves factory costs (0.9x–1.5x) and shop demand (0.7x–1.1x), one week behind the results that set it. The economy keeps going on CPU alone, and better if you keep going.</p></div>
+    <div class="card in"><h4>🏘️ REAL ESTATE</h4>
+    <div class="kv"><span>Owner in ${esc(cname(S.home))}</span><b>${owner ? esc(owner.name) : 'None yet'}</b></div>
+    <div class="kv"><span>Rent collected last week</span><b>${fmtMoney(rent, true)}</b></div>
+    <p class="muted small">All farmland, apartments, stores for lease, already-leased stores and stadium rent is owned by real estate companies. Rent that used to vanish now lands on that company's weekly profit.</p></div>
+    ${all.length ? `<div class="card in"><h4>⚠️ SHORTAGES ELSEWHERE</h4>${all.slice(0, 10).map(x => `<div class="kv"><span>${esc(cname(x.a3))}</span><b>Factory costs ${(x.farmCost * 100).toFixed(0)}% · Shop demand ${(x.shopDemand * 100).toFixed(0)}%</b></div>`).join('')}</div>` : ''}
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 // World leaders, with the exact names Tawk uses (seeded per country),

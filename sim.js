@@ -305,14 +305,21 @@ function locEconomics(c, loc, nLocs) {
   const _cs = country(c.a3), taxDemand = (1 - ((_cs.incTax || 0.20) - 0.20) * 0.5) * (1 - ((_cs.vat || 0.05) - 0.05) * 1.0);
   const wageSpeed = s.wage < 1 ? 0.85 : s.wage > 1 ? 1.15 : 1, rush = S.boosts.rush > S.day && controlled(c.a3) ? 2 : 1;
   const extraSat = (c.web.addons.reviews ? 0.3 : 0) + (loc.boost || 0);
+  // Supply chain, one week lagged (see economy.js): farm shortage
+  // raises factory costs, factory shortage cuts shop demand. Sectors
+  // still run on their own — this only moves the dial a little.
+  const _sup = (typeof S !== 'undefined' && S && S.supply && S.supply[c.a3]) ? S.supply[c.a3] : null;
+  const _role = (typeof chainRole === 'function') ? chainRole(c.sector) : 'other';
+  const _farmCost = _role === 'factory' && _sup ? (_sup.farmCost || 1) : 1;
+  const _shopDemand = _role === 'shop' && _sup ? (_sup.shopDemand || 1) : 1;
   if (L.mode === 'traffic') {
     const priceF = Math.pow(1 / s.price, 1.7), comp = 1 / (1 + 0.12 * Math.max(0, nLocs - 1));
-    const demand = loc.traffic * L.capture * 1.4 * priceF * qualityF * interiorF * adsF(c) * webF(c) * brandF * comp * m * rush * taxDemand;
+    const demand = loc.traffic * L.capture * 1.4 * priceF * qualityF * interiorF * adsF(c) * webF(c) * brandF * comp * m * rush * taxDemand * _shopDemand;
     const cap = loc.staff * L.throughput * wageSpeed;
     const served = Math.min(demand, cap), over = demand / Math.max(1, cap);
     const sat = clamp(3 + (qualityF - 1) * 4 + (interiorF - 1) * 3 - Math.min(1.5, Math.max(0, over - 1) * 2.5) + (s.wage - 1) * 2.5 - (s.price - 1) * 2 + extraSat, 1, 5);
     const rev = served * L.ticket * Math.pow(w, 0.6) * s.price * Math.pow(econ(c), 0.7);
-    const cogs = rev * L.cogs * (0.8 + 0.1 * s.quality);
+    const cogs = rev * L.cogs * (0.8 + 0.1 * s.quality) * _farmCost;
     const wages = loc.staff * L.wage * Math.pow(w, 0.7) * s.wage;
     return { demand, cap, served, sat, rev, cost: (cogs + wages + loc.rent) * cm, profit: rev - (cogs + wages + loc.rent) * cm };
   }
@@ -320,7 +327,7 @@ function locEconomics(c, loc, nLocs) {
   const totalStaff = c._staff != null ? c._staff : c.locs.reduce((a, l) => a + l.staff, 0);
   const sat0 = 1 / (1 + totalStaff / (8 * Math.sqrt(k.gdp0 / 1000) + 5));
   const fleetBoost = c.sector === 'Shipping' ? 1 + c.fleet * 0.08 : 1;
-  const dF = m * webF(c) * Math.sqrt(adsF(c)) * brandF * (0.8 + 0.1 * s.quality) * Math.pow(1 / s.price, 0.6) * s.price * sat0 * fleetBoost * interiorF * rush * Math.pow(econ(c), 0.7) * taxDemand;
+  const dF = m * webF(c) * Math.sqrt(adsF(c)) * brandF * (0.8 + 0.1 * s.quality) * Math.pow(1 / s.price, 0.6) * s.price * sat0 * fleetBoost * interiorF * rush * Math.pow(econ(c), 0.7) * taxDemand * _shopDemand;
   const rev = loc.staff * L.perStaff * Math.pow(w, 0.7) * dF;
   const wages = loc.staff * L.wage * Math.pow(w, 0.8) * s.wage;
   const sat = clamp(3 + (s.wage - 1) * 2.5 + (s.quality - 3) * 0.3 + (interiorF - 1) * 3 - (s.price - 1) * 1.5 + extraSat, 1, 5);
