@@ -181,12 +181,15 @@ function tawkRoundPairings(teams, round) {
   for (let i = 0; i < n / 2; i++) pairs.push([order[i], order[n - 1 - i]]);
   return pairs;
 }
-function tawkSportGames(lgId) {
+function tawkSportGames(lgId, weekOff) {
   if (typeof ensureSports !== 'function') return [];
   ensureSports();
   const lg = (S.sports.leagues || []).find(l => l.id === lgId);
   if (!lg || !lg.teams || lg.teams.length < 2) return [];
-  const week = tawkSportWeek(), round = week % 9;
+  // weekOff shifts the slate: -1 = last week (Final), 0 = this week
+  // (live), +1 = next week (Upcoming). Callers that omit it get the
+  // current week, exactly as before.
+  const week = tawkSportWeek() + (weekOff || 0), round = ((week % 9) + 9) % 9;
   const pairs = tawkRoundPairings(lg.teams, round);
   return pairs.map((pr, gi) => {
     const home = lg.teams[pr[0]], away = lg.teams[pr[1]];

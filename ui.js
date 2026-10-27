@@ -469,8 +469,9 @@ function renderHUD() {
   $('hud').innerHTML = `
   <button class="hud-pill hud-tl" data-a="panel" data-x="profile" aria-label="User profile">
     <span class="hud-avatar">${esc(youName.charAt(0).toUpperCase())}</span>
-    <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)} · ${fmtMoney(S.cash)}</small></span>
+    <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)}</small></span>
   </button>
+  <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
@@ -1709,10 +1710,9 @@ PANELS.profile = () => {
   return panelShell('You', `${esc(you.name)} · Age ${personAge()} · ${office ? esc(office.title) : esc(cur.title)}`,
     `<div class="card in"><h4>✏️ Name</h4><div class="row"><input id="profileName" class="search" type="text" value="${esc(you.name)}" maxlength="24"><button class="btn" data-a="profileRename">Save name</button></div><p class="muted small">This is the name on the top pill, with your title behind it. Your title changes on its own as you win offices, run companies, and climb careers.</p></div>
     <div class="card in"><h4>📊 Meters</h4>${bar('👁 Visibility', P.vis)}${bar('⭐ Fame', P.fame)}${bar('❤️ Popularity', P.pop)}${bar('🗳️ Public opinion', P.opin)}<p class="muted small">Elections are won on fame, popularity, and public opinion — three separate scores. Visibility helps fame grow.</p></div>
-    <div class="card in"><h4>💰 Wallets</h4>
+    <div class="card in"><h4>💰 Your money</h4>
     <div class="kv"><span>Personal money</span><b>${fmtMoney(P.cash, true)}</b></div>
-    <div class="kv"><span>Business money</span><b>${fmtMoney(S.cash, true)}</b></div>
-    ${office ? `<div class="kv"><span>${esc(office.title)} budget</span><b>${fmtMoney(officeTreasury(office), true)} · ${Math.max(0, Math.ceil((office.termEnd - S.day) / 365))}y left</b></div>` : ''}
+    ${office ? `<div class="kv"><span>${esc(office.title)} term</span><b>${Math.max(0, Math.ceil((office.termEnd - S.day) / 365))}y left</b></div>` : ''}
     <div class="row wrap"><button class="btn small" data-a="personInvest" data-x="10000">Invest $10K</button><button class="btn small" data-a="personInvest" data-x="100000">Invest $100K</button><button class="btn small" data-a="personInvest" data-x="all">Invest all</button><button class="btn small" data-a="personPay" data-x="10000">Pay self $10K</button><button class="btn small" data-a="personPay" data-x="100000">Pay self $100K</button><button class="btn small" data-a="personPay" data-x="all">Pay self all</button></div>
     <p class="muted small">Invest moves your money into your business. Pay yourself moves business money to you.</p></div>
     <div class="card in"><h4>💼 Career</h4>
@@ -1721,12 +1721,10 @@ PANELS.profile = () => {
     <div class="row wrap"><button class="btn small" data-a="personJoinAgency" data-x="dom">Join ${esc(agencyOf(S.home)[0])}</button><button class="btn small" data-a="personJoinAgency" data-x="for">Join ${esc(agencyOf(S.home)[1])}</button><button class="btn small" data-a="personEnlist">Enlist in the military</button></div>
     ${office ? `<div class="kv"><span>Office</span><b>${esc(office.title)} · ${fmtMoney(office.salary, true)}/week</b></div><button class="btn" data-a="policy">Announce policy (office budget)</button>` : ''}
     <p class="muted small">Jobs pay you every week. Agencies cut your risk of getting caught. The military opens the General advisor.</p></div>
-    <div class="card in"><h4>🏠 Assets</h4>
-    <div class="kv"><span>Country</span><b>${esc(cname(S.home))}</b></div>
+    <div class="card in"><h4>🏠 Your assets</h4>
     <div class="kv"><span>Buildings</span><b>${(S.props || []).length} · ${fmtMoney(propValue(), true)}</b></div>
-    <div class="kv"><span>Investments</span><b>${fmtMoney(holdingsValue(), true)}</b></div>
-    <div class="kv"><span>Companies you control</span><b>${mineCount}</b></div>
     <div class="kv"><span>Rating</span><b>${(S.rating || 0).toFixed(1)} / 5</b></div>
+    <p class="muted small">Companies, stocks and business money live in Trade, My Companies and Offices — not here.</p>
     <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">CABINET (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
 };
 PANELS.cabinet = () => {
@@ -1767,16 +1765,14 @@ PANELS.elections = () => {
 };
 PANELS.country = () => {
   const cs = country(S.home), k = W.byA3[S.home], cap = W.cities[k.capital];
-  const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(S.home) : [S.co[S.home]];
-  const avgRating = biz.length ? biz.reduce((a, b) => a + (b.rating || 0), 0) / biz.length : 0;
   const gdpSorted = W.playable.slice().sort((a, b) => b.gdp0 - a.gdp0);
   const gdpRank = gdpSorted.findIndex(c => c.a3 === S.home) + 1;
   const adv = countryAdvisor();
   const top3 = gdpSorted.slice(0, 3);
   const hist = S.news.filter(n => n.a3 === S.home).slice(0, 6);
   return panelShell('Your country', `${k.flag} ${esc(cname(S.home))} · ${esc(countryStatus(S.home).t)}`,
-    `<div class="country-hero"><div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(cname(S.home))}</h2><div class="muted-light">Based in ${cap ? esc(cap.name) : ''} · Balance ${fmtMoney(S.cash, true)}</div></div></div>
-    <div class="stats4"><div><span>Businesses</span><b>${biz.length}</b></div><div><span>Placed</span><b>${(S.placed || []).length}</b></div><div><span>Rating</span><b>★ ${avgRating.toFixed(1)}</b></div><div><span>GDP rank</span><b>#${gdpRank}</b></div></div></div>
+    `<div class="country-hero"><div class="row start"><div class="flag-big">${k.flag}</div><div><h2>${esc(cname(S.home))}</h2><div class="muted-light">Capital ${cap ? esc(cap.name) : ''} · Population ${fmtPop(nationPop())}</div></div></div>
+    <div class="stats4"><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>Stability</span><b>${Math.round(cs.stab)}/100</b></div><div><span>Military rank</span><b>#${milRank(S.home)}</b></div><div><span>GDP rank</span><b>#${gdpRank}</b></div></div></div>
     ${S.flow ? `<div class="card in"><h4>🌍 Domination</h4><p class="muted small">${(S.dominated || []).length} countries dominated. ${flowDominated(S.home) ? 'You dominate your home country ✓.' : 'To dominate a country: control its flagship (50%+) and buy an office there.'} ${flowCanExpand() ? 'The world is open — you can expand.' : 'Buy an office and hire a full board to open the world.'}</p></div>` : ''}
     <div class="row wrap" style="margin-top:12px"><span class="chip">Corporate tax ${Math.round(cs.tax * 100)}%</span><span class="chip">Stability ${Math.round(cs.stab)}/100</span><span class="chip">Population ${fmtPop(nationPop())}</span><span class="chip">Level ${level()}</span></div>
     <div class="row" style="margin-top:12px"><button class="btn flex" data-a="panel" data-x="nation">NATION / TAX</button><button class="btn flex" data-a="panel" data-x="leader">LEADER</button><button class="btn flex" data-a="panel" data-x="military">MILITARY</button></div>
@@ -1786,9 +1782,7 @@ PANELS.country = () => {
     ${gdpRank > 3 ? `<div class="kv"><span>#${gdpRank} ${k.flag} ${esc(cname(S.home))} (you)</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div>` : ''}
     <div class="kv"><span>Military rank</span><b>#${milRank(S.home)} of ${W.playable.length}</b></div>
     <button class="btn wide" data-a="panel" data-x="leaderboard">SEE ALL RANKINGS</button></div>
-    <h4>Ratings</h4><div class="card in"><p class="muted small">You are at ★ ${avgRating.toFixed(1)} on average across your country's businesses.</p>
-    ${biz.map(b => `<div class="kv"><span>${(SECTORS[b.sector] && SECTORS[b.sector].icon) || ICONS.company} ${esc(b.name)}</span><b>★ ${(b.rating || 0).toFixed(1)}</b></div>`).join('')}
-    ${S.rating ? `<div class="kv"><span>Your personal rating</span><b>★ ${S.rating.toFixed(1)}</b></div>` : ''}</div>
+    <p class="muted small">Business ratings live in My Companies — this panel is the country only: nation, taxes, military, rankings and history.</p>
     <h4>History</h4><div class="card in">${hist.map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No history yet — play a week and it lands here.</p>'}</div>`);
 };
 PANELS.nation = () => {
@@ -2064,6 +2058,80 @@ function sportStatLine(lgId, p) {
   if (lgId === 'base') return p.pos.match(/SP|RP|CP/) ? `W ${s.W || 0} L ${s.L || 0} SV ${s.SV || 0} SO ${s.SO || 0} ERA ${s.ERA != null ? s.ERA : '-'}` : `.${String(Math.round((s.AVG || 0) * 1000))} HR ${s.HR || 0} RBI ${s.RBI || 0} SB ${s.SB || 0}`;
   return `PTS ${s.PTS || 0} REB ${s.REB || 0} AST ${s.AST || 0}`;
 }
+// --- Worl Sports: scores-app layout (layout reference only, original
+// leagues/teams only). Scores come from the game's real teams via the
+// same seeded weekly slate Tawk uses, so the scoreboard is stable all
+// week and changes next week. Views: scores (Yesterday / Today /
+// Upcoming) / leagues (follow + search) / league (games + standings).
+// Team detail (franchise, players, finance, draft) is unchanged and
+// opens when you tap a team anywhere here.
+function sportFavs() { if (!S.sportFavs) S.sportFavs = {}; return S.sportFavs; }
+function sportLgFavs() { if (!S.sportLgFavs) S.sportLgFavs = {}; return S.sportLgFavs; }
+function sportDayTabs() {
+  const day = UI.sportDay || 0;
+  return `<div class="wsport-tabs">${[['Yesterday', -1], ['Today', 0], ['Upcoming', 1]].map(([label, v]) => `<button class="wsport-tab ${day === v ? 'on' : ''}" data-a="sportDay" data-x="${v}">${label}</button>`).join('')}</div>`;
+}
+function sportGameCard(g, dayOff) {
+  const status = dayOff < 0 ? 'Final' : dayOff > 0 ? 'Upcoming · ' + fmtDate(S.day + dayOff * 7) : g.period;
+  const side = (t, s, first) => `<button class="wsport-side" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo" style="background:${t.color}">${esc(t.logo)}</span><span class="wsport-tname">${esc(t.name)}</span>${dayOff > 0 ? '' : `<b class="wsport-score">${s}</b>`}</button>`;
+  return `<div class="wsport-card">${side(g.away, g.as, true)}<span class="wsport-status">${esc(status)}</span>${side(g.home, g.hs, false)}</div>`;
+}
+function sportStandingsHTML(lg) {
+  const favs = sportFavs();
+  const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
+  const pct = t => (t.wins + t.losses) ? (t.wins / (t.wins + t.losses)).toFixed(3).replace(/^0/, '') : '.000';
+  return `<div class="wsport-stand"><div class="wsport-stand-head"><span>#</span><span>Team</span><span>W</span><span>L</span><span>PCT</span><span></span></div>${sorted.map((t, i) => `<div class="wsport-stand-row"><span>${i + 1}</span><button class="wsport-stand-team" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo sm" style="background:${t.color}">${esc(t.logo)}</span>${esc(t.name)}</button><span>${t.wins}</span><span>${t.losses}</span><span>${pct(t)}</span><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button></div>`).join('')}</div>`;
+}
+function sportScoresHTML() {
+  ensureSports();
+  const view = UI.sportView || 'scores', day = UI.sportDay || 0;
+  const leagues = (S.sports.leagues || []).slice().sort((a, b) => ((sportLgFavs()[b.id] ? 1 : 0) - (sportLgFavs()[a.id] ? 1 : 0)));
+  if (view === 'league') {
+    const lg = sportLeague(UI.sportLg || 'base') || leagues[0];
+    if (!lg) return panelShell('Sports', '', '<p class="muted">No leagues yet.</p>');
+    const games = (typeof tawkSportGames === 'function') ? tawkSportGames(lg.id, day) : [];
+    return panelShell('Worl Sports', '',
+      `<div class="wsport"><div class="wsport-leaguehead"><button class="wsport-back" data-a="sportView" data-x="scores">← Scores</button><span class="wsport-pill">${lg.icon} ${esc(lg.name)}</span><span></span></div>
+      ${sportDayTabs()}
+      <h4 class="wsport-h">${day < 0 ? 'Last week' : day > 0 ? 'Next week' : 'This week'} · ${lg.name}</h4>
+      ${games.map(g => sportGameCard(g, day)).join('') || '<p class="muted small">No games this week.</p>'}
+      <h4 class="wsport-h">Standings · Season ${lg.seasonYear || yearOf(S.day)}</h4>
+      ${lg.champion ? `<p class="muted small">🏆 Champion: ${esc(sportTeam(lg.champion).name)}</p>` : '<p class="muted small">No champion yet — age a year to play a season.</p>'}
+      ${sportStandingsHTML(lg)}
+      <p class="muted small">Tap a team for Franchise, Uniform, Players, Trade, Finance and Draft.</p></div>`);
+  }
+  if (view === 'leagues') {
+    const q = (UI.sportQuery || '').toLowerCase();
+    const lgFavs = sportLgFavs(), favs = sportFavs();
+    const lgRows = leagues.filter(l => !q || l.name.toLowerCase().includes(q)).map(l => `<div class="wsport-lgrow"><button class="wsport-star" data-a="sportLgFav" data-x="${l.id}">${lgFavs[l.id] ? '★' : '☆'}</button><button class="wsport-lgbtn" data-a="sportLeagueView" data-x="${l.id}"><span>${l.icon}</span><span><b>${esc(l.name)}</b><small>${l.short}</small></span><span>›</span></button></div>`).join('');
+    let teamRows = '';
+    if (q) {
+      const teams = leagues.flatMap(l => l.teams.filter(t => t.name.toLowerCase().includes(q)).map(t => ({ t, l })));
+      teamRows = `<h4 class="wsport-h">Teams</h4>${teams.map(({ t, l }) => `<div class="wsport-lgrow"><button class="wsport-star" data-a="sportFav" data-x="${t.id}">${favs[t.id] ? '★' : '☆'}</button><button class="wsport-lgbtn" data-a="sportTeam" data-x="${t.id}"><span class="wsport-logo sm" style="background:${t.color}">${esc(t.logo)}</span><span><b>${esc(t.name)}</b><small>${esc(l.name)} · ${t.wins}W - ${t.losses}L</small></span><span>›</span></button></div>`).join('') || '<p class="muted small">No teams match.</p>'}`;
+    }
+    return panelShell('Worl Sports', '',
+      `<div class="wsport"><div class="wsport-leaguehead"><button class="wsport-back" data-a="sportView" data-x="scores">← Scores</button><span class="wsport-pill">My Leagues</span><span></span></div>
+      <div class="row"><input id="sportSearch" class="search" placeholder="Teams, Leagues, and…" value="${esc(UI.sportQuery || '')}"><button class="btn" data-a="sportSearch">Search</button></div>
+      <h4 class="wsport-h">Leagues</h4>${lgRows || '<p class="muted small">No leagues match.</p>'}${teamRows}
+      <p class="muted small">Star a league to pin it first on Scores. Star a team to pin its games under My Teams.</p></div>`);
+  }
+  // Scores view (default).
+  const favIds = Object.keys(sportFavs()).filter(id => sportTeam(id));
+  let myTeams = '';
+  if (favIds.length) {
+    const cards = leagues.flatMap(l => (typeof tawkSportGames === 'function' ? tawkSportGames(l.id, day) : []).filter(g => favIds.includes(g.home.id) || favIds.includes(g.away.id)).map(g => sportGameCard(g, day))).join('');
+    myTeams = `<h4 class="wsport-h">★ My Teams</h4>${cards || '<p class="muted small">Your teams play next week.</p>'}`;
+  } else {
+    myTeams = `<h4 class="wsport-h">★ My Teams</h4><p class="muted small">Star a team in a league's standings to pin its games here.</p>`;
+  }
+  const sections = leagues.map(l => {
+    const games = (typeof tawkSportGames === 'function') ? tawkSportGames(l.id, day) : [];
+    return `<button class="wsport-lghead" data-a="sportLeagueView" data-x="${l.id}"><span>${l.icon} ${esc(l.name)}</span><span>${sportLgFavs()[l.id] ? '★ ' : ''}›</span></button>${games.map(g => sportGameCard(g, day)).join('')}`;
+  }).join('');
+  return panelShell('Worl Sports', '',
+    `<div class="wsport"><div class="wsport-top"><b>🏆 Worl Sports</b><button class="wsport-home" data-a="sportView" data-x="leagues">My Leagues</button></div>
+    ${sportDayTabs()}${myTeams}${sections}</div>`);
+}
 PANELS.sports = () => {
   ensureSports();
   const teamId = UI.stack[0];
@@ -2121,13 +2189,7 @@ PANELS.sports = () => {
     }
     return panelShell(`${t.name}`, `${lg.name} · ${esc(t.cityName)} · ${mine ? 'Your team' : 'Click a tab'}`, body);
   }
-  const lgId = S.sports.tab || 'base', lg = sportLeague(lgId);
-  const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
-  return panelShell('Sports', 'Leagues are businesses. Buy a team, run it, and IPO it only when you want to.',
-    `<div class="row wrap">${SPORT_LEAGUES.map(l => `<button class="chip ${lgId === l.id ? 'on' : ''}" data-a="sportLeague" data-x="${l.id}">${l.icon} ${l.name}</button>`).join('')}</div>
-    <p class="muted small">${lg.champion ? `Champion: ${esc(sportTeam(lg.champion).name)}` : 'No champion yet — age a year to play a season.'} · Season ${lg.seasonYear || yearOf(S.day)}</p>
-    <div class="list">${sorted.map((t, i) => `<button class="srow" data-a="sportTeam" data-x="${t.id}"><span class="avatar" style="background:${t.color}">${esc(t.logo)}</span><span class="sname"><b>${esc(t.name)}</b><small>${i + 1}. · ${t.wins}W - ${t.losses}L · ${esc(t.stadium.name)}</small></span><span class="sprice"><b>${fmtMoney(t.value, true)}</b><small>${t.owner === 'you' ? 'Yours' : 'OFFER PURCHASE'}</small></span></button>`).join('')}</div>
-    <p class="muted small">Tap a team for Franchise, Uniform, Players, Trade, Finance and Draft. Tap its stadium on the city map to open it there too.</p>`);
+  return sportScoresHTML();
 };
 PANELS.stores = () => {
   ensureStores();
@@ -2320,7 +2382,8 @@ PANELS.offices = () => {
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
     ${mgrSection(c)}
-    ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}</div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
+    ${c.listed ? '<p class="muted small">Already public.</p>' : `<p class="muted small">IPO at today's valuation, up to 100%, minus a 7% fee. Needs a full board and 2 profitable weeks.</p><button class="btn3d orange wide" data-a="ipo" data-x="${c.a3}">IPO THIS COMPANY</button>`}
+    <button class="btn" data-a="officeAd" data-x="${c.a3}">📣 ADVERTISING FOR THIS COMPANY</button></div>`).join('') || '<p class="muted small">No companies you control yet.</p>';
   const teamCards = teams.map(t => `<div class="card in"><b>${esc(t.name)}</b><div class="muted small">${esc(t.cityName)} · Value ${fmtMoney(t.value, true)} · Rating ${(t.rating5 || 3).toFixed(1)} / 5</div>
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(t)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${t.weekStreak || 0} / 2</b></div>
     ${boardRow(t, 'team', t.id)}
@@ -2329,41 +2392,171 @@ PANELS.offices = () => {
     `${hireSection()}<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
 };
 PANELS.bank = () => bankPanelHTML();
-// New Markets format: sector cards with sparkline, plus Market / Equity / M&A tabs.
+// --- Trade app (was Markets): brokerage layout, original data only.
+// Bottom tabs: Home (account value + index chart), Portfolio
+// (positions + cash), Trade (search + recently viewed + watchlist +
+// order toolbox), Watchlist (table), Markets (index strip + chart +
+// events + the full stock list). Equity (trade box + secondary
+// offering) and M&A keep their old content, reached from the Trade
+// tab's toolbox. The + button at the top right opens the IPO
+// launcher: pick a company you control, choose how much to sell,
+// price follows today's valuation, 7% fee, launch on goPublic.
+function tradeNav(tab) {
+  const items = [['home', '🏠', 'Home'], ['portfolio', '📊', 'Portfolio'], ['trade', '🔍', 'Trade'], ['watchlist', '⭐', 'Watchlist'], ['markets', '🌍', 'Markets']];
+  return `<div class="wtrade-nav">${items.map(([k, ic, label]) => k === 'trade'
+    ? `<button class="trade-cta ${tab === k ? 'on' : ''}" data-a="tradeTab" data-x="${k}"><span class="ic">${ic}</span>${label}</button>`
+    : `<button class="${tab === k ? 'on' : ''}" data-a="tradeTab" data-x="${k}"><span style="font-size:20px">${ic}</span>${label}</button>`).join('')}</div>`;
+}
+function tradeDailyPnl() {
+  let pnl = 0;
+  for (const a3 in S.holdings) {
+    const h = S.holdings[a3], c = S.co[a3];
+    if (!c || !c.listed || !h.qty) continue;
+    const d = c.h.d || [], prev = d.length > 1 ? d[d.length - 2] : c.price;
+    pnl += h.qty * (c.price - prev);
+  }
+  return pnl;
+}
+function tradePositions() {
+  const out = [];
+  for (const a3 in S.holdings) {
+    const h = S.holdings[a3], c = S.co[a3];
+    if (!c || !h.qty) continue;
+    const pnl = c.listed ? (c.price - h.cost) * h.qty : 0;
+    out.push({ key: a3, sym: c.sym, name: c.name, price: c.listed ? c.price : null, qty: h.qty, pnl, pct: h.cost ? pnl / Math.max(1, Math.abs(h.cost * h.qty)) : 0, color: c.color });
+  }
+  for (const id in (S.holdingsX || {})) {
+    const h = S.holdingsX[id], b = S.extra && S.extra[id];
+    if (!b || !h.qty) continue;
+    const pnl = h.cost != null ? (b.price - h.cost) * h.qty : 0;
+    out.push({ key: id, sym: b.sym, name: b.name, price: b.price, qty: h.qty, pnl, pct: h.cost ? pnl / Math.max(1, Math.abs(h.cost * h.qty)) : 0, color: b.color, isExtra: true });
+  }
+  return out;
+}
+function tradeIdxSeries(range) {
+  const d = (S.idx.h && S.idx.h.d) || [], w = (S.idx.h && S.idx.h.w) || [];
+  if (range === '1M') return d.slice(-22);
+  if (range === '1Y') return d.slice(-260);
+  if (range === '2Y') return w.length > 1 ? w.slice(-104) : d;
+  return d.slice(-5);
+}
+function tradeNextQuarterDay() { let d = S.day; while (((d + 1) % 91) !== 0) d++; return d; }
+function tradeIdxChart() {
+  const range = UI.tradeRange || '1M';
+  const series = tradeIdxSeries(range);
+  const ranges = [['Today', 'today'], ['1M', '1M'], ['1Y', '1Y'], ['2Y', '2Y']].map(([l, v]) => `<button class="wtrade-range ${range === v ? 'on' : ''}" data-a="tradeRange" data-x="${v}">${l}</button>`).join('');
+  const chart = series.length > 1 ? lineChart(series, { h: 110 }) : '<p style="color:#8b949e">Not enough index history yet — it builds as days pass.</p>';
+  return `${chart}<div class="wtrade-ranges">${ranges}</div>`;
+}
+function tradeIpoHTML() {
+  const mineList = mine();
+  const sel = (UI.tradeIpoCo && S.co[UI.tradeIpoCo]) ? S.co[UI.tradeIpoCo] : null;
+  const rows = mineList.filter(c => !c.listed).map(c => {
+    const full = (typeof boardFull === 'function') ? boardFull(c) : true;
+    const streak = c.weekProfitStreak || 0, ok = full && streak >= 2;
+    return `<div class="wtrade-card"><div class="row between"><div><b>${esc(c.name)}</b><div style="color:#8b949e;font-size:13px">${c.sym} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${(c.rating || 0).toFixed(1)} / 5</div></div><button class="wtrade-btn ghost" style="flex:none" data-a="tradeIpoSel" data-x="${c.a3}">${sel && sel.a3 === c.a3 ? 'Selected' : 'Select'}</button></div>
+    <p style="color:#8b949e;font-size:13px">${ok ? 'Ready to list.' : 'Not ready: ' + (!full ? 'board not full (hire in Offices). ' : '') + (streak < 2 ? `needs 2 profitable weeks (now ${streak}).` : '')}</p></div>`;
+  }).join('') || '<p style="color:#8b949e">No private companies you control yet. Buy 50% of a stock to control it, then list it here.</p>';
+  let form = '';
+  if (sel) {
+    const v = companyFairTotal(sel), price = v / sel.shares;
+    const pct = UI.tradeIpoPct != null ? UI.tradeIpoPct : 100;
+    const sold = Math.floor(sel.shares * pct / 100), gross = Math.round(sold * price), fee = Math.round(gross * 0.07), proceeds = gross - fee;
+    form = `<div class="wtrade-card"><h4 style="margin:0 0 8px">Launch ${esc(sel.name)}</h4>
+    <div class="kv"><span>Price per share</span><b>${fmtMoney(price)}</b></div>
+    <div class="kv"><span>Shares in company</span><b>${sel.shares.toLocaleString()}</b></div>
+    <div class="kv"><span>Valuation</span><b>${fmtMoney(v, true)}</b></div>
+    <label style="color:#8b949e;font-size:12px">SELL %</label>
+    <div class="row"><input id="tradeIpoPct" class="qty" type="number" value="${pct}" min="1" max="100"><button class="wtrade-btn ghost" data-a="tradeIpoPctSet">Update</button></div>
+    <div class="kv"><span>Shares sold</span><b>${sold.toLocaleString()}</b></div>
+    <div class="kv"><span>Gross</span><b>${fmtMoney(gross, true)}</b></div>
+    <div class="kv"><span>Fee (7%)</span><b>${fmtMoney(fee, true)}</b></div>
+    <div class="kv"><span>You receive</span><b>${fmtMoney(proceeds, true)}</b></div>
+    <button class="wtrade-btn buy" style="width:100%;margin-top:10px" data-a="tradeIpoLaunch" data-x="${sel.a3}">LAUNCH IPO</button>
+    <p style="color:#8b949e;font-size:13px">Price follows today's valuation — it is set when you launch. Needs a full board and 2 profitable weeks.</p></div>`;
+  }
+  return `<h4 class="wtrade-h">LAUNCH AN IPO</h4><p style="color:#8b949e">Pick a company you control, choose how much to sell, and launch it on the Worl Exchange.</p>${rows}${form}`;
+}
 PANELS.markets = () => {
-  const mkt = UI.mktTab || 'market';
-  const tabs = `<div class="row"><button class="btn flex ${mkt === 'market' ? 'on' : ''}" data-a="mktTab" data-x="market">${ICONS.bank} Market</button><button class="btn flex ${mkt === 'equity' ? 'on' : ''}" data-a="mktTab" data-x="equity">${ICONS.card} Equity</button><button class="btn flex ${mkt === 'ma' ? 'on' : ''}" data-a="mktTab" data-x="ma">${ICONS.merge} M&amp;A</button></div>`;
-  if (mkt === 'equity') {
-    // NOTE: the local must NOT be called `mine` — `const mine = mine()`
-    // used to shadow the global mine() function and throw
-    // "Cannot access 'mine' before initialization" (TDZ) on every open.
+  const tab = UI.tradeTab || 'home';
+  const wrap = body => panelShell('Trade', '', `<div class="wtrade"><div class="wtrade-top"><div><b>Trade</b><small>Worl Exchange · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}</small></div><button class="wtrade-plus" data-a="tradeTab" data-x="ipo" aria-label="Launch an IPO">+</button></div>${body}${tradeNav(tab)}</div>`);
+  if (tab === 'ipo') return wrap(tradeIpoHTML());
+  if (tab === 'equity') {
     const mineList = mine();
     const first = mineList[0] || Object.values(S.co).find(c => c.listed);
-    return panelShell('Stock Market', 'Trade stocks, or issue new shares for a company you control.', tabs + `<div class="card in"><h4>TRADE STOCKS</h4><p class="muted small">Available cash: ${fmtMoney(S.cash, true)}</p>
+    return wrap(`<div class="wtrade-card"><h4 style="margin:0 0 8px">TRADE STOCKS</h4><p style="color:#8b949e">Available cash: ${fmtMoney(S.cash, true)}</p>
     ${first ? `<div class="kv"><span><b>${esc(first.name)}</b> · ${first.sym}</span><b>${fmtMoney(first.price)}</b></div>
-    <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${first.a3}">MAX</button></div>
-    <div class="row"><button class="btn3d buy flex" data-a="doTrade" data-x="${first.a3}|buy">BUY</button><button class="btn3d sell flex" data-a="doTrade" data-x="${first.a3}|sell">SELL</button></div>
-    <p class="muted small">Pick another stock from the Market tab first, then come back here to trade it.</p>` : '<p class="muted small">No listed companies yet.</p>'}</div>
-    <div class="card in"><h4>SECONDARY OFFERING</h4><p class="muted small">Issue new shares for a company you control. Underwriting fee 3.85%.</p>
-    ${mineList.map(c => `<div class="kv"><span>${esc(c.name)} · ${c.sym} · ${fmtMoney(c.price)}/share</span><b>${c.shares.toLocaleString()} shares</b></div>`).join('') || '<p class="muted small">You control no companies yet. Buy 50% of a stock to control it.</p>'}
-    ${mineList.length ? `<label class="muted small">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="btn3d orange wide" data-a="issueShares" data-x="${mineList[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
+    <div class="row"><button class="wtrade-btn ghost" data-a="qty" data-x="-100">−100</button><button class="wtrade-btn ghost" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="wtrade-btn ghost" data-a="qty" data-x="10">+10</button><button class="wtrade-btn ghost" data-a="qty" data-x="100">+100</button><button class="wtrade-btn ghost" data-a="qtyMax" data-x="${first.a3}">MAX</button></div>
+    <div class="row" style="margin-top:10px"><button class="wtrade-btn buy" data-a="doTrade" data-x="${first.a3}|buy">BUY</button><button class="wtrade-btn sell" data-a="doTrade" data-x="${first.a3}|sell">SELL</button></div>
+    <p style="color:#8b949e">Pick another stock from the Markets tab first, then come back here to trade it.</p>` : '<p style="color:#8b949e">No listed companies yet.</p>'}</div>
+    <div class="wtrade-card"><h4 style="margin:0 0 8px">SECONDARY OFFERING</h4><p style="color:#8b949e">Issue new shares for a company you control. Underwriting fee 3.85%.</p>
+    ${mineList.map(c => `<div class="kv"><span>${esc(c.name)} · ${c.sym} · ${fmtMoney(c.price)}/share</span><b>${c.shares.toLocaleString()} shares</b></div>`).join('') || '<p style="color:#8b949e">You control no companies yet. Buy 50% of a stock to control it.</p>'}
+    ${mineList.length ? `<label style="color:#8b949e;font-size:12px">NEW SHARES (first controlled company)</label><input id="issueQty" class="qty" type="number" value="19000"><button class="wtrade-btn buy" style="width:100%;margin-top:8px" data-a="issueShares" data-x="${mineList[0].a3}">ISSUE NEW SHARES</button>` : ''}</div>`);
   }
-  if (mkt === 'ma') {
+  if (tab === 'ma') {
     const rows = marketRows().filter(c => c.listed && !c.isExtra).slice(0, 30);
-    return panelShell('Stock Market', 'Mergers and acquisitions. Offer to buy a whole company.', tabs + `<div class="list">${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="card in"><div class="row between"><div><b>${esc(c.name)}</b><div class="muted small">${c.sym} · Market cap ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="btn" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}</div>`);
+    return wrap(`<h4 class="wtrade-h">MERGERS &amp; ACQUISITIONS</h4><p style="color:#8b949e">Offer to buy a whole company.</p>${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="wtrade-card"><div class="row between"><div><b>${esc(c.name)}</b><div style="color:#8b949e;font-size:13px">${c.sym} · Market cap ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="wtrade-btn buy" style="width:100%;margin-top:8px" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}`);
   }
-  // LIVE Markets panel. NOTE: an earlier PANELS.markets definition above
-  // is dead code — this later assignment overwrites it, so any fix to
-  // Markets categories/rows must be made HERE, not there. That is
-  // exactly how the Extras bug happened: the dead panel had Extras,
-  // this live one stripped them.
-  const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...SECTOR_LIST.slice(0, 12)];
-  const rows = marketRows();
-  const shown = rows.slice(0, 120);
-  return panelShell('Stock Market', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`, tabs +
-    `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
-    <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
-    <div class="list" id="mlist">${shown.map(c => { const ch = chgVs(c), closes = (c.h.d || []).slice(-30), cap = companyValue(c), hi = closes.length ? Math.max(...closes) : c.price, lo = closes.length ? Math.min(...closes) : c.price, key = c.stockKey || c.a3, sec = SECTORS[c.sector] || {}, pe = c.pe != null ? c.pe : sec.pe; return `<button class="srow" data-a="stock" data-x="${key}" style="flex-direction:column;align-items:stretch"><span class="row between" style="width:100%"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname" style="flex:1"><b>${c.sym}</b><small>${esc(c.name)} · ${esc(cname(c.a3))}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b><small class="${upCls(ch)}">${fmtPct(ch)}</small></span>${c.isExtra ? '<span class="tagp">EXTRA</span>' : ''}</span>${lineChart(closes, { h: 50 })}<span class="row between muted small" style="width:100%"><span>Market cap ${fmtMoney(cap, true)}</span><span>Dividend ${((sec.div || 0) * 100).toFixed(1)}%</span><span>52w ${fmtMoney(lo)} - ${fmtMoney(hi)}</span><span>P/E ${pe != null ? pe.toFixed(1) : '—'}</span></span></button>`; }).join('') || (UI.cat === 'Extras' ? '<div class="card in empty">No extra businesses yet. Extra businesses list here as their own stocks once they exist.</div>' : '<div class="card in empty">Nothing here yet.</div>')}</div>`);
+  if (tab === 'portfolio') {
+    const pos = tradePositions(), dpnl = tradeDailyPnl(), nlv = S.cash + holdingsValue();
+    return wrap(`<div class="wtrade-value">${fmtMoney(nlv)}</div><div class="wtrade-daily" style="color:#8b949e">Net Liquidation Value</div>
+    <div class="wtrade-daily ${upCls(dpnl)}">Daily P&amp;L ${dpnl >= 0 ? '+' : ''}${fmtMoney(dpnl, true)}</div>
+    <h4 class="wtrade-h">POSITIONS</h4>
+    <table class="wtrade-table"><tr><th>Instrument</th><th>Last Price</th><th>P&amp;L</th><th>P&amp;L %</th><th>Position</th></tr>
+    ${pos.map(p => `<tr><td><button class="wtrade-stockbtn" data-a="stock" data-x="${p.key}"><b>${p.sym}</b><br><span style="color:#8b949e;font-size:12px">${esc(p.name)}</span></button></td><td>${p.price != null ? fmtMoney(p.price) : 'Private'}</td><td class="${upCls(p.pnl)}">${fmtMoney(p.pnl, true)}</td><td class="${upCls(p.pnl)}">${fmtPct(p.pct)}</td><td>${p.qty.toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#8b949e">No positions yet.</td></tr>'}</table>
+    <h4 class="wtrade-h">CASH BALANCES</h4>
+    <div class="wtrade-card"><div class="kv"><span>Business cash</span><b>${fmtMoney(S.cash, true)}</b></div><div class="kv"><span>Personal cash</span><b>${fmtMoney(ensurePerson().cash, true)}</b></div></div>`);
+  }
+  if (tab === 'trade') {
+    const resolve = k => {
+      if (S.co[k]) return S.co[k];
+      if (S.extra && S.extra[k]) return S.extra[k];
+      return null;
+    };
+    const chg = c => { try { const v = chgVs(c); return isFinite(v) ? v : 0; } catch (e) { return 0; } };
+    const tile = (c, key) => { const ch = chg(c); return `<button class="wtrade-tile" style="flex-basis:130px" data-a="stock" data-x="${key}"><b>${c.sym}</b><span>${esc(c.name)}</span><span>${c.listed === false ? 'Private' : fmtMoney(c.price)}</span><span class="wtrade-pill ${ch >= 0 ? 'up' : 'dn'}">${fmtPct(ch)}</span></button>`; };
+    const recent = (S.tradeRecent || []).map(k => ({ c: resolve(k), k })).filter(x => x.c);
+    const watched = Object.values(S.co).filter(c => (S.watch || []).includes(c.a3));
+    return wrap(`<input id="msearch" class="wtrade-search" placeholder="Search Stocks, ETFs &amp; More" value="${esc(UI.q)}" autocomplete="off">
+    <p style="color:#8b949e;font-size:13px">Search filters the Markets list — open Markets to see results.</p>
+    <div class="wtrade-row"><div style="flex:1"><b style="font-size:20px;color:#58a6ff">0</b> <span style="color:#8b949e">Orders</span></div><div style="flex:1"><b style="font-size:20px;color:#58a6ff">${S.stats.trades || 0}</b> <span style="color:#8b949e">Trades</span></div></div>
+    <h4 class="wtrade-h">RECENTLY VIEWED</h4>
+    <div class="wtrade-row" style="flex-wrap:wrap">${recent.map(x => tile(x.c, x.k)).join('') || '<p style="color:#8b949e">Nothing viewed yet — open a stock from Markets.</p>'}</div>
+    <h4 class="wtrade-h">WATCHLIST</h4>
+    <div class="wtrade-row" style="flex-wrap:wrap">${watched.map(c => tile(c, c.a3)).join('') || '<p style="color:#8b949e">Star a stock in Markets to watch it.</p>'}</div>
+    <h4 class="wtrade-h">TOOLBOX</h4>
+    <div class="wtrade-row"><button class="wtrade-btn buy" data-a="tradeTab" data-x="equity">Buy Order</button><button class="wtrade-btn sell" data-a="tradeTab" data-x="equity">Sell Order</button></div>
+    <div class="wtrade-row" style="margin-top:10px"><button class="wtrade-btn ghost" data-a="tradeTab" data-x="markets">Market Screener</button><button class="wtrade-btn ghost" data-a="tradeTab" data-x="ma">M&amp;A</button></div>`);
+  }
+  if (tab === 'watchlist') {
+    const watched = Object.values(S.co).filter(c => (S.watch || []).includes(c.a3)).sort((a, b) => companyValue(b) - companyValue(a));
+    const vol = c => { const v = (c.h.v && c.h.v.length) ? c.h.v[c.h.v.length - 1] : (c.tradedToday || 0); return v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(2) + 'K' : String(v); };
+    return wrap(`<h4 class="wtrade-h">WATCHLISTS</h4><button class="wtrade-btn ghost" data-a="tradeTab" data-x="markets">+ Add Instrument</button>
+    <table class="wtrade-table" style="margin-top:12px"><tr><th>Instrument</th><th>Last Price</th><th>Change</th><th>Change %</th><th>Volume</th></tr>
+    ${watched.map(c => { const d = c.h.d || [], prev = d.length > 1 ? d[d.length - 2] : c.price, ch = c.price - prev, pct = prev ? ch / prev : 0; return `<tr><td><button class="wtrade-stockbtn" data-a="stock" data-x="${c.a3}"><b>${c.sym}</b><br><span style="color:#8b949e;font-size:12px">${esc(c.name)}</span></button></td><td>${fmtMoney(c.price)}</td><td class="${upCls(ch)}">${ch >= 0 ? '+' : ''}${fmtMoney(ch, true)}</td><td class="${upCls(ch)}">${fmtPct(pct)}</td><td>${vol(c)}</td></tr>`; }).join('') || '<tr><td colspan="5" style="color:#8b949e">Nothing watched yet — star a stock in Markets.</td></tr>'}</table>
+    <p style="color:#8b949e">${watched.length} Instrument${watched.length === 1 ? '' : 's'}</p>`);
+  }
+  if (tab === 'markets') {
+    const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...SECTOR_LIST.slice(0, 12)];
+    const secAvg = SECTOR_LIST.map(sec => { const cs = Object.values(S.co).filter(c => c.sector === sec && c.listed); return { sec, ch: cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0, n: cs.length }; }).filter(x => x.n).sort((a, b) => b.ch - a.ch)[0];
+    const listedCount = Object.values(S.co).filter(c => c.listed).length;
+    return wrap(`<div class="wtrade-idx"><div class="wtrade-idxcard"><b>World Index</b><span class="pct ${upCls(marketReturn())}">${fmtPct(marketReturn())}</span><span style="color:#8b949e">${S.idx.v.toFixed(0)}</span></div><div class="wtrade-idxcard" style="border-color:#f97316"><b>Oil Index</b><span class="pct">${(S.oil || 0).toFixed(2)}x</span><span style="color:#8b949e">Energy</span></div>${secAvg ? `<div class="wtrade-idxcard" style="border-color:#a855f7"><b>${esc(secAvg.sec)} Index</b><span class="pct ${upCls(secAvg.ch)}">${fmtPct(secAvg.ch)}</span><span style="color:#8b949e">Top sector today</span></div>` : ''}</div>
+    ${tradeIdxChart()}
+    <h4 class="wtrade-h">UPCOMING EVENTS · WORL EXCHANGE</h4><p style="color:#8b949e">Quarterly reports land ${fmtDate(tradeNextQuarterDay())} — ${listedCount} listed companies report earnings that week.</p>
+    <input id="msearch" class="wtrade-search" placeholder="Search Stocks, ETFs &amp; More" value="${esc(UI.q)}" autocomplete="off">
+    <div class="row wrap" style="margin-top:10px">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
+    <div class="list" id="mlist">${marketsListHTML()}</div>`);
+  }
+  // Home (default tab).
+  const value = S.cash + holdingsValue(), dpnl = tradeDailyPnl();
+  const rows = marketRows().filter(c => c.listed);
+  const topMover = rows.slice().sort((a, b) => chgVs(b) - chgVs(a))[0];
+  return wrap(`<div class="wtrade-value">${fmtMoney(value)}</div>
+  <div class="wtrade-daily ${upCls(dpnl)}">Daily P&amp;L ${dpnl >= 0 ? '+' : ''}${fmtMoney(dpnl, true)} (${fmtPct(value ? dpnl / value : 0)})</div>
+  ${tradeIdxChart()}
+  <div class="wtrade-row"><button class="wtrade-btn buy" data-a="tradeTab" data-x="equity">Buy Order</button><button class="wtrade-btn sell" data-a="tradeTab" data-x="equity">Sell Order</button></div>
+  <div class="wtrade-row" style="margin-top:10px"><button class="wtrade-btn ghost" data-a="panel" data-x="bank">Deposit</button><button class="wtrade-btn ghost" data-a="panel" data-x="bank">Transfer Funds</button><button class="wtrade-btn ghost" data-a="tradeTab" data-x="portfolio">Statements</button></div>
+  <div class="wtrade-card"><b>For You</b><p style="color:#8b949e">Quarterly reports land every 91 days — next ones ${fmtDate(tradeNextQuarterDay())}.${topMover ? ` Top mover today: ${esc(topMover.name)} (${topMover.sym}) ${fmtPct(chgVs(topMover))}.` : ''}</p></div>`);
 };
 PANELS.mode = () => {
   if (S.mode === 'random') {
@@ -2390,7 +2583,7 @@ PANELS.help = () => {
 // sheet. The popup is the new home for all of these now that the
 // bottom bar is gone.
 const MENU_ITEMS = [
-  ['leader', ICONS.leader, 'Leader'], ['newsapp', ICONS.news, 'News'], ['markets', ICONS.markets, 'Markets'],
+  ['leader', ICONS.leader, 'Leader'], ['newsapp', ICONS.news, 'News'], ['markets', ICONS.markets, 'Trade'],
   ['airport', ICONS.airport, 'Airport'],
   ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'], ['country', '🗺️', 'Your Country'],
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'],
@@ -2399,7 +2592,7 @@ const MENU_ITEMS = [
   ['progress', '🏆', 'Progress'],
   ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
-  ['tawk', '💬', 'Tawk'], ['radio', '📻', 'Robot Radio'], ['ads', '📣', 'Advertising'],
+  ['tawk', '💬', 'Tawk'], ['radio', '📻', 'Robot Radio'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
@@ -2415,8 +2608,20 @@ function phoneHTML() {
   const unread = (S.mail || []).filter(m => !m.read).length;
   const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
   if (!UI.phoneApp) {
-    const apps = MENU_ITEMS.map(([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic">${ic}</span><span class="phone-app-label">${t}</span></button>`).join('');
-    return `<div class="phone-notch"></div>${status}<div class="phone-grid">${apps}</div>`;
+    // Home-screen layout: 4-across icon tiles, pages with dots, and a
+    // dock of the four daily apps pinned at the bottom. Dock apps are
+    // not duplicated in the grid. Pages hold 12 (4 x 3).
+    const TILE_COLORS = ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#1f5fd0', '#8a5a2b', '#334155', '#b45309', '#0f766e'];
+    const tileBg = x => { let h = 0; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) >>> 0; return TILE_COLORS[h % TILE_COLORS.length]; };
+    const appBtn = ([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic" style="background:${tileBg(x)}">${ic}</span><span class="phone-app-label">${t}</span></button>`;
+    const dockKeys = ['tawk', 'web', 'bank', 'markets'];
+    const dock = MENU_ITEMS.filter(m => dockKeys.includes(m[0])).sort((a, b) => dockKeys.indexOf(a[0]) - dockKeys.indexOf(b[0]));
+    const grid = MENU_ITEMS.filter(m => !dockKeys.includes(m[0]));
+    const PER_PAGE = 12, pages = Math.max(1, Math.ceil(grid.length / PER_PAGE));
+    const page = Math.min(UI.phonePage || 0, pages - 1);
+    const slice = grid.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+    const dots = pages > 1 ? `<div class="phone-dots">${grid.map((_, i) => i < pages ? `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="Page ${i + 1}"></button>` : '').join('')}</div>` : '';
+    return `<div class="phone-notch"></div>${status}<div class="phone-grid">${slice.map(appBtn).join('')}</div>${dots}<div class="phone-dock">${dock.map(appBtn).join('')}</div>`;
   }
   const entry = MENU_ITEMS.find(m => m[0] === UI.phoneApp);
   return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><button data-a="phoneBack">\u2190 Apps</button><b>${esc(entry ? entry[2] : UI.phoneApp)}</b><span></span></div><div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>`;
@@ -2616,6 +2821,8 @@ const A = {
     renderPanel();
   },
   phoneBack: () => { phoneToGrid(); },
+  phonePage: x => { UI.phonePage = parseInt(x, 10) || 0; openMenuPopup(); },
+  officeAd: x => { UI.adCompany = x; openPanel('ads'); },
   closePopup: () => closePopup(),
   vehicleCard: x => openVehicleCard(x),
   watchVehicle: x => openWatch(x),
@@ -2628,7 +2835,7 @@ const A = {
   closePaper: () => { closePaper(); if (S && S.pendingVictory) { const v = S.pendingVictory; S.pendingVictory = null; save(); openModal(`<h2>🏆 Victory!</h2><p>${esc(v)}</p><p class="muted small">Keep playing, or restart for a new run.</p><button class="btn3d orange wide" data-a="closeModal">KEEP PLAYING</button>`, 'center'); return; } if (S && S.pendingSituation && typeof WORL_SITUATIONS !== 'undefined') { const s = WORL_SITUATIONS.find(x => x.id === S.pendingSituation); if (s) openModal(`<h2>🎲 ${esc(s.title)}</h2><p>${esc(s.text)}</p>${s.choices.map((c, i) => `<button class="btn3d orange wide" data-a="situationChoice" data-x="${i}">${esc(c.label)} — ${esc(c.desc)}</button>`).join('')}`, 'center'); } },
   paperPrev: () => flipPaper(-1),
   paperNext: () => flipPaper(1),
-  paperAdBuy: () => { closePaper(); openPanel('ads'); },
+  paperAdBuy: () => { closePaper(); openPanel('offices'); },
   adCompany: x => { UI.adCompany = x; renderPanel(); },
   adRoute: x => { UI.adRoute = x; renderPanel(); },
   adWeeks: x => { UI.adWeeks = parseInt(x, 10) || 4; renderPanel(); },
@@ -2742,6 +2949,9 @@ const A = {
   range: x => { UI.range = x; renderPanel(); },
   tradeRange: x => { UI.tradeRange = x; renderPanel(); },
   stock: x => {
+    // Recently viewed, for the Trade tab: newest first, cap 6.
+    if (!S.tradeRecent) S.tradeRecent = [];
+    S.tradeRecent = [x].concat(S.tradeRecent.filter(k => k !== x)).slice(0, 6);
     closePopup(); if (CityView.isOpen()) leaveCity();
     // Capture the Markets scroll position before leaving it, so a back
     // navigation from the stock panel can restore it (see renderPanel).
@@ -2778,7 +2988,11 @@ const A = {
     const [a3, p] = x.split('|');
     act(() => takeover(a3, +p), 'Takeover complete! You now own it outright.');
   },
-  mktTab: x => { UI.mktTab = x; renderPanel(); },
+  tradeTab: x => { UI.tradeTab = x; renderPanel(); },
+  tradeRange: x => { UI.tradeRange = x; renderPanel(); },
+  tradeIpoSel: x => { UI.tradeIpoCo = x; UI.tradeTab = 'ipo'; renderPanel(); },
+  tradeIpoPctSet: () => { const el = document.getElementById('tradeIpoPct'); if (el) UI.tradeIpoPct = Math.min(100, Math.max(1, parseFloat(el.value) || 100)); renderPanel(); },
+  tradeIpoLaunch: x => { const pct = (UI.tradeIpoPct != null ? UI.tradeIpoPct : 100) / 100; act(() => goPublic(x, pct), 'IPO complete!'); },
   issueShares: x => {
     const c = S.co[x]; if (!c) return toast('Company not found', 'bad');
     const qty = Math.floor(+($('issueQty') ? $('issueQty').value : 0)); if (!qty || qty <= 0) return toast('Enter a share count', 'bad');
@@ -2789,6 +3003,12 @@ const A = {
   },
   sportLeague: x => { ensureSports(); S.sports.tab = x; UI.stack = []; renderPanel(); },
   sportTeam: x => { pushPanel(x); },
+  sportDay: x => { UI.sportDay = parseInt(x, 10) || 0; UI.sportView = UI.sportView || 'scores'; renderPanel(); },
+  sportView: x => { UI.sportView = x; renderPanel(); },
+  sportLeagueView: x => { UI.sportView = 'league'; UI.sportLg = x; renderPanel(); },
+  sportFav: x => { const f = sportFavs(); if (f[x]) delete f[x]; else f[x] = true; save(); renderPanel(); },
+  sportLgFav: x => { const f = sportLgFavs(); if (f[x]) delete f[x]; else f[x] = true; save(); renderPanel(); },
+  sportSearch: () => { const el = document.getElementById('sportSearch'); UI.sportQuery = el ? el.value.trim() : ''; renderPanel(); },
   sportTab: x => { UI.sportTab = x; renderPanel(); },
   sportFin: x => { UI.sportFin = x; renderPanel(); },
   buyTeam: x => act(() => buySportTeam(x), 'Team bought!'),

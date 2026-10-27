@@ -134,7 +134,7 @@ function radioPanelHTML() {
     <div class="rr-track"><b>${esc(track.title)}</b><span class="rr-muted"> — ${esc(track.artist)}</span></div>
     <div class="rr-bar"><div id="radioProgress" class="rr-bar-fill" style="width:${Math.min(100, t / track.len * 100)}%"></div></div>
     <div class="rr-row"><span class="rr-muted" id="radioTime">${radioFmt(t)} / ${radioFmt(track.len)}</span><button class="rr-btn" data-a="radioNext">Next track ⏭</button></div>${sleepLine}</div>
-    <div class="rr-ad"><h4>🎙️ Ad break</h4><p>${esc(adRead)}</p><div class="rr-row">${ads.length ? '<button class="rr-btn ghost" data-a="radioAdNext">Hear another ad</button>' : ''}<button class="rr-btn ghost" data-a="panel" data-x="ads">Buy a radio ad</button></div></div>
+    <div class="rr-ad"><h4>🎙️ Ad break</h4><p>${esc(adRead)}</p><div class="rr-row">${ads.length ? '<button class="rr-btn ghost" data-a="radioAdNext">Hear another ad</button>' : ''}<button class="rr-btn ghost" data-a="panel" data-x="offices">Buy a radio ad</button></div></div>
     <h3 class="rr-sec">${q ? 'Results' : 'Top Stations'}</h3><div class="rr-grid">${shown.map(tile).join('') || '<p class="rr-empty">No stations match that search.</p>'}</div>`;
   }
   const nav = `<div class="rr-nav"><button class="${view === 'home' ? 'on' : ''}" data-a="radioView" data-x="home">🏠<span>Home</span></button><button class="${view === 'premium' ? 'on' : ''}" data-a="radioView" data-x="premium">((•))<span>Premium</span></button><button class="${view === 'favs' ? 'on' : ''}" data-a="radioView" data-x="favs">❤️<span>Favorites</span></button></div>`;

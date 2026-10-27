@@ -94,7 +94,7 @@ function webAdRender() {
   if (!l || !r) { if (UI.webAdTimer) { clearInterval(UI.webAdTimer); UI.webAdTimer = null; } return; }
   const buyers = activeAds('web');
   if (!buyers.length) {
-    const house = `<div class="ad-card"><span class="ad-tag">AD</span><b>YOUR AD HERE</b><p>Advertise your company on the web.</p><button class="btn small" data-a="panel" data-x="ads">Buy a web ad</button></div>`;
+    const house = `<div class="ad-card"><span class="ad-tag">AD</span><b>YOUR AD HERE</b><p>Advertise your company on the web.</p><button class="btn small" data-a="panel" data-x="offices">Buy a web ad</button></div>`;
     l.innerHTML = house; r.innerHTML = house;
     return;
   }
