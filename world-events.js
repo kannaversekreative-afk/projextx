@@ -420,8 +420,18 @@ function occupy(winner, loser) {
     S.holdings[loser] = { qty: c.shares - (((S.holdingsP || {})[loser] || {}).qty || 0), cost: 0 }; c.listed = false; c.ai = false; S.stats.takeovers++; S.xp += 800;
     news('War', `Victory. ${c.name} in ${cname(loser)} is now yours, and its ${fmtPop(country(loser).pop)} people count toward your nation.`, loser);
   } else if (controlled(loser) && loser !== S.home) {
-    delete S.holdings[loser]; if (S.holdingsP) delete S.holdingsP[loser]; c.ai = true; c.listed = true;
-    news('War', `${cname(winner)} seized ${c.name}. You lost your stake.`, loser);
+    // A CPU war you are not party to must not strip your stake for free.
+    // The occupier buys you out at the current market price, wallet by
+    // wallet, and the office goes with the country, so re-buying has to
+    // earn domination again instead of restoring it for free.
+    const heldC = ((S.holdings || {})[loser] || {}).qty || 0, heldP = ((S.holdingsP || {})[loser] || {}).qty || 0;
+    const payC = Math.round(heldC * c.price), payP = Math.round(heldP * c.price);
+    if (payC) S.cash += payC;
+    if (payP && typeof ensurePerson === 'function') ensurePerson().cash += payP;
+    delete S.holdings[loser]; if (S.holdingsP) delete S.holdingsP[loser];
+    if (c.office) delete c.office;
+    c.ai = true; c.listed = true;
+    news('War', `${cname(winner)} seized ${c.name} and bought out your stake for ${fmtMoney(payC + payP, true)}.`, loser);
   } else if (loser === S.home) {
     const lost = Math.floor(c.locs.length / 2); for (let i = 0; i < lost; i++) closeLoc(c, c.locs[c.locs.length - 1].id);
     news('War', `Your country has fallen. Occupying forces closed ${lost} of your locations.`, loser);
@@ -449,6 +459,7 @@ function worldDay() {
     for (const y in cx.rel) {
       const cy = S.countries[y]; if (!cy || cy.war || cy.occ || cx.rel[y] > -55 || rand() > 0.006) continue;
       if (x === S.home || y === S.home) continue;
+      if (typeof controlled === 'function' && (controlled(x) || controlled(y))) continue;
       const [att, def] = milPower(x) * (0.5 + rand()) > milPower(y) * (0.5 + rand()) ? [x, y] : [y, x];
       startWar(att, def); break;
     }
@@ -504,7 +515,7 @@ function countryDay(a3) {
     const occupier = c.occ;
     news('World', `${k.name} is liberated from ${cname(occupier)}. Celebrations in the streets.`, a3);
     shockCountry(a3, 'liberation'); c.occ = null; c.stab = 45; S.live = S.live.filter(e => e.title !== `Occupation of ${k.name}`);
-    if (occupier === S.home && controlled(a3)) { delete S.holdings[a3]; if (S.holdingsP) delete S.holdingsP[a3]; S.co[a3].listed = true; S.co[a3].ai = true; news('War', `You lost ${S.co[a3].name} when ${k.name} was liberated.`, a3); }
+    if (occupier === S.home && controlled(a3)) { delete S.holdings[a3]; if (S.holdingsP) delete S.holdingsP[a3]; if (S.co[a3].office) delete S.co[a3].office; S.co[a3].listed = true; S.co[a3].ai = true; news('War', `You lost ${S.co[a3].name} when ${k.name} was liberated.`, a3); }
   }
 }
 function homeBonus(kind) { let v = 0; country(S.home).proj.forEach(p => { if (p.until > S.day) { const d = PROJECTS.find(x => x.id === p.id); v += d[kind] || 0; } }); return v; }

@@ -226,6 +226,11 @@ function buyOffice(a3) {
 function flowDominanceCheck() {
   if (!S.flow) return;
   S.dominated = S.dominated || [];
+  // Prune first: dominated is current ownership, not a milestone list.
+  // A country lost to war/liberation must stop counting until it is
+  // controlled + officed again, or the counter (and a 196/196 claim)
+  // overstates what you actually own.
+  S.dominated = S.dominated.filter(a3 => flowDominated(a3));
   (W.playable || []).forEach(k => {
     if (!S.dominated.includes(k.a3) && flowDominated(k.a3)) { S.dominated.push(k.a3); news('Milestone', `You dominate ${cname(k.a3)}.`, k.a3); }
   });
