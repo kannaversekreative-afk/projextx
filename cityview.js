@@ -8,6 +8,7 @@ const CityView = (() => {
   let marsMode = false;
   let onPin = null, filter = 'all', roofs = {}, landmarkName = 'Capitol', landmarkEmoji = '', vehicles = [], occluders = [], skyPlanes = [], animTimer = null, lastAnim = 0;
   let photoMode = false, pmViewport = null, pmImg = null, pmZoomLabel = null, pm = { x: 0, y: 0, s: 1, fit: 1, iw: 0, ih: 0 }, pmPts = new Map(), pmPinch = null;
+  let pmStage = null, panoMode = false, panoTimer = null, panoVehs = [], panoBtn = null;
 
   const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const shade = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`; };
@@ -900,7 +901,7 @@ const CityView = (() => {
     const W = pm.iw * pm.s, H = pm.ih * pm.s;
     pm.x = (W < vw) ? (vw - W) / 2 : Math.min(0, Math.max(vw - W, pm.x));
     pm.y = (H < vh) ? (vh - H) / 2 : Math.min(0, Math.max(vh - H, pm.y));
-    pmImg.style.transform = `translate(${pm.x}px,${pm.y}px) scale(${pm.s})`;
+    (pmStage || pmImg).style.transform = `translate(${pm.x}px,${pm.y}px) scale(${pm.s})`;
     if (pmZoomLabel) pmZoomLabel.textContent = Math.round(pm.s / pm.fit * 100) + '%';
   }
   function pmZoomAt(s, sx, sy) {
@@ -933,33 +934,115 @@ const CityView = (() => {
     pmViewport.addEventListener('dblclick', e => { if (!photoMode) return; const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pm.s >= pm.fit * 3 ? pm.fit : pm.s * 2, e.clientX - rect.left, e.clientY - rect.top); });
     window.addEventListener('resize', () => { if (!photoMode || !pm.iw) return; const ratio = pm.s / pm.fit; pm.fit = Math.min(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih); pm.s = pm.fit * ratio; pmApply(); });
   }
+  function openCode() {
+    photoMode = false; el.classList.remove('photo');
+    layout = cityLayout(city); roofs = {}; render(); buildVehicles(); buildSkyPlanes(); startAnim();
+    el.classList.add('open');
+    const vw = el.clientWidth, vh = el.clientHeight;
+    view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
+    const [cx, cy] = P(layout.landmark.x + 1.5, layout.landmark.y + 1.5);
+    view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
+    pins(); apply();
+  }
+  // ---------- Havana living panorama ----------
+  // Wide illustrated panorama with REAL moving traffic on top. The
+  // picture itself has no cars, boats or people painted in, so
+  // everything that moves is a live element, not a frozen pixel.
+  // The Malecón road runs diagonally across the picture, from about
+  // 58% height at the left edge to 22% at the right edge.
+  function panoRoadY(x) { return pm.ih * (0.58 - 0.36 * (x / pm.iw)); }
+  function panoTrafficEl() { return el ? el.querySelector('#pmTraffic') : null; }
+  function clearPano() {
+    stopPanoAnim(); panoMode = false;
+    const t = panoTrafficEl(); if (t) t.innerHTML = '';
+    if (panoBtn) { panoBtn.remove(); panoBtn = null; }
+    panoVehs = [];
+  }
+  function openPano() {
+    photoMode = true; panoMode = true; stopAnim(); layer.innerHTML = '';
+    el.classList.add('photo'); el.classList.add('open');
+    pmImg.src = HAVANA_PANO_SRC;
+    const go = () => { pm.iw = pmImg.naturalWidth || 2240; pm.ih = pmImg.naturalHeight || 1120; pmImg.style.width = pm.iw + 'px'; pmImg.style.height = pm.ih + 'px'; if (pmStage) { pmStage.style.width = pm.iw + 'px'; pmStage.style.height = pm.ih + 'px'; } pmFit(); buildPanoTraffic(); startPanoAnim(); };
+    if (pmImg.complete && pmImg.naturalWidth) go(); else pmImg.onload = go;
+    if (!panoBtn) {
+      panoBtn = document.createElement('button');
+      panoBtn.className = 'pano-city-btn'; panoBtn.textContent = '🏙️ City view';
+      panoBtn.addEventListener('pointerdown', e => e.stopPropagation());
+      panoBtn.addEventListener('click', e => { e.stopPropagation(); clearPano(); openCode(); });
+      el.appendChild(panoBtn);
+    }
+  }
+  function panoMk(kind, cls, html, x, speed, dir, lane, hw, hh) {
+    const t = panoTrafficEl(); if (!t) return null;
+    const d = document.createElement('div'); d.className = 'pv ' + cls; d.innerHTML = html;
+    t.appendChild(d);
+    const v = { el: d, kind, x, speed, dir, lane, hw, hh };
+    panoVehs.push(v); return v;
+  }
+  function buildPanoTraffic() {
+    const t = panoTrafficEl(); if (!t) return; t.innerHTML = ''; panoVehs = [];
+    const W = pm.iw, rnd = Math.random;
+    const carCols = ['#ff5d8f', '#2ec4b6', '#ffd166', '#ff7b54', '#f8f9fa', '#7fb3ff', '#e5484d'];
+    for (let i = 0; i < 10; i++) {
+      const dir = i % 2 ? -1 : 1, col = carCols[i % carCols.length];
+      panoMk('car', 'pv-car', `<span class="pv-body" style="background:${col}"></span><span class="pv-cab"></span>`, rnd() * W, 70 + rnd() * 50, dir, (i % 2 ? -1 : 1) * 16, 28, 13);
+    }
+    for (let i = 0; i < 6; i++) {
+      const dir = i % 2 ? -1 : 1;
+      panoMk('boat', 'pv-boat', `<span class="pv-hull"></span><span class="pv-cab2"></span><span class="pv-wake"></span>`, rnd() * W, 35 + rnd() * 25, dir, [0.10, 0.18, 0.30][i % 3], 32, 13);
+    }
+    const pplCols = ['#e5484d', '#2f7cf6', '#ffd166', '#2ec4b6', '#ff7b54', '#8b5cf6'];
+    for (let i = 0; i < 14; i++) {
+      const dir = i % 2 ? -1 : 1;
+      const v = panoMk('person', 'pv-person', '', rnd() * W, 14 + rnd() * 10, dir, -36, 5, 8);
+      if (v) v.el.style.background = pplCols[i % pplCols.length];
+    }
+  }
+  function panoLaneY(v) {
+    if (v.kind === 'boat') return pm.ih * v.lane;
+    return panoRoadY(v.x) + v.lane;
+  }
+  function startPanoAnim() {
+    if (panoTimer) return;
+    let last = performance.now();
+    panoTimer = setInterval(() => {
+      const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+      panoVehs.forEach(v => {
+        v.x += v.dir * v.speed * dt;
+        if (v.x > pm.iw + 90) v.x = -90; if (v.x < -90) v.x = pm.iw + 90;
+        const y = panoLaneY(v);
+        let rot = 0;
+        if (v.kind === 'car') rot = v.dir === 1 ? -10 : 170;
+        else if (v.kind === 'boat' && v.dir === -1) rot = 180;
+        v.el.style.transform = `translate(${v.x - v.hw}px,${y - v.hh}px) rotate(${rot}deg)`;
+      });
+    }, 50);
+  }
+  function stopPanoAnim() { if (panoTimer) { clearInterval(panoTimer); panoTimer = null; } }
   function openPhoto(src) {
     photoMode = true; stopAnim(); layer.innerHTML = '';
     el.classList.add('photo'); el.classList.add('open');
     pmImg.src = src;
-    const go = () => { pm.iw = pmImg.naturalWidth || 1024; pm.ih = pmImg.naturalHeight || 1800; pmImg.style.width = pm.iw + 'px'; pmImg.style.height = pm.ih + 'px'; pmFit(); };
+    const go = () => { pm.iw = pmImg.naturalWidth || 1024; pm.ih = pmImg.naturalHeight || 1800; pmImg.style.width = pm.iw + 'px'; pmImg.style.height = pm.ih + 'px'; if (pmStage) { pmStage.style.width = pm.iw + 'px'; pmStage.style.height = pm.ih + 'px'; } pmFit(); };
     if (pmImg.complete && pmImg.naturalWidth) go(); else pmImg.onload = go;
   }
 
   return {
     init(root, pinHandler) { el = root; canvas = el.querySelector('canvas'); ctx = canvas.getContext('2d'); layer = el.querySelector('.pins'); onPin = pinHandler; bind();
-      pmViewport = el.querySelector('.pm-viewport'); pmImg = pmViewport ? pmViewport.querySelector('img') : null;
+      pmViewport = el.querySelector('.pm-viewport'); pmImg = pmViewport ? pmViewport.querySelector('img') : null; pmStage = pmViewport ? pmViewport.querySelector('.pm-stage') : null;
+      if (pmViewport && pmImg && !pmStage) { pmStage = document.createElement('div'); pmStage.className = 'pm-stage'; pmViewport.appendChild(pmStage); pmStage.appendChild(pmImg); const tr = document.createElement('div'); tr.id = 'pmTraffic'; pmStage.appendChild(tr); }
       if (pmViewport) pmBind(); },
     open(id) {
       marsMode = false;
       city = W.cities[id];
+      clearPano();
+      if (city.a3 === 'CUB' && city.name === 'Havana' && typeof HAVANA_PANO_SRC === 'string') { openPano(); return; }
       const mapSrc = (typeof cityMapFor === 'function') ? cityMapFor(city) : null;
       if (mapSrc) { openPhoto(mapSrc); return; }
-      photoMode = false; el.classList.remove('photo');
-      layout = cityLayout(city); roofs = {}; render(); buildVehicles(); buildSkyPlanes(); startAnim();
-      el.classList.add('open');
-      const vw = el.clientWidth, vh = el.clientHeight;
-      view.s = Math.max(Math.min(vw / W2, vh / H2), vw < 700 ? 0.62 : Math.min(1, vw / (W2 * 0.62)));
-      const [cx, cy] = P(layout.landmark.x + 1.5, layout.landmark.y + 1.5);
-      view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
-      pins(); apply();
+      openCode();
     },
     openMars() {
+      clearPano();
       photoMode = false; el.classList.remove('photo'); if (pmImg) pmImg.src = '';
       marsMode = true;
       city = { id: MARS_CITY_ID, name: 'Mars', a3: S.home, code: 'MARS', size: 0.5, port: false, wealth: 1, pop: 0 };
@@ -971,7 +1054,7 @@ const CityView = (() => {
       view.x = vw / 2 - cx * view.s; view.y = vh / 2 - (cy - 60) * view.s;
       pins(); apply();
     },
-    close() { stopAnim(); marsMode = false; photoMode = false; el.classList.remove('open'); el.classList.remove('photo'); if (pmImg) pmImg.src = ''; city = null; img = null; },
+    close() { stopAnim(); clearPano(); marsMode = false; photoMode = false; el.classList.remove('open'); el.classList.remove('photo'); if (pmImg) pmImg.src = ''; city = null; img = null; },
     refresh() { if (city && !photoMode) pins(); },
     setFilter(f) { filter = f; if (!photoMode) pins(); },
     get filter() { return filter; },
