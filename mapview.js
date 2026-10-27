@@ -13,7 +13,7 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  const COL = { sea: '#bcd9f7', sea2: '#9cc3ef', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
+  const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
   function resize() {
