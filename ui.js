@@ -2421,6 +2421,7 @@ function sportStars(p) { return '★'.repeat(Math.floor(p.stars)) + (p.stars % 1
 function sportStatLine(lgId, p) {
   const s = p.stats || {};
   if (lgId === 'base') return p.pos.match(/SP|RP|CP/) ? `W ${s.W || 0} L ${s.L || 0} SV ${s.SV || 0} SO ${s.SO || 0} ERA ${s.ERA != null ? s.ERA : '-'}` : `.${String(Math.round((s.AVG || 0) * 1000))} HR ${s.HR || 0} RBI ${s.RBI || 0} SB ${s.SB || 0}`;
+  if (lgId === 'foot') return `YDS ${s.YDS || 0} TD ${s.TD || 0}`;
   return `PTS ${s.PTS || 0} REB ${s.REB || 0} AST ${s.AST || 0}`;
 }
 // --- Worl Sports: scores-app layout (layout reference only, original
@@ -2516,7 +2517,7 @@ PANELS.minigames = () => {
     <button class="btn3d orange wide" data-a="mgplay" data-x="baseball">⚾ BASEBALL · Pennant GM</button>
     <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
     <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
-    <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · baseball &amp; basketball leagues</button></div>`);
+    <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · football, baseball &amp; basketball leagues</button></div>`);
 };
 // Team shield badge: same logo as the Mini Games baseball teams (abbr on a
 // shield in the team's colours). Falls back to the old letter/color for
@@ -3299,7 +3300,7 @@ const A = {
   tawkExploreTab: x => { UI.tawkExploreTab = x; renderPanel(); },
   tawkTopic: x => { const tp = tawkTopics()[parseInt(x, 10)]; if (!tp) return; UI.tawkQuery = tp.label; UI.tawkExploreTab = 'explore'; UI.tawkView = 'explore'; renderPanel(); },
   tawkSportLeague: x => { UI.tawkSport = x; renderPanel(); },
-  tawkJoinChat: x => { let g = null; ['base', 'basket'].forEach(l => tawkSportGames(l).forEach(gg => { if (gg.id === x) g = gg; })); if (!g) return; const c = tawkEnsureChat(g); c.seen = c.msgs.length; UI.tawkGame = x; UI.tawkView = 'gamechat'; save(); renderPanel(); },
+  tawkJoinChat: x => { let g = null; ['base', 'basket', 'foot'].forEach(l => tawkSportGames(l).forEach(gg => { if (gg.id === x) g = gg; })); if (!g) return; const c = tawkEnsureChat(g); c.seen = c.msgs.length; UI.tawkGame = x; UI.tawkView = 'gamechat'; save(); renderPanel(); },
   tawkChatOpen: x => { const t = tawkState(); const c = t.chats[x]; if (!c) return; c.seen = c.msgs.length; UI.tawkGame = x; UI.tawkView = 'gamechat'; save(); renderPanel(); },
   tawkChatBack: () => { const ci = document.getElementById('tawkChatText'); if (ci) UI.tawkChatDraft = ci.value; UI.tawkView = 'chat'; renderPanel(); },
   tawkChatPost: () => { const inp = document.getElementById('tawkChatText'); const text = (inp ? inp.value : (UI.tawkChatDraft || '')).trim().slice(0, 280); if (!text) return; const t = tawkState(); const c = t.chats[UI.tawkGame]; if (!c) return; const youName = (S.you && S.you.name) || 'Founder'; c.msgs.push({ acct: { name: youName, handle: tawkHandle(youName), icon: '👤' }, text, time: 'now' }); c.seen = c.msgs.length; UI.tawkChatDraft = ''; if (S.person) S.person.vis = clamp((S.person.vis || 5) + 1, 0, 100); save(); renderPanel(); },

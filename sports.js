@@ -7,10 +7,25 @@
 'use strict';
 
 const SPORT_LEAGUES = [
+  { id: 'foot', name: 'World Football League', short: 'Football', icon: '🏈',
+    positions: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'] },
   { id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾',
     positions: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] },
   { id: 'basket', name: 'World Basketball League', short: 'Basketball', icon: '🏀',
     positions: ['PG', 'SG', 'SF', 'PF', 'C'] },
+];
+// Country clubs for the football + baseball leagues: 6 teams, country + mascot
+// (Japan Fighters / USA Eagles style). Same clubs in both leagues, so a club
+// is recognisable in either sport. Basketball keeps the old city teams.
+// The 6th club is USA (the example given); swap it for Japan in one word if
+// wanted. New games only for the new leagues; see ensureSports migration.
+const COUNTRY_CLUBS = [
+  { a3: 'ZAF', country: 'South Africa', mascot: 'Lions', abbr: 'ZAF', c1: '#007A4D', c2: '#FFB612' },
+  { a3: 'EGY', country: 'Egypt', mascot: 'Pharaohs', abbr: 'EGY', c1: '#CE1126', c2: '#C09300' },
+  { a3: 'IND', country: 'India', mascot: 'Tigers', abbr: 'IND', c1: '#FF9933', c2: '#000080' },
+  { a3: 'SGP', country: 'Singapore', mascot: 'Merlions', abbr: 'SGP', c1: '#ED2939', c2: '#FFFFFF' },
+  { a3: 'TUR', country: 'Turkey', mascot: 'Stars', abbr: 'TUR', c1: '#E30A17', c2: '#FFFFFF' },
+  { a3: 'USA', country: 'USA', mascot: 'Eagles', abbr: 'USA', c1: '#0A3161', c2: '#FFFFFF' },
 ];
 // Shared team identities with the Mini Games (baseball minigame uses the same
 // 30 names, abbreviations, colours and shield logos). The two games are NOT
@@ -78,6 +93,19 @@ function sportTeamCities() {
   for (const c of caps) if (out.length < 10 && !out.includes(c)) out.push(c);
   return out;
 }
+function makeCountryTeam(league, city, club, usedNames) {
+  const cityName = city.name;
+  const name = club.country + ' ' + club.mascot;
+  const cap = clamp(Math.round(18000 + Math.sqrt(city.pop) * 12), 20000, 55000);
+  const team = { id: league.id + '-' + city.id, league: league.id, cityId: city.id, a3: city.a3,
+    name, mascot: club.mascot, color: club.c1, c1: club.c1, c2: club.c2, abbr: club.abbr, logo: club.abbr, cityName, country: club.a3,
+    stadium: { name: cityName + ' Park', capacity: cap, level: 1 },
+    owner: 'AI', value: 0, wins: 0, losses: 0, history: [], champions: 0,
+    players: [], finance: null, finHist: [], ipo: null, lastNet: 0, profitStreak: 0, board: [], weekNets: [], weekStreak: 0, rating5: 3.0 };
+  for (let i = 0; i < 12; i++) team.players.push(makeSportPlayer(league, usedNames, 20, 34, 58, 88));
+  team.value = 120000000 + Math.round(rand() * 200000000);
+  return team;
+}
 function makeSportTeam(league, city, entry, usedNames) {
   const cityName = city.name;
   const name = entry[0], mascot = entry[0], color = entry[2];
@@ -96,6 +124,14 @@ function ensureSports() {
   if (!S.sports) {
     const used = new Set();
     const leagues = SPORT_LEAGUES.map(l => {
+      if (l.id === 'foot' || l.id === 'base') {
+        const teams = COUNTRY_CLUBS.map(club => {
+          const cap = W.cities[W.byA3[club.a3] ? W.byA3[club.a3].capital : -1];
+          return cap ? makeCountryTeam(l, cap, club, used) : null;
+        }).filter(Boolean);
+        return { id: l.id, name: l.name, short: l.short, icon: l.icon, teams,
+          freeAgents: [], draftClass: [], seasonYear: yearOf(S.day), champion: null };
+      }
       const cities = sportTeamCities();
       const teams = cities.map((c, i) => makeSportTeam(l, c, SHARED_SPORT_TEAMS[i % SHARED_SPORT_TEAMS.length], used));
       return { id: l.id, name: l.name, short: l.short, icon: l.icon, teams,
@@ -108,6 +144,10 @@ function ensureSports() {
     S.sports = { leagues, tab: 'base', teamId: null, draftYear: yearOf(S.day) };
   }
   if (!S.sports.leagues) S.sports.leagues = [];
+  const baseLg = S.sports.leagues.find(l => l.id === 'base');
+  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== 6 || !baseLg.teams[0].country;
+  const anyOwned = S.sports.leagues.some(lg => lg.teams.some(tm => tm.owner === 'you'));
+  if (needsNewLeagues && !anyOwned) { S.sports = null; return ensureSports(); }
   S.sports.leagues.forEach(lg => {
     if (!lg.freeAgents) lg.freeAgents = [];
     if (!lg.draftClass) lg.draftClass = [];
@@ -140,6 +180,7 @@ function sportSeasonStats(leagueId, p, games) {
     const avg = clamp(0.210 + p.rating * 0.0011 + gauss() * 0.015, 0.180, 0.360);
     return { AVG: +avg.toFixed(3), HR: Math.max(0, Math.round((p.rating - 55) * 0.7 + gauss() * 5)), RBI: Math.max(0, Math.round((p.rating - 50) * 1.2 + gauss() * 10)), SB: Math.max(0, Math.round(rand() * 20)) };
   }
+  if (leagueId === 'foot') return { YDS: Math.max(0, Math.round((p.rating - 45) * 12 + gauss() * 60)), TD: Math.max(0, Math.round((p.rating - 50) * 0.25 + gauss() * 2)) };
   return { PTS: +(Math.max(2, (p.rating - 40) * 0.38 + gauss() * 2)).toFixed(1), REB: +(Math.max(1, (p.rating - 45) * 0.12 + gauss())).toFixed(1), AST: +(Math.max(0.5, (p.rating - 50) * 0.10 + gauss())).toFixed(1) };
 }
 function sportGameWinProb(a, b, home) {

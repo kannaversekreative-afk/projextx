@@ -203,7 +203,12 @@ function tawkSportGames(lgId, weekOff) {
     const as0 = (typeof teamStrength === 'function') ? teamStrength(away) : 60;
     const diff = hs0 - as0;
     let hs, as, period;
-    if (lgId === 'basket') {
+    if (lgId === 'foot') {
+      hs = clamp(Math.round(21 + diff * 0.4 + (rnd() * 16 - 8)), 3, 45);
+      as = clamp(Math.round(21 - diff * 0.4 + (rnd() * 16 - 8)), 3, 45);
+      if (hs === as) { if (diff >= 0) hs += 3; else as += 3; }
+      period = 'Q' + (1 + Math.floor(rnd() * 4)) + ' ' + String(Math.floor(rnd() * 15)).padStart(2, '0') + ':' + String(Math.floor(rnd() * 60)).padStart(2, '0');
+    } else if (lgId === 'basket') {
       hs = clamp(Math.round(98 + diff * 0.6 + (rnd() * 22 - 11)), 78, 148);
       as = clamp(Math.round(98 - diff * 0.6 + (rnd() * 22 - 11)), 78, 148);
       if (hs === as) hs += 2;
