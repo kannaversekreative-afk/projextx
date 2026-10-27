@@ -603,3 +603,50 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .tawk-set-row button { background: #16181c; color: #fff; border: 1px solid #2f3336; border-radius: 16px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
 /* Newspaper index edition link + footer nav (bottom bar is page flip only) */
 .nindex button { background: none; border: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+
+/* ---- Robot Radio (dark tuner app) ---- */
+.rradio { background: #191d27; color: #fff; border-radius: 14px; overflow: hidden; padding-bottom: 10px; }
+.rr-search { display: flex; gap: 8px; padding: 14px; }
+.rr-search-input { flex: 1; background: #fff; color: #111; border: none; border-radius: 999px; padding: 12px 18px; font-size: 15px; min-width: 0; }
+.rr-search-btn { background: #2f7cf6; color: #fff; border: none; border-radius: 999px; padding: 10px 18px; font-weight: 800; cursor: pointer; }
+.rr-player { margin: 0 14px 12px; background: #232838; border-radius: 16px; padding: 14px; }
+.rr-player h4 { margin: 0 0 4px; }
+.rr-muted { color: #9aa3b2; font-size: 13px; }
+.rr-track { margin: 8px 0; }
+.rr-bar { background: #3a4157; height: 10px; border-radius: 5px; margin: 8px 0; }
+.rr-bar-fill { background: #2f7cf6; height: 10px; border-radius: 5px; }
+.rr-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rr-btn { background: #2f7cf6; color: #fff; border: none; border-radius: 999px; padding: 8px 16px; font-weight: 800; cursor: pointer; }
+.rr-btn.ghost { background: #2b3348; }
+.rr-ad { margin: 0 14px 12px; background: #232838; border-radius: 16px; padding: 14px; }
+.rr-ad h4 { margin: 0 0 6px; }
+.rr-ad p { margin: 6px 0 10px; line-height: 1.45; }
+.rr-sec { padding: 4px 14px; margin: 0; font-size: 20px; }
+.rr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 10px 14px; }
+.rr-tile-wrap { position: relative; }
+.rr-tile { width: 100%; background: none; border: none; cursor: pointer; padding: 0; text-align: left; }
+.rr-tile-art { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: 16px; color: #fff; font-size: 28px; font-weight: 900; letter-spacing: 1px; }
+.rr-tile-name { display: block; color: #fff; font-size: 13px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rr-heart { position: absolute; right: 8px; bottom: 26px; background: none; border: none; font-size: 18px; cursor: pointer; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.rr-onair { position: absolute; top: 8px; left: 8px; background: #12a150; color: #fff; font-size: 9px; font-weight: 800; border-radius: 999px; padding: 2px 7px; }
+.rr-nav { display: flex; gap: 8px; background: #232838; border-radius: 999px; margin: 14px auto 4px; padding: 6px; width: max-content; }
+.rr-nav button { background: none; border: none; color: #9aa3b2; font-size: 20px; padding: 8px 16px; border-radius: 999px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rr-nav button span { font-size: 11px; }
+.rr-nav button.on { background: #2b3a55; color: #4da3ff; }
+.rr-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 14px 8px; }
+.rr-head h3 { margin: 0; }
+.rr-favrow { display: flex; align-items: center; gap: 10px; margin: 0 14px 10px; background: #232838; border-radius: 14px; padding: 10px; }
+.rr-favplay { display: flex; align-items: center; gap: 10px; flex: 1; background: none; border: none; color: #fff; cursor: pointer; text-align: left; min-width: 0; }
+.rr-mini { width: 52px; height: 52px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff; }
+.rr-favtxt { display: flex; flex-direction: column; min-width: 0; }
+.rr-favtxt span { color: #9aa3b2; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rr-heart.static { position: static; font-size: 20px; }
+.rr-empty { color: #9aa3b2; padding: 20px 14px; text-align: center; }
+.rr-prem { padding: 20px 14px; text-align: center; }
+.rr-prem-ic { width: 72px; height: 72px; margin: 10px auto; background: #2f7cf6; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #fff; }
+.rr-prem-sub { color: #9aa3b2; }
+.rr-perks { display: flex; flex-direction: column; gap: 10px; text-align: left; max-width: 320px; margin: 18px auto; color: #dfe4ee; line-height: 1.45; }
+.rr-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.rr-chip { background: #232838; color: #fff; border: 1px solid #3a4157; border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
+.rr-chip.on { background: #2f7cf6; border-color: #2f7cf6; }
+.rr-note { color: #9aa3b2; font-size: 13px; text-align: center; }
