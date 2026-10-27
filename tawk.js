@@ -296,7 +296,7 @@ function tawkPostCard(p) {
 }
 function tawkSportsHTML() {
   const lgId = UI.tawkSport || 'base';
-  const leagues = (typeof SPORT_LEAGUES !== 'undefined') ? SPORT_LEAGUES : [{ id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾' }];
+  const leagues = (typeof SPORT_LEAGUES !== 'undefined') ? SPORT_LEAGUES : [{ id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾' }, { id: 'foot', name: 'World Football League', short: 'Football', icon: '🏈' }, { id: 'basket', name: 'World Basketball League', short: 'Basketball', icon: '🏀' }];
   const games = tawkSportGames(lgId);
   const chips = leagues.map(l => `<button class="tawk-chip ${l.id === lgId ? 'on' : ''}" data-a="tawkSportLeague" data-x="${l.id}">${l.icon} ${l.short}</button>`).join('');
   const cards = games.map(g => {

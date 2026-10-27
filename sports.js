@@ -11,7 +11,21 @@ const SPORT_LEAGUES = [
     positions: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'] },
   { id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾',
     positions: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] },
+  { id: 'basket', name: 'World Basketball League', short: 'Basketball', icon: '🏀',
+    positions: ['PG', 'SG', 'SF', 'PF', 'C'] },
 ];
+// Real-league schedules (2026-10-27 order: use real numbers and timeframes).
+// Months are 0-based (Jan = 0). Football: 16 games, not 17 — with 17 teams
+// 17 games each is impossible (17 x 17 is odd; every game counts for two
+// teams), so 16 (everyone once) is the closest real equivalent; say the
+// word to switch it to 18 (everyone once + 2 rivalry games). Baseball 162
+// and basketball 82 are exact: base games per opponent plus 1 extra game
+// against each of a team's 2 cycle neighbours (see sportSeasonLeague).
+const SPORT_SEASONS = {
+  foot: { games: 16, startMonth: 7, endMonth: 1, playoff: 'single' },   // Aug–Feb, single elimination
+  base: { games: 162, startMonth: 3, endMonth: 9, playoff: 'series' },  // Apr–Oct, best of 7
+  basket: { games: 82, startMonth: 9, endMonth: 5, playoff: 'series' }, // Oct–Jun, best of 7
+};
 // Country clubs for the football + baseball leagues: ALL 17 playable
 // countries, country + mascot, same clubs in both leagues so a club is
 // recognisable in either sport. Basketball was removed (2026-10-27 order).
@@ -137,18 +151,12 @@ function ensureSports() {
   if (!S.sports) {
     const used = new Set();
     const leagues = SPORT_LEAGUES.map(l => {
-      if (l.id === 'foot' || l.id === 'base') {
-        const teams = COUNTRY_CLUBS.map(club => {
-          const cap = W.cities[W.byA3[club.a3] ? W.byA3[club.a3].capital : -1];
-          return cap ? makeCountryTeam(l, cap, club, used) : null;
-        }).filter(Boolean);
-        return { id: l.id, name: l.name, short: l.short, icon: l.icon, teams,
-          freeAgents: [], draftClass: [], seasonYear: yearOf(S.day), champion: null };
-      }
-      const cities = sportTeamCities();
-      const teams = cities.map((c, i) => makeSportTeam(l, c, SHARED_SPORT_TEAMS[i % SHARED_SPORT_TEAMS.length], used));
+      const teams = COUNTRY_CLUBS.map(club => {
+        const cap = W.cities[W.byA3[club.a3] ? W.byA3[club.a3].capital : -1];
+        return cap ? makeCountryTeam(l, cap, club, used) : null;
+      }).filter(Boolean);
       return { id: l.id, name: l.name, short: l.short, icon: l.icon, teams,
-        freeAgents: [], draftClass: [], seasonYear: yearOf(S.day), champion: null };
+        freeAgents: [], draftClass: [], seasonYear: yearOf(S.day), champion: null, seasonKey: null };
     });
     leagues.forEach(lg => {
       const lgDef = SPORT_LEAGUES.find(x => x.id === lg.id);
@@ -158,9 +166,11 @@ function ensureSports() {
   }
   if (!S.sports.leagues) S.sports.leagues = [];
   const baseLg = S.sports.leagues.find(l => l.id === 'base');
+  const basketLg = S.sports.leagues.find(l => l.id === 'basket');
   const wantNames = COUNTRY_CLUBS.map(c => c.country + ' ' + c.mascot).join('|');
   const baseNames = baseLg ? baseLg.teams.map(t => t.name).join('|') : '';
-  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== COUNTRY_CLUBS.length || !baseLg.teams[0].country || S.sports.leagues.some(l => l.id === 'basket') || baseNames !== wantNames;
+  const basketNames = basketLg ? basketLg.teams.map(t => t.name).join('|') : '';
+  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || !basketLg || baseLg.teams.length !== COUNTRY_CLUBS.length || basketLg.teams.length !== COUNTRY_CLUBS.length || !baseLg.teams[0].country || baseNames !== wantNames || basketNames !== wantNames;
   const anyOwned = S.sports.leagues.some(lg => lg.teams.some(tm => tm.owner === 'you'));
   if (needsNewLeagues && !anyOwned) { S.sports = null; return ensureSports(); }
   S.sports.leagues.forEach(lg => {
@@ -207,9 +217,14 @@ function sportPlaySeries(a, b, need) {
   while (wa < need && wb < need) { if (rand() < sportGameWinProb(a, b, wa + wb === 0)) wa++; else wb++; }
   return wa > wb ? a : b;
 }
+function sportGamesPerTeam(lgId) {
+  const cfg = (typeof SPORT_SEASONS !== 'undefined') ? SPORT_SEASONS[lgId] : null;
+  if (cfg) return cfg.games;
+  const lg = (typeof sportLeague === 'function') ? sportLeague(lgId) : null;
+  return lg ? (lg.teams.length - 1) * 2 : 32;
+}
 function sportFinance(team) {
-  const lgTeams = sportLeague(team.league).teams;
-  const games = (lgTeams.length - 1) * 2, homeGames = games / 2;
+  const games = sportGamesPerTeam(team.league), homeGames = games / 2;
   const winPct = (team.wins + team.losses) ? team.wins / (team.wins + team.losses) : 0.5;
   const city = W.cities[team.cityId], popM = city ? city.pop / 1e6 : 10;
   const market = clamp(0.6 + popM / 20, 0.6, 2.2);
@@ -264,23 +279,30 @@ function sportWeek() {
   }));
   return total;
 }
-function sportSeason() {
-  // One full season per league, run at year end. Settles owned teams
-  // into the player's cash: net income in, payroll already inside net.
-  if (!S || !S.sports) return;
-  const year = yearOf(S.day);
-  S.sports.leagues.forEach(lg => {
-    const lgDef = SPORT_LEAGUES.find(x => x.id === lg.id);
-    lg.teams.forEach(t => { t.wins = 0; t.losses = 0; });
-    for (let i = 0; i < lg.teams.length; i++) for (let j = i + 1; j < lg.teams.length; j++) {
-      const a = lg.teams[i], b = lg.teams[j];
-      for (let g = 0; g < 2; g++) {
-        const home = g === 0 ? a : b, away = g === 0 ? b : a;
-        if (rand() < sportGameWinProb(home, away, true)) { home.wins++; away.losses++; } else { away.wins++; home.losses++; }
-      }
+function sportSingleGame(a, b) { return rand() < sportGameWinProb(a, b, true) ? a : b; }
+function sportSeasonLeague(lg, startYear) {
+  // One full season for ONE league, run at its real end month (see
+  // sportSeasonsDue in stepDay), not at year end. Weekly cash is already
+  // paid in sportWeek, so this settles wins, finance, ratings, draft
+  // and the championship only. Games: real counts from SPORT_SEASONS.
+  if (!S || !lg || !lg.teams || lg.teams.length < 2) return;
+  const year = (startYear != null) ? startYear : yearOf(S.day);
+  const lgDef = SPORT_LEAGUES.find(x => x.id === lg.id);
+  const gamesPerTeam = sportGamesPerTeam(lg.id), n = lg.teams.length;
+  const baseN = Math.floor(gamesPerTeam / (n - 1)), extra = gamesPerTeam - baseN * (n - 1);
+  const cycleExtra = Math.floor(extra / 2);
+  lg.teams.forEach(t => { t.wins = 0; t.losses = 0; });
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a = lg.teams[i], b = lg.teams[j];
+    const cycle = (j - i === 1) || (i === 0 && j === n - 1);
+    const games = baseN + (cycle ? cycleExtra : 0);
+    for (let g = 0; g < games; g++) {
+      const home = g % 2 === 0 ? a : b, away = g % 2 === 0 ? b : a;
+      if (rand() < sportGameWinProb(home, away, true)) { home.wins++; away.losses++; } else { away.wins++; home.losses++; }
     }
-    lg.teams.forEach(t => {
-      t.players.forEach(p => { p.stats = sportSeasonStats(lg.id, p, 20); });
+  }
+  lg.teams.forEach(t => {
+      t.players.forEach(p => { p.stats = sportSeasonStats(lg.id, p, gamesPerTeam); });
       const fin = sportFinance(t);
       t.finance = fin; t.lastNet = fin.net;
       t.finHist.unshift({ year, revenue: fin.revenue, payroll: fin.payroll, admin: fin.admin, net: fin.net, wins: t.wins, losses: t.losses });
@@ -293,8 +315,15 @@ function sportSeason() {
       // Weekly cash is already paid in sportWeek. Do not pay the annual net again here.
     });
     const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
-    const semi1 = sportPlaySeries(sorted[0], sorted[3], 4), semi2 = sportPlaySeries(sorted[1], sorted[2], 4);
-    const champ = sportPlaySeries(semi1, semi2, 4);
+    const cfg = (typeof SPORT_SEASONS !== 'undefined') ? SPORT_SEASONS[lg.id] : null;
+    let champ;
+    if (cfg && cfg.playoff === 'single') {
+      const semi1 = sportSingleGame(sorted[0], sorted[3]), semi2 = sportSingleGame(sorted[1], sorted[2]);
+      champ = sportSingleGame(semi1, semi2);
+    } else {
+      const semi1 = sportPlaySeries(sorted[0], sorted[3], 4), semi2 = sportPlaySeries(sorted[1], sorted[2], 4);
+      champ = sportPlaySeries(semi1, semi2, 4);
+    }
     champ.champions++; champ.value = Math.round(champ.value * 1.15);
     if (champ.history[0]) champ.history[0].champion = true;
     lg.champion = champ.id; lg.seasonYear = year;
@@ -326,8 +355,32 @@ function sportSeason() {
       const mine = ownedSportTeams().filter(t => t.league === lg.id);
       if (mine.length) news('Sports', `${lg.name} ${year}: ${mine.map(t => `${t.name} ${t.wins}-${t.losses}, net ${fmtMoney(t.lastNet, true)}`).join('; ')}. ${champ.name} won the championship.`, mine[0].a3);
     }
-  });
+}
+function sportSeason() {
+  // Back-compat wrapper: run every league at once (tests, old callers).
+  if (!S || !S.sports) return;
+  const year = yearOf(S.day);
+  S.sports.leagues.forEach(lg => sportSeasonLeague(lg, year));
   S.sports.draftYear = year;
+}
+function sportSeasonsDue() {
+  // Real-league timing, called from stepDay: a league's season runs on
+  // the 1st of its end month, once per season. Baseball ends in Oct of
+  // its season year; football and basketball end in Feb/Jun of the year
+  // after their season started, so their key uses startYear = year - 1.
+  if (!S || !S.sports || !S.sports.leagues) return;
+  const d = dateOf(S.day);
+  if (d.getUTCDate() !== 1) return;
+  const month = d.getUTCMonth(), year = d.getUTCFullYear();
+  S.sports.leagues.forEach(lg => {
+    const cfg = (typeof SPORT_SEASONS !== 'undefined') ? SPORT_SEASONS[lg.id] : null;
+    if (!cfg || month !== cfg.endMonth) return;
+    const startYear = (lg.id === 'base') ? year : year - 1;
+    const key = lg.id + '-' + startYear;
+    if (lg.seasonKey === key) return;
+    lg.seasonKey = key;
+    sportSeasonLeague(lg, startYear);
+  });
 }
 function buySportTeam(id, w) {
   const t = sportTeam(id); if (!t) return 'Team not found.';

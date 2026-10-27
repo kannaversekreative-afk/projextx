@@ -709,7 +709,9 @@ function ratingForYear(c) {
 function yearEnd(year) {
   if (S.mode === 'worl' && typeof worlYearEnd === 'function') { try { worlYearEnd(); } catch (e) {} }
   if (S.mode === 'domination' && typeof dominationRound === 'function') { try { dominationRound(); } catch (e) {} }
-  if (typeof sportSeason === 'function') { try { sportSeason(); } catch (e) {} }
+  // Sports seasons no longer run at year end: each league runs at its
+  // real end month via sportSeasonsDue() in stepDay (baseball Oct,
+  // football Feb, basketball Jun).
   const entries = [];
   for (const a3 in S.co) {
     const c = S.co[a3], old = c.rating, r = ratingForYear(c);
@@ -780,6 +782,7 @@ function stepDay() {
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
   if (S.day % 7 === 6) businessWeek();
   S.day++;
+  if (typeof sportSeasonsDue === 'function') { try { sportSeasonsDue(); } catch (e) {} }
   if (yearOf(S.day) !== yearOf(S.day - 1)) yearEnd(yearOf(S.day));
   if (S.day % 7 === 0) { S.nh.w.push([S.day, Math.round(netWorth()), +S.idx.v.toFixed(2)]); if (S.nh.w.length > 260) S.nh.w.shift(); }
   if (dateOf(S.day).getUTCDate() === 1) S.nh.m.push([S.day, Math.round(netWorth()), +S.idx.v.toFixed(2)]);
