@@ -295,14 +295,27 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opening a full #panel page, the app renders into the phone's own
 // screen (#phoneCard). UI.phoneApp is the app on the phone screen;
 // UI.phoneStack is the chain of apps opened from inside apps, so a
-// back step returns to the previous app, not the map. Panels opened
-// from anywhere else (HUD pill, map, city) still use the #panel page.
+// back step returns to the previous app, not the map. Detail screens
+// opened from anywhere else (HUD pill, map, city) still use the
+// #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
     const mbox = document.querySelector('#modal .mbox.phone');
     if (mbox) mbox.innerHTML = phoneHTML();
+    renderPhoneApp(); renderHUD(); return;
+  }
+  // Every app opens inside the phone box, even when tapped from the
+  // map HUD, a city, or another panel: open the phone first, then put
+  // the app on its screen. Detail screens (a stock, a company, an
+  // office) are not apps and keep opening as panels.
+  if (MENU_ITEMS.some(m => m[0] === name) || name === 'profile') {
+    if (CityView.isOpen()) leaveCity();
+    openMenuPopup();
+    UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
+    const mbox2 = document.querySelector('#modal .mbox.phone');
+    if (mbox2) mbox2.innerHTML = phoneHTML();
     renderPhoneApp(); renderHUD(); return;
   }
   closeModal(); if (CityView.isOpen()) leaveCity();
@@ -966,6 +979,21 @@ async function boot() {
   let ageX = null;
   $('hud').addEventListener('pointerdown', e => { if (e.target.closest('.agebar')) ageX = e.clientX; });
   $('hud').addEventListener('pointerup', e => { if (ageX == null) return; const dx = e.clientX - ageX; ageX = null; if (Math.abs(dx) > 70) { if (dx > 0) A.ageUp(); else A.ageDown(); } });
+  // Swipe the phone home grid left or right to change pages, like a
+  // real home screen. Listened on #modal because the grid itself is
+  // re-rendered on every page change. Only the grid swipes — apps
+  // scroll vertically, and a mostly-vertical drag still scrolls.
+  let phoneSwipeX = null, phoneSwipeY = null;
+  $('modal').addEventListener('pointerdown', e => { if (UI.modal === 'phone' && !UI.phoneApp && e.target.closest('.phone-grid')) { phoneSwipeX = e.clientX; phoneSwipeY = e.clientY; } });
+  $('modal').addEventListener('pointerup', e => {
+    if (phoneSwipeX == null) return;
+    const dx = e.clientX - phoneSwipeX, dy = e.clientY - phoneSwipeY; phoneSwipeX = null; phoneSwipeY = null;
+    if (Math.abs(dx) <= 60 || Math.abs(dx) <= Math.abs(dy)) return;
+    const grid = MENU_ITEMS.filter(m => !['bank', 'markets'].includes(m[0]));
+    const pages = Math.max(1, Math.ceil(grid.length / 12));
+    const next = Math.min(pages - 1, Math.max(0, (UI.phonePage || 0) + (dx < 0 ? 1 : -1)));
+    if (next !== (UI.phonePage || 0)) { UI.phonePage = next; openMenuPopup(); }
+  });
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
   addEventListener('pagehide', save);
@@ -1725,11 +1753,27 @@ PANELS.profile = () => {
     <div class="kv"><span>Buildings</span><b>${(S.props || []).length} · ${fmtMoney(propValue(), true)}</b></div>
     <div class="kv"><span>Rating</span><b>${(S.rating || 0).toFixed(1)} / 5</b></div>
     <p class="muted small">Companies, stocks and business money live in Trade, My Companies and Offices — not here.</p>
-    <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">CABINET (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
+    <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">ADVISORS (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
 };
 PANELS.cabinet = () => {
+  // Advisors, laid out like a contacts list: your card on top, then
+  // advisors grouped A-Z with a letter rail on the right, a search
+  // row, and + to add one. The panel key stays 'cabinet' (saves store
+  // advisors under S.person.cabinet) — only the name changed.
   const P = ensurePerson();
-  const slots = P.cabinet.map(ad => `<div class="kv"><span>${esc(ad.name)} · ${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐' : ''}</span><b><button class="btn small" data-a="cabTip" data-x="${ad.id}">BUY TIP · ${fmtMoney(tipStake(), true)}</button> <button class="btn small" data-a="cabFire" data-x="${ad.id}">FIRE</button></b></div>`).join('');
+  const q = (UI.advQuery || '').toLowerCase();
+  const list = P.cabinet.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const shown = q ? list.filter(ad => ad.name.toLowerCase().includes(q) || CAB_TYPES[ad.type].name.toLowerCase().includes(q)) : list;
+  const groups = {};
+  shown.forEach(ad => { const L = /^[A-Z]$/i.test(ad.name[0] || '') ? ad.name[0].toUpperCase() : '#'; (groups[L] = groups[L] || []).push(ad); });
+  const letters = Object.keys(groups).sort((a, b) => (a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b)));
+  const avCol = n => { let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#b45309'][h % 8]; };
+  const row = ad => {
+    const open = UI.advOpen === ad.id;
+    const detail = open ? `<div class="adv-detail"><span>${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐ developable' : ''}</span><span><button class="btn small" data-a="cabTip" data-x="${ad.id}">BUY TIP · ${fmtMoney(tipStake(), true)}</button> <button class="btn small" data-a="cabFire" data-x="${ad.id}">FIRE</button></span></div>` : '';
+    return `<div class="adv-row"><button class="adv-person" data-a="advOpen" data-x="${ad.id}"><span class="adv-av" style="background:${avCol(ad.name)}">${esc((ad.name[0] || '?').toUpperCase())}</span><span class="adv-nm"><b>${esc(ad.name)}</b><small>${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐' : ''}</small></span></button>${detail}</div>`;
+  };
+  const sections = letters.map(L => `<div class="adv-sec" id="adv-sec-${L}"><div class="adv-letter">${L}</div>${groups[L].map(row).join('')}</div>`).join('');
   let hire = '';
   if (UI.cabHire) {
     const type = UI.cabHire.type;
@@ -1739,12 +1783,52 @@ PANELS.cabinet = () => {
     if (!cabUnlocked(t)) return `<div class="kv"><span>${esc(CAB_TYPES[t].name)}</span><b>🔒 ${cabUnlockWhy(t)}</b></div>`;
     return `<div class="kv"><span>${esc(CAB_TYPES[t].name)} · ${fmtMoney(CAB_TYPES[t].cost, true)}</span><b><button class="btn small" data-a="cabType" data-x="${t}">ADD</button></b></div>`;
   }).join('');
-  return panelShell('Cabinet', `Your advisors — ${P.cabinet.length}/10 seats. They boost you weekly, and sell inside tips for money. Tips can be wrong, and getting caught means a fine, an arrest, or impeachment.`,
-    `${slots || '<p class="muted small">No advisors yet. Family and friends are free.</p>'}${hire}<div class="card in"><h4>Add an advisor</h4>${types}</div>`);
+  const add = UI.advAdd ? `<div class="card in"><h4>Add an advisor</h4>${types}</div>` : '';
+  return panelShell('Advisors', `Your advisors — ${P.cabinet.length}/10 seats.`,
+    `<div class="adv"><button class="adv-person adv-mycard" data-a="panel" data-x="profile"><span class="adv-av" style="background:#334155">${esc(((S.you && S.you.name) || 'Y')[0].toUpperCase())}</span><span class="adv-nm"><b>My Card</b><small>${esc(S.you.name)} · ${esc(personTitle())}</small></span></button>
+    <div class="adv-search"><input id="advSearch" placeholder="Search" value="${esc(UI.advQuery || '')}"><button class="btn" data-a="advSearch">Search</button>${q ? `<button class="btn" data-a="advClear">Clear</button>` : ''}<button class="btn" data-a="advAdd">＋</button></div>
+    <p class="muted small">Advisors boost you weekly and sell inside tips for money. Tips can be wrong, and getting caught means a fine, an arrest, or impeachment.</p>
+    ${hire}${add}
+    <div class="adv-wrap"><div class="adv-list">${sections || '<p class="muted small">No advisors yet. Family and friends are free — tap ＋ to add one.</p>'}</div><div class="adv-index">${letters.map(L => `<button data-a="advJump" data-x="${L}">${L}</button>`).join('')}</div></div></div>`);
 };
 PANELS.elections = () => {
   const P = ensurePerson();
+  const home = W.byA3[S.home];
+  const cap = W.cities.find(c => c.id === home.capital);
   const office = P.office;
+  // Home races: nation, region, legislature, capital mayor — each on
+  // its own seeded calendar, so their dates differ.
+  const scopes = ['nation', 'region', 'legislature', 'city'];
+  const homeCards = scopes.map(sc => {
+    const jur = sc === 'city' ? S.home + ':' + home.capital : S.home;
+    const label = electionScopeTitle(S.home, sc, sc === 'city' ? (cap && cap.name) : null);
+    return { sc, jur, label, race: electionRace(jur, sc, S.day) };
+  });
+  const openNow = homeCards.filter(x => x.race.status === 'open');
+  const ballot = openNow.length
+    ? openNow.map(x => electRaceCardHTML(x.jur, S.home, x.sc, x.label)).join('')
+    : `<p class="muted small">No election open right now. Next: ${homeCards.map(x => `${x.label} ${fmtDate(x.race.next)}`).join(' · ')}.</p>`;
+  const homeSection = homeCards.map(x => electRaceCardHTML(x.jur, S.home, x.sc, x.label)).join('');
+  // City elections in the home country: every city votes for its mayor
+  // on its own seeded date. Rows expand in place — no back buttons.
+  const cities = W.cities.filter(c => c.a3 === S.home).sort((a, b) => ((b.id === home.capital ? 1 : 0) - (a.id === home.capital ? 1 : 0)) || b.pop - a.pop);
+  const cityRows = cities.map(c => {
+    const jur = S.home + ':' + c.id, race = electionRace(jur, 'city', S.day);
+    const status = race.status === 'open' ? `🗳️ Voting open — closes ${fmtDate(race.day)}` : `Next ${fmtDate(race.next)}`;
+    return `<div class="elect-city"><button class="elect-citybtn" data-a="electCity" data-x="${c.id}"><span>${c.id === home.capital ? '⭐ ' : ''}${esc(c.name)}</span><span style="color:#8b949e">${status} ›</span></button>${UI.electCity === c.id ? electRaceCardHTML(jur, S.home, 'city', `Mayor of ${c.name}`) : ''}</div>`;
+  }).join('') || '<p class="muted small">No cities found in your country.</p>';
+  // Every country's national race, open ones first. Tap a country and
+  // its card opens right there — the same layout as the state card.
+  const world = W.playable.slice().sort((a, b) => {
+    const ra = electionRace(a.a3, 'nation', S.day), rb = electionRace(b.a3, 'nation', S.day);
+    if ((ra.status === 'open') !== (rb.status === 'open')) return ra.status === 'open' ? -1 : 1;
+    return ra.next - rb.next;
+  });
+  const worldRows = world.map(k => {
+    const race = electionRace(k.a3, 'nation', S.day);
+    const status = race.status === 'open' ? '🗳️ Voting open' : `Next ${fmtDate(race.next)}`;
+    return `<div class="elect-city"><button class="elect-citybtn" data-a="electOpen" data-x="${k.a3}"><span>${k.flag} ${esc(k.name)}</span><span style="color:#8b949e">${status} ›</span></button>${UI.electOpen === k.a3 ? electRaceCardHTML(k.a3, k.a3, 'nation', electionScopeTitle(k.a3, 'nation')) : ''}</div>`;
+  }).join('');
   const rows = officeList().map(o => {
     const holding = office && office.id === o.id;
     const missing = [];
@@ -1760,7 +1844,11 @@ PANELS.elections = () => {
     return `<div class="kv"><span>${esc(o.title)} · ${fmtMoney(o.salary, true)}/week</span><b>${status} ${btn}</b></div>`;
   }).join('');
   return panelShell('Elections', `Fame ${Math.round(P.fame)} · Popularity ${Math.round(P.pop)} · Public opinion ${Math.round(P.opin)} — the vote is 25% fame, 40% popularity, 35% opinion, plus a little chaos. Campaign first, then run.`,
-    `<div class="card in"><h4>📣 Campaign</h4><div class="row wrap"><button class="btn small" data-a="campaign" data-x="rally">Rally · $25K</button><button class="btn small" data-a="campaign" data-x="ads">Campaign ads · $100K</button><button class="btn small" data-a="campaign" data-x="donate">Donate · $50K</button></div><p class="muted small">Rallies raise visibility, fame, and opinion. Ads raise opinion and popularity. Donations raise popularity. A strategist makes campaigning 25% stronger.</p></div>
+    `<div class="elect"><h4>🗳️ Your ballot — open now</h4>${ballot}
+    <h4>🏛️ ${esc(cname(S.home))} races</h4>${homeSection}
+    <h4>🏙️ City elections — ${esc(cname(S.home))}</h4>${cityRows}
+    <h4>🌍 Every country — national races</h4><p class="muted small">Tap a country to see its race card. Voting is open for 28 days before each election day, and every country votes on its own dates.</p>${worldRows}</div>
+    <div class="card in"><h4>📣 Campaign</h4><div class="row wrap"><button class="btn small" data-a="campaign" data-x="rally">Rally · $25K</button><button class="btn small" data-a="campaign" data-x="ads">Campaign ads · $100K</button><button class="btn small" data-a="campaign" data-x="donate">Donate · $50K</button></div><p class="muted small">Rallies raise visibility, fame, and opinion. Ads raise opinion and popularity. Donations raise popularity. A strategist makes campaigning 25% stronger.</p></div>
     <div class="card in"><h4>🗳️ Offices</h4>${rows}</div>`);
 };
 PANELS.country = () => {
@@ -2583,16 +2671,17 @@ PANELS.help = () => {
 // sheet. The popup is the new home for all of these now that the
 // bottom bar is gone.
 const MENU_ITEMS = [
-  ['leader', ICONS.leader, 'Leader'], ['newsapp', ICONS.news, 'News'], ['markets', ICONS.markets, 'Trade'],
-  ['airport', ICONS.airport, 'Airport'],
-  ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'], ['country', '🗺️', 'Your Country'],
+  ['leader', ICONS.leader, 'Leader'], ['newsapp', ICONS.news, 'News'], ['airport', ICONS.airport, 'Airport'],
+  ['portfolio', ICONS.portfolio, 'Portfolio'], ['nation', ICONS.nation, 'Nation'], ['country', '🗺️', 'Your Country'],
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'],
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
   ['progress', '🏆', 'Progress'],
-  ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
+  ['tawk', '💬', 'Tawk'], ['web', ICONS.website, 'Web'],
+  ['cabinet', '👥', 'Advisors'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
-  ['tawk', '💬', 'Tawk'], ['radio', '📻', 'Robot Radio'],
+  ['markets', ICONS.markets, 'Trade'],
+  ['radio', '📻', 'Robot Radio'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
@@ -2607,24 +2696,28 @@ function phoneHTML() {
   // an app, to the map from the grid), and Apps goes to the grid.
   const unread = (S.mail || []).filter(m => !m.read).length;
   const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
+  // Home-screen layout: 4-across icon tiles, pages with dots, and a
+  // bottom bar (dock) pinned at the bottom of the grid AND of every
+  // app. The dock's first, bottom-left slot is Home — tapping it
+  // returns to the grid, so apps need no back button in their chrome.
+  // Web and Tawk sit with the other apps on the grid pages; the dock
+  // holds only Home, Bank and Trade.
+  const TILE_COLORS = ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#1f5fd0', '#8a5a2b', '#334155', '#b45309', '#0f766e'];
+  const tileBg = x => { let h = 0; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) >>> 0; return TILE_COLORS[h % TILE_COLORS.length]; };
+  const appBtn = ([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic" style="background:${tileBg(x)}">${ic}</span><span class="phone-app-label">${t}</span></button>`;
+  const dockKeys = ['bank', 'markets'];
+  const dock = MENU_ITEMS.filter(m => dockKeys.includes(m[0])).sort((a, b) => dockKeys.indexOf(a[0]) - dockKeys.indexOf(b[0]));
+  const dockHTML = () => `<div class="phone-dock"><button class="phone-app" data-a="phoneHome"><span class="phone-app-ic" style="background:#334155">🏠</span><span class="phone-app-label">Home</span></button>${dock.map(appBtn).join('')}</div>`;
   if (!UI.phoneApp) {
-    // Home-screen layout: 4-across icon tiles, pages with dots, and a
-    // dock of the four daily apps pinned at the bottom. Dock apps are
-    // not duplicated in the grid. Pages hold 12 (4 x 3).
-    const TILE_COLORS = ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#1f5fd0', '#8a5a2b', '#334155', '#b45309', '#0f766e'];
-    const tileBg = x => { let h = 0; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) >>> 0; return TILE_COLORS[h % TILE_COLORS.length]; };
-    const appBtn = ([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic" style="background:${tileBg(x)}">${ic}</span><span class="phone-app-label">${t}</span></button>`;
-    const dockKeys = ['tawk', 'web', 'bank', 'markets'];
-    const dock = MENU_ITEMS.filter(m => dockKeys.includes(m[0])).sort((a, b) => dockKeys.indexOf(a[0]) - dockKeys.indexOf(b[0]));
     const grid = MENU_ITEMS.filter(m => !dockKeys.includes(m[0]));
     const PER_PAGE = 12, pages = Math.max(1, Math.ceil(grid.length / PER_PAGE));
     const page = Math.min(UI.phonePage || 0, pages - 1);
     const slice = grid.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
     const dots = pages > 1 ? `<div class="phone-dots">${grid.map((_, i) => i < pages ? `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="Page ${i + 1}"></button>` : '').join('')}</div>` : '';
-    return `<div class="phone-notch"></div>${status}<div class="phone-grid">${slice.map(appBtn).join('')}</div>${dots}<div class="phone-dock">${dock.map(appBtn).join('')}</div>`;
+    return `<div class="phone-notch"></div>${status}<div class="phone-grid">${slice.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
   }
   const entry = MENU_ITEMS.find(m => m[0] === UI.phoneApp);
-  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><button data-a="phoneBack">\u2190 Apps</button><b>${esc(entry ? entry[2] : UI.phoneApp)}</b><span></span></div><div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>`;
+  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><span></span><b>${esc(entry ? entry[2] : (UI.phoneApp === 'profile' ? 'You' : UI.phoneApp === 'departures' ? 'Airport' : UI.phoneApp))}</b><span></span></div><div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
 }
 function openMenuPopup() {
   // The phone: every menu item is an app on a home screen. Tapping
@@ -2665,7 +2758,7 @@ function depContGroup(cont) {
   if (cont === 'Africa') return 'Africa';
   return 'Oceania';
 }
-function openDeparturesModal() {
+function departuresBoardHTML(inPhone) {
   const from = airportFromCity();
   const groups = ['Americas', 'Europe', 'Asia', 'Africa', 'Oceania'];
   const sel = UI.depCont || depContGroup(W.byA3[from.a3].cont);
@@ -2676,17 +2769,33 @@ function openDeparturesModal() {
     const k = W.byA3[c.a3];
     return { ct: c, k, km: airportDistanceKm(from, c), grp: k ? depContGroup(k.cont) : 'Oceania' };
   }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km);
-  openModal(`<div class="dep-head"><span class="dep-plane">✈️</span><h2>${esc(from.name)} Airport</h2><button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button></div>
-  <p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>
+  const head = `<div class="dep-head"><span class="dep-plane">✈️</span><h2>${esc(from.name)} Airport</h2>${inPhone ? '' : `<button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button>`}</div>`;
+  const body = `<p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>
   <div class="dep-title">✈ DEPARTURES</div>
   <canvas id="depmap" class="dep-map"></canvas>
   <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
   <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}</div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
   ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km.toLocaleString('en-US')}</span></button>`).join('')}
-  </div>`, 'dep');
-  drawDepMap(sel, from);
+  </div>`;
+  return head + body;
 }
+function openDeparturesModal() {
+  // Inside the phone the board is a screen on the phone itself, with
+  // no X button — Home in the dock is the way out. Anywhere else it
+  // keeps its full-screen board modal.
+  if (UI.modal === 'phone' && document.querySelector('#phoneCard')) {
+    UI.phoneApp = 'departures'; UI.panel = 'departures';
+    const mbox = document.querySelector('#modal .mbox.phone');
+    if (mbox) mbox.innerHTML = phoneHTML();
+    renderPhoneApp();
+    drawDepMap(UI.depCont, airportFromCity());
+    return;
+  }
+  openModal(departuresBoardHTML(false), 'dep');
+  drawDepMap(UI.depCont, airportFromCity());
+}
+PANELS.departures = () => departuresBoardHTML(true);
 // Land cells belonging to one continent group, cached per group. A cell
 // counts when it falls inside a group country's bounding box AND inside
 // its shape path — the same point-in-path test the map itself uses.
@@ -3136,8 +3245,26 @@ const A = {
   cabHire: x => { const [type, id] = x.split('|'); act(() => hireCabinet(type, id), 'Advisor hired'); UI.cabHire = null; renderPanel(); },
   cabCancel: () => { UI.cabHire = null; renderPanel(); },
   cabFire: x => act(() => fireCabinet(x), 'Advisor fired'),
+  advSearch: () => { const el = document.querySelector('#advSearch'); UI.advQuery = el ? el.value.trim() : ''; renderPanel(); },
+  advClear: () => { UI.advQuery = ''; renderPanel(); },
+  advAdd: () => { UI.advAdd = !UI.advAdd; renderPanel(); },
+  advOpen: x => { UI.advOpen = UI.advOpen === x ? null : x; renderPanel(); },
+  advJump: x => { const el = document.getElementById('adv-sec-' + x); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); },
   cabTip: x => act(() => buyCabTip(x), 'Tip bought — it pays off next week'),
   runOffice: x => act(() => runOffice(x), 'Election won!'),
+  electVote: x => {
+    // x = jurKey|scope|electDay|candIdx (jurKey may contain ':').
+    const parts = x.split('|'), candIdx = parseInt(parts.pop(), 10), electDay = parseInt(parts.pop(), 10), scope = parts.pop(), jurKey = parts.join('|');
+    const key = electionVoteKey(jurKey, scope, electDay);
+    const votes = electionVotes();
+    if (votes[key] != null) { toast('You already voted in this race.', 'bad'); return; }
+    votes[key] = candIdx;
+    const P = ensurePerson(); P.opin = Math.min(100, (P.opin || 0) + 1);
+    save(); renderPanel(); toast('Vote counted.', 'good');
+  },
+  electOpen: x => { UI.electOpen = UI.electOpen === x ? null : x; renderPanel(); },
+  electCity: x => { UI.electCity = UI.electCity === x ? null : x; renderPanel(); },
+  phoneHome: () => { phoneToGrid(); },
   campaign: x => act(() => campaignAction(x), 'Campaign move done'),
   policy: () => act(() => announcePolicy(), 'Policy announced'),
   fleetUp: x => act(() => upgradeFleet(x), 'Fleet upgraded'),
