@@ -777,7 +777,7 @@ function stepDay() {
   if (trading) { for (const a3 in S.co) pushHist(S.co[a3].h, +S.co[a3].price.toFixed(2), S.day, S.co[a3].dayVol || 0); pushHist(S.idx.h, +S.idx.v.toFixed(2), S.day, 0); }
   if (S.day % 91 === 45) { let d = 0; const keys = [...new Set([...Object.keys(S.holdings || {}), ...Object.keys(S.holdingsP || {})])]; for (const a3 of keys) { const c = S.co[a3]; if (!c || !c.listed || controlled(a3)) continue; const qc = ((S.holdings || {})[a3] || {}).qty || 0, qp = ((S.holdingsP || {})[a3] || {}).qty || 0; if (qc > 0) { const p = qc * c.price * SECTORS[c.sector].div / 4; S.cash += p; d += p; } if (qp > 0) { const p = qp * c.price * SECTORS[c.sector].div / 4; ensurePerson().cash += p; if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ dividend · ' + c.name, amt: Math.round(p) }); d += p; } } if (d > 1) { news('Market', `Dividends paid: ${fmtMoney(d)}.`); } }
   S.props.forEach(p => { const c = country(W.cities[p.city].a3); p.value *= 1 + (c.growth * 0.6 + (c.war ? -0.1 : 0)) / 365 + gauss() * 0.001; });
-  if (S.day % 7 === 6) { businessWeek(); if (typeof pushPaperEdition === 'function') { try { pushPaperEdition(); } catch (e) {} } }
+  if (S.day % 7 === 6) { businessWeek(); if (typeof pushPaperEdition === 'function') { try { pushPaperEdition(); } catch (e) { S.lastPaperError = e && e.message ? e.message : String(e); } } }
   S.day++;
   if (typeof sportSeasonsDue === 'function') { try { sportSeasonsDue(); } catch (e) {} }
   if (yearOf(S.day) !== yearOf(S.day - 1)) yearEnd(yearOf(S.day));

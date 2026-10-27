@@ -936,7 +936,7 @@ function paperHTML() {
   <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= PAPER_PAGES.length - 1 ? 'disabled' : ''}>NEXT →</button></div>`;
 }
 
-function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
+function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; try { $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); } catch (e) { toast('Newspaper failed to open: ' + String(e && e.message ? e.message : e).slice(0, 120), 'bad'); } }
 function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
 function flipPaper(d) { paperPage = Math.max(0, Math.min(PAPER_PAGES.length - 1, paperPage + d)); $('paper').innerHTML = paperHTML(); }
 function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx + d)); paperPage = 0; $('paper').innerHTML = paperHTML(); }
@@ -2496,7 +2496,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
-    const src = { pro: 'minigames/pro.html?v=20261026du', college: 'minigames/college.html?v=20261026du', baseball: 'minigames/baseball.html?v=20261026du' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dv' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
@@ -3494,7 +3494,7 @@ const A = {
   fireExecMgr: x => act(() => { const [id, kind] = x.split('|'); const e = S.co[id]; return (typeof fireExecManager === 'function') ? fireExecManager(e, kind) : 'unavailable'; }, 'Manager fired'),
   hireMktEmp: x => act(() => { const e = S.co[x]; return (typeof hireMarketingEmployee === 'function') ? hireMarketingEmployee(e) : 'unavailable'; }, 'Marketing staff hired'),
   mgrHireCancel: () => { UI.mgrHire = null; renderPanel(); },
-  ageWeek: () => { try { stepWeek(); save(); renderHUD(); if (UI.panel) renderPanel(); toast('Advanced one week.', 'good'); } catch (e) { toast('Could not advance a week.', 'bad'); } },
+  ageWeek: () => { try { stepWeek(); save(); renderHUD(); if (UI.panel) renderPanel(); if (S.lastPaperError) { const m = S.lastPaperError; S.lastPaperError = null; toast('Week advanced, but the newspaper failed: ' + String(m).slice(0, 120), 'bad'); } else toast('Advanced one week.', 'good'); } catch (e) { toast('Could not advance a week: ' + String(e && e.message ? e.message : e).slice(0, 120), 'bad'); } },
   sportIpo: x => { const el = document.getElementById('ipoPctTeam'); const pct = el ? clamp(parseFloat(el.value) || 100, 1, 100) / 100 : 1; act(() => sportIpo(x, pct), 'Team is now public!'); },
   ipoBuy: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'buy', qty), 'Shares bought'); },
   ipoSell: x => { const qty = Math.floor(+($('ipoQty') ? $('ipoQty').value : 0)); act(() => sportTradeShares(x, 'sell', qty), 'Shares sold'); },
