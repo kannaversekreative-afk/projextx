@@ -529,8 +529,16 @@ function renderCityHUD() {
       const livePop = (cs && share) ? Math.round(cs.pop * share) : (c.popAlloc || c.pop);
       const liveGdp = (cs && share) ? cs.gdp * 1e6 * share : (c.gdpAlloc || 0);
       const growth = cs ? cs.growth : 0;
-      const filterBtn = (typeof CityView.isPhoto === 'function' && CityView.isPhoto()) ? '' : `<button data-a="cityFilter">Filter: ${CityView.filter}</button>`;
-      html = `<div class="citytoptext"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div><div class="cityexit">${filterBtn}<button data-a="leaveCity">\u2715 Leave city</button></div>`;
+      // Bottom row, exactly the row from the world map: filters on the
+      // left (same layers icon), the current city in the middle (tap it
+      // for the airport, to fly somewhere else or go back to the map),
+      // phone on the right. Same buttons and same placement as the map,
+      // so the row looks identical inside every city.
+      const layersIcon = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>`;
+      html = `<div class="citytopbar"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`
+        + `<button class="hud-btn hud-bl" data-a="cityFilter" aria-label="Filters">${layersIcon}</button>`
+        + `<button class="hud-city" data-a="departures" aria-label="Change city or leave"><span>${W.byA3[c.a3].flag}</span><span>${esc(c.name)}</span></button>`
+        + `<button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">\u{1F4F1}</button>`;
     }
   }
   if (html !== UI.lastCityHUD) { UI.lastCityHUD = html; $('chud').innerHTML = html; }
@@ -2974,7 +2982,8 @@ function departuresBoardHTML(inPhone) {
     return { ct: c, k, km: airportDistanceKm(from, c), grp: k ? depContGroup(k.cont) : 'Oceania' };
   }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km);
   const head = `<div class="dep-head"><span class="dep-plane">✈️</span><h2>${esc(from.name)} Airport</h2>${inPhone ? '' : `<button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button>`}</div>`;
-  const body = `<p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>
+  const leaveBtn = (!inPhone && typeof CityView !== 'undefined' && CityView.isOpen && CityView.isOpen()) ? `<button class="btn wide" data-a="depLeave">\u2190 Back to world map</button>` : '';
+  const body = `<p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>${leaveBtn}
   <div class="dep-title">✈ DEPARTURES</div>
   <canvas id="depmap" class="dep-map"></canvas>
   <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
@@ -3510,6 +3519,7 @@ const A = {
   enterCity: x => { closeModal(); enterCity(+x); },
   unlockCity: x => { const err = unlockCity(+x); if (err) { toast(err, 'bad'); return; } closeModal(); save(); renderHUD(); toast('City unlocked.', 'good'); },
   leaveCity: () => leaveCity(),
+  depLeave: () => { closeModal(); leaveCity(); },
   cityFilter: () => {
     const f = ['all', 'lease', 'sale', 'mine'];
     CityView.setFilter(f[(f.indexOf(CityView.filter) + 1) % f.length]); renderCityHUD();

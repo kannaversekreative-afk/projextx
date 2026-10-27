@@ -89,6 +89,8 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .tut { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top)) + 178px); width: min(480px, calc(100vw - 32px)); padding: 14px 16px; z-index: 6; }
 .tut p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 .popup { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 220px); overflow-y: auto; padding: 18px; z-index: 7; }
+.citytopbar { position: absolute; top: 0; left: 0; right: 0; background: #ffffff; color: #1f5fd0; text-align: center; font-size: 15px; font-weight: 800; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px 12px; pointer-events: none; }
+#chud > .citytopbar, #chud > .citytoptext { pointer-events: none; }
 .citytoptext { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); text-align: center; color: #1f5fd0; font-size: 15px; font-weight: 800; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,0.9); pointer-events: none; }
 .cityexit { position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 20px; pointer-events: none; }
 .cityexit button { pointer-events: auto; color: #1f5fd0; font-size: 15px; font-weight: 800; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,0.9); }
