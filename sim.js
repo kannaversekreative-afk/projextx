@@ -392,6 +392,47 @@ function aiCoverOrOpen(c) {
   if (c.locs.length < 14) return aiOpenLocation(c);
   return false;
 }
+// CPU expansion abroad: a profitable flagship with nothing left to
+// cover at home opens branches in other countries — the multinational
+// step. Gated hard so the map does not flood: yearly profit above
+// $500K, at most 3 foreign branches per flagship, one branch per
+// attempt, best lease lot by the same score as home coverage. Foreign
+// branches take lots abroad (real competition for space with the
+// player and other CPUs) and earn revenue there through the normal
+// location economics; like home coverage, a lone branch in a city is
+// never trimmed, so foreign branches stick once opened. Targets are
+// trade partners first (leader games), else the biggest economies.
+function aiExpandAbroad(c) {
+  if (!c.ai || controlled(c.a3)) return false;
+  if (c.avg * 52 < 500000) return false;
+  if (c.locs.filter(l => l.abroad).length >= 3) return false;
+  const partners = [];
+  if (S.tradeLinks) for (const key in S.tradeLinks) { const L = S.tradeLinks[key]; if (L.a === c.a3) partners.push(L.b); else if (L.b === c.a3) partners.push(L.a); }
+  let targets = partners.filter(a3 => a3 !== c.a3 && W.byA3[a3]);
+  // GDP field differs by object: S.countries uses gdp (dollars), W.byA3
+  // uses gdp0 ($ million). Either works for ranking; gdp0 is the one
+  // that always exists (tradeLinks only exist after the first week).
+  const gdpOf = a3 => (S.countries && S.countries[a3] && S.countries[a3].gdp) || (W.byA3[a3] && (W.byA3[a3].gdp0 || W.byA3[a3].gdp)) || 0;
+  if (!targets.length) targets = Object.values(W.byA3).sort((a, b) => gdpOf(b.a3) - gdpOf(a.a3)).slice(0, 20).map(k => k.a3).filter(a3 => a3 !== c.a3);
+  targets.sort((a, b) => gdpOf(b) - gdpOf(a));
+  for (const a3 of targets) {
+    const cities = topCities(a3, 1);
+    if (!cities.length) continue;
+    const city = cities[0];
+    if (c.locs.some(l => (l.city || c.city) === city.id)) continue;
+    const lots = cityLots(city.id).filter(l => l.kind === 'lease');
+    if (!lots.length) continue;
+    const score = locMode(c) === 'size' ? l => l.size * 10000 - l.srent : l => l.traffic / (l.rent + 300);
+    lots.sort((a, b) => score(b) - score(a));
+    const lot = lots[Math.floor(rand() * Math.min(3, lots.length))];
+    const hadForeign = c.locs.some(l => l.abroad);
+    const loc = addLocation(c, lot, 1, city.id);
+    if (loc) loc.abroad = true;
+    if (!hadForeign && typeof news === 'function') news('Business', `${c.name} opens its first foreign branch in ${city.name}.`, c.a3);
+    return true;
+  }
+  return false;
+}
 // AI management: grow when profitable, trim when losing.
 function aiWeek(c) {
   if (!c.ai || controlled(c.a3) || rand() > 1 / 10) return;
@@ -399,7 +440,7 @@ function aiWeek(c) {
   if (c.avg > 0) {
     const r = rand();
     if (F && c.fleet < 6 && r < 0.3 && yearly * 2.5 > F.levels[c.fleet + 1].cost && fleetDemand(c) > 0.75) c.fleet++;
-    else if (r < 0.7) aiCoverOrOpen(c);
+    else if (r < 0.7) { if (!aiCoverOrOpen(c)) aiExpandAbroad(c); }
     else if (c.web.tier < 4 && yearly > WEB_TIERS[c.web.tier + 1].cost * 3) c.web.tier++;
   } else if (c.avg < 0 && c.locs.length > 1) {
     // Trim never closes a company's only location in a city — coverage,
