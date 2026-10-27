@@ -230,6 +230,29 @@ function applyCompanyJob(key) {
   if (typeof news === 'function') news('Person', `You were hired at ${c.name}.`, S.home);
   return null;
 }
+// Analyst decisions: as Analyst (rank 3+) you make the CEO-like calls
+// for the company you work for — price, quality, wage — at analyst pay,
+// with no stock. These are the real settings the weekly simulation
+// already uses (see locEconomics): price trades customers for margin,
+// quality trades cost for satisfaction, wage trades cost for staff
+// happiness. Bad calls shrink weekly profit, which shrinks company
+// value, which is what gets you fired and what blocks promotion.
+function setAnalystSetting(kind, value) {
+  const P = ensurePerson();
+  if (!P.job || P.job.track !== 'company') return 'You do not have a company job.';
+  if (P.job.rank < 3) return 'Analyst decisions start at Analyst — work up to it first.';
+  const c = companyForJob(P.job);
+  if (!c) return 'Your company is gone.';
+  if (kind !== 'price' && kind !== 'quality' && kind !== 'wage') return 'That is not a decision you can make.';
+  const v = +value;
+  if (!isFinite(v)) return 'Bad value.';
+  if (!c.set) c.set = { price: 1, quality: 3, wage: 1 };
+  c.set[kind] = v;
+  P.job.decisions = (P.job.decisions || 0) + 1;
+  P.job.lastDecision = { kind, value: v, day: S.day, companyValue: companyValueForJob(P.job) };
+  if (typeof news === 'function') news('Person', `As Analyst at ${c.name}, you set ${kind} to ${v}.`, S.home);
+  return null;
+}
 function enrollCollege(id) {
   const P = ensurePerson();
   const d = COLLEGE_DEGREES.find(x => x.id === id);

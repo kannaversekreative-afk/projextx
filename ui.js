@@ -1792,7 +1792,7 @@ PANELS.profile = () => {
     <p class="muted small">Invest moves your money into your business. Pay yourself moves business money to you.</p></div>
     <div class="card in"><h4>💼 Career</h4>
     <div class="kv"><span>Job</span><b>${esc(cur.title)} · ${fmtMoney(cur.salary, true)}/week · ${job.weeks} weeks</b></div>
-    ${job.track === 'company' && typeof companyForJob === 'function' && companyForJob(job) ? `<div class="kv"><span>Company</span><b>${esc(companyForJob(job).name)} · Value ${fmtMoney(companyValueForJob(job), true)}${job.valueAtPromo ? ` · At last promotion ${fmtMoney(job.valueAtPromo, true)}` : ''}</b></div><p class="muted small">Analyst and above: promotion needs the company to double since your last promotion — and it jumps you, not just one step. Lose more than half the company's value and you are fired.</p>` : ''}
+    ${job.track === 'company' && typeof companyForJob === 'function' && companyForJob(job) ? `<div class="kv"><span>Company</span><b>${esc(companyForJob(job).name)} · Value ${fmtMoney(companyValueForJob(job), true)}${job.valueAtPromo ? ` · At last promotion ${fmtMoney(job.valueAtPromo, true)}` : ''}</b></div><p class="muted small">Analyst and above: promotion needs the company to double since your last promotion — and it jumps you, not just one step. Lose more than half the company's value and you are fired.</p>${job.rank >= 3 ? `<button class="btn" data-a="panel" data-x="analyst">MAKE DECISIONS AS ANALYST (${job.decisions || 0} made)</button>` : ''}` : ''}
     ${next ? `<button class="btn" data-a="personPromo">Ask for promotion to ${esc(next.title)} (needs ${job.track === 'company' && job.rank >= 3 ? 'company to double, ' : `${next.fame} fame, `}${next.weeks} weeks)</button>` : '<p class="muted small">Top of this career.</p>'}
     ${job.track !== 'company' ? `<button class="btn" data-a="personApplyCompany" data-x="${S.home}">Apply for a job at ${esc(cname(S.home))}'s main company</button><p class="muted small">Company jobs are not automatic: a company losing money is not hiring. Entry is coffee / fast food level, then manager, then analyst in the office, then on to CEO.</p>` : ''}
     <div class="row wrap"><button class="btn small" data-a="personJoinAgency" data-x="dom">Join ${esc(agencyOf(S.home)[0])}</button><button class="btn small" data-a="personJoinAgency" data-x="for">Join ${esc(agencyOf(S.home)[1])}</button><button class="btn small" data-a="personEnlist">Enlist in the military</button></div>
@@ -1806,6 +1806,20 @@ PANELS.profile = () => {
     <div class="kv"><span>Rating</span><b>${(S.rating || 0).toFixed(1)} / 5</b></div>
     <p class="muted small">Companies, stocks and business money live in Trade, My Companies and Offices — not here.</p>
     <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">ADVISORS (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
+};
+PANELS.analyst = () => {
+  const P = ensurePerson();
+  const job = P.job || {};
+  const c = typeof companyForJob === 'function' ? companyForJob(job) : null;
+  if (!c || job.track !== 'company' || job.rank < 3) return panelShell('Analyst decisions', '', '<p class="muted">Analyst decisions start at Analyst. Get a company job and work up to Analyst first.</p><button class="btn wide" data-a="closePanel">RETURN TO MAP</button>');
+  const set = c.set || { price: 1, quality: 3, wage: 1 };
+  const btn = (kind, v, label) => `<button class="btn small ${set[kind] === v ? 'on' : ''}" data-a="analystSet" data-x="${kind}|${v}">${label}</button>`;
+  return panelShell(`Analyst — ${c.name}`, `Analyst pay, no stock · ${job.decisions || 0} decisions made · Company value ${fmtMoney(companyValueForJob(job), true)} · Last week profit ${fmtMoney((c.week || {}).profit || 0, true)}`,
+    `<p class="muted small">These are CEO calls, made at analyst pay. They feed the real weekly simulation: price trades customers for margin, quality trades cost for satisfaction, wage trades cost for staff happiness. Good calls grow the company toward your next promotion. Bad calls shrink it — and that is what gets you fired.</p>
+    <div class="card in"><h4>💲 Price</h4><div class="row wrap">${btn('price', 0.8, 'Cut to 80% — more customers, less per sale')}${btn('price', 1, 'Normal 100%')}${btn('price', 1.25, 'Raise to 125% — more per sale, fewer customers')}</div><p class="muted small">Now: ${Math.round(set.price * 100)}%</p></div>
+    <div class="card in"><h4>⭐ Quality</h4><div class="row wrap">${btn('quality', 2, 'Lower to 2★ — cheaper, worse satisfaction')}${btn('quality', 3, 'Normal 3★')}${btn('quality', 4, 'Raise to 4★ — better, costs more')}</div><p class="muted small">Now: ${set.quality}★</p></div>
+    <div class="card in"><h4>👷 Wage</h4><div class="row wrap">${btn('wage', 0.8, 'Cut to 80% — cheaper, staff unhappy')}${btn('wage', 1, 'Normal 100%')}${btn('wage', 1.25, 'Raise to 125% — happier staff, higher wages')}</div><p class="muted small">Now: ${Math.round(set.wage * 100)}%</p></div>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 // World leaders, with the exact names Tawk uses (seeded per country),
 // cached — the names are deterministic per a3, so the cache is valid
@@ -3350,6 +3364,7 @@ const A = {
   personPay: x => act(() => transferToPersonal(x === 'all' ? 'all' : +x), 'Paid yourself'),
   personPromo: () => act(() => promoteJob(), 'Promoted!'),
   personApplyCompany: x => act(() => applyCompanyJob(x), 'Hired!'),
+  analystSet: x => { const [kind, v] = x.split('|'); act(() => setAnalystSetting(kind, +v), 'Decision made'); },
   personEnrollCollege: x => act(() => enrollCollege(x), 'Enrolled!'),
   personJoinAgency: x => act(() => joinAgency(x), 'Joined the agency'),
   personEnlist: () => act(() => enlistMilitary(), 'Enlisted'),
