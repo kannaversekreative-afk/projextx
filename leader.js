@@ -958,7 +958,10 @@ function businessesInCountry(a3) {
 // zeroes their link; occupation of either side cuts it to 30%.
 function buildTradeLinks() {
   const links = {};
-  const playable = (W.playable || []).filter(a => S.countries[a]);
+  // W.playable holds country OBJECTS, not a3 codes: map to codes first.
+  // (Without this, the filter below dropped every country, tradeLinks
+  // came back empty, and every nation's trade tax was silently zero.)
+  const playable = (W.playable || []).map(k => k.a3).filter(a => S.countries[a]);
   const byGdp = [...playable].sort((a, b) => (S.countries[b].gdp || 0) - (S.countries[a].gdp || 0));
   const partnersOf = (a3) => {
     const k = W.byA3[a3]; if (!k) return [];
@@ -1071,6 +1074,13 @@ function leaderWeek() {
   if (!S || !S.leader) return;
   sectorEraWeek();
   S.tradeLinks = buildTradeLinks();
+  // Group extras by country once: the per-country loop below used to
+  // scan ALL extras for EVERY country (196x work), which is what made
+  // late-game weeks crawl as extras grew. Grouping preserves the exact
+  // processing order (countries in S.countries order, each country's
+  // extras in insertion order), so results are identical, just faster.
+  const extrasByA3 = {};
+  if (S.extra) for (const b of Object.values(S.extra)) (extrasByA3[b.a3] || (extrasByA3[b.a3] = [])).push(b);
   let homeRev = 0, homeSpend = 0, homeTrade = 0;
   for (const a3 in S.countries) {
     const cs = S.countries[a3], k = W.byA3[a3]; if (!k) continue;
@@ -1084,8 +1094,7 @@ function leaderWeek() {
     // Extras: simple weekly simulation, straight: profit -> tax -> treasury.
     // Their stock price moves with profit and sector volatility, and one
     // weekly close is pushed into their chart each week.
-    if (S.extra) Object.values(S.extra).forEach(b => {
-      if (b.a3 !== a3) return;
+    (extrasByA3[a3] || []).forEach(b => {
       ensureExtraStock(b);
       const info = LEADER_SECTOR_BY_NAME[b.sector] || { growth: 0.03, vol: 0.02 };
       // Weekly profit = value * annual return / 52, with sector growth and noise.
@@ -1124,8 +1133,25 @@ function leaderWeek() {
     const spending = payPeople + services + milUpkeep + interest;
     const net = revenue - spending;
     cs.treasury += net;
+    // Surplus weeks pay down debt first (half the surplus), so a nation
+    // that fixes its budget actually escapes the interest burden.
+    if (net > 0 && cs.debt > 0) { const pay = Math.min(cs.debt, net * 0.5); cs.debt -= pay; cs.treasury -= pay; }
     cs.lastWeek = { revenue: Math.round(revenue), corpTax: Math.round(corpTax), incomeTax: Math.round(incomeTax), vat: Math.round(vat), tradeTax: Math.round(tradeTax), tradeVol: Math.round(tradeVol), tradePartners: myLinks.slice(0, 8), payPeople: Math.round(payPeople), services: Math.round(services), milUpkeep: Math.round(milUpkeep), interest: Math.round(interest), spending: Math.round(spending), net: Math.round(net), debt: Math.round(cs.debt), treasury: Math.round(cs.treasury) };
-    if (cs.treasury < 0) { const shortfall = -cs.treasury; cs.debt += shortfall; cs.treasury = spending * 0.5; cs.debt += spending * 0.5; cs.stab = clamp(cs.stab - 0.1, 0, 100); }
+    if (cs.treasury < 0) {
+      // Default, not a bailout: the shortfall becomes debt, the treasury
+      // empties, and debt is written down to 2x GDP. The old rule reset
+      // a broke nation's treasury to half a week's spending (and added
+      // that to debt too), so cash ballooned as the nation collapsed
+      // while interest on the growing debt compounded
+      // super-exponentially toward Infinity within ~2 years of the
+      // first bad week. The 2x cap keeps recovery possible: at max
+      // taxes, revenue still beats interest on capped debt.
+      cs.debt += -cs.treasury;
+      cs.treasury = 0;
+      const cap = gdpDollars * 2;
+      if (cs.debt > cap) cs.debt = cap;
+      cs.stab = clamp(cs.stab - 0.1, 0, 100);
+    }
     else if (cs.treasury > gdpDollars * 0.1) cs.stab = clamp(cs.stab + 0.05, 0, 100);
     if (a3 === S.home) { S.cash = cs.treasury; homeRev = revenue; homeSpend = spending; }
   }
