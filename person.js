@@ -43,6 +43,18 @@ function ensurePerson() {
 }
 function personAge() { return 18 + Math.floor(((typeof S !== 'undefined' && S ? S.day : 0) || 0) / 365); }
 
+// The title shown behind the player's name in the top HUD pill:
+// elected office first, then CEO of a company they control, then
+// Leader in a leader game, then their job title, else Citizen.
+function personTitle() {
+  const P = ensurePerson();
+  if (P.office && P.office.title) return P.office.title;
+  try { if (typeof mine === 'function' && mine().length) return 'CEO'; } catch (e) {}
+  if (typeof S !== 'undefined' && S && S.leader) return 'Leader';
+  if (P.job) { try { return jobTitle(P.job); } catch (e) {} }
+  return 'Citizen';
+}
+
 // ---------- offices ----------
 const MONARCHY = { GBR: 1, SAU: 1, ESP: 1, SWE: 1, NOR: 1, DNK: 1, NLD: 1, BEL: 1, MAR: 1, JOR: 1, THA: 1, JPN: 1, KWT: 1, QAT: 1, ARE: 1, BHR: 1, OMN: 1, MYS: 1, CAM: 1, BTN: 1, LSO: 1, SWZ: 1, TON: 1, LUX: 1, MCO: 1, LIE: 1 };
 function isMonarchy(a3) { return !!MONARCHY[a3]; }

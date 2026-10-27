@@ -366,6 +366,14 @@ function companyWeek(c, quiet) {
   c.week = { rev: R(rev), profit: R(profit), tax: R(tax), locs: c.locs.reduce((a, l) => a + l.profit, 0), fleet: R(f.profit), online: R(o.profit), onlineRev: R(o.rev), visitors: o.visitors, ads: R(ads), cust };
   if (!quiet) { c.hist.push(Math.round(profit)); if (c.hist.length > 52) c.hist.shift(); }
   c.avg = Math.round(c.avg ? c.avg * 0.8 + profit * 0.2 : profit);
+  // Quarterly earnings: accumulate the quarter's profit; on a quarter
+  // boundary the report lands (price jumps on the surprise) and the
+  // market's companies make their quarterly moves (see corpnews.js).
+  c.qProfit = (c.qProfit || 0) + profit;
+  if (typeof isQuarterEnd === 'function' && isQuarterEnd(S.day)) {
+    if (typeof quarterlyReport === 'function') quarterlyReport(c);
+    if (typeof corpQuarterEvents === 'function') corpQuarterEvents(c);
+  }
   c._staff = null; c.book = bookValue(c);
   return c.week;
 }
@@ -543,8 +551,12 @@ function researchCost() { return Math.round(Math.max(1500, netWorth() * 0.0004) 
 function research(a3) {
   const cost = researchCost(); if (S.cash < cost) return 'Not enough cash for research.';
   S.cash -= cost;
-  const c = S.co[a3], dir = c.mood >= 0 ? 1 : -1;
-  c.res = { day: S.day, dir: rand() < 0.72 ? dir : -dir, strength: Math.abs(c.mood) > 0.45 ? 'strong' : Math.abs(c.mood) > 0.15 ? 'moderate' : 'weak', fair: fairValue(c) * Math.exp(gauss() * 0.12), pattern: c.pattern && rand() < 0.6 ? c.pattern.type : null };
+  const c = S.co[a3];
+  // Research reveals what the market expects: next quarter's
+  // earnings estimate, plus what the last report actually did.
+  // That expectation is what the next report will be judged against.
+  const expect = (c.qExpect != null) ? c.qExpect : Math.round((c.avg || 0) * 13);
+  c.res = { day: S.day, expect, lastSurprise: c.lastReport ? c.lastReport.surprise : null, lastMove: c.lastReport ? c.lastReport.move : null, lastQ: c.lastReport ? c.lastReport.q : null };
   return null;
 }
 const intelOn = () => S.boosts.intel > S.day;
@@ -583,13 +595,16 @@ function marketDay() {
     if (rand() < 1 / 25) c.moodT = clamp(gauss() * 0.5, -1, 1);
     c.mood = clamp(c.mood + 0.15 * (c.moodT - c.mood) + gauss() * 0.05, -1, 1);
     if (!isFinite(c.price) || c.price <= 0) c.price = (isFinite(c.p0) && c.p0 > 0) ? c.p0 : 100;
-    let r = c.beta * mkt + (sec[c.sector] || 0) + c.mood * 0.003 + 0.012 * Math.log(Math.max(1, fairValue(c)) / c.price) + gauss() * c.vol * R.vol * (cs.war || cs.occ ? 1.5 : 1);
+    // Earnings-driven market: the daily move is small noise only
+    // (about 0.2%/day, so roughly 0.5% a week). Quarterly reports do
+    // the real moving. There is no fair-value gravity, no pump /
+    // squeeze patterns, and no random shock jumps any more — those
+    // stories now come from reports and corporate actions instead.
+    // Rate moves are scaled down to match: small market-wide wiggles.
+    let r = (c.beta * mkt + (sec[c.sector] || 0) + c.mood * 0.003 + gauss() * c.vol * R.vol * (cs.war || cs.occ ? 1.5 : 1)) * 0.1;
     if (!isFinite(r)) r = 0;
-    r += cs.drift + c.tmp * 0.5 + rate; c.tmp *= 0.5;
+    r += cs.drift * 0.1 + c.tmp * 0.5 + rate * 0.3; c.tmp *= 0.5;
     if (c.shock) { r += c.shock; c.shock = 0; }
-    if (!c.pattern) { if (c.vol >= 0.024 && rand() < 0.002) c.pattern = { type: 'pump', seq: [0.07, 0.09, 0.1, 0.05, -0.18, -0.16, -0.09] }; else if (rand() < 0.0012) c.pattern = { type: 'squeeze', seq: [0.11, 0.13, 0.07, -0.06] }; }
-    if (c.pattern) { r += c.pattern.seq.shift(); if (!c.pattern.seq.length) c.pattern = null; }
-    if (rand() < 0.004) { const x = (rand() < 0.5 ? -1 : 1) * (0.03 + rand() * 0.08); r += x; if (S.holdings[a3] || rand() < 0.12) news('Market', `${c.name} ${x > 0 ? pick(['wins a huge contract', 'announces a buyback', 'gets an upgrade', 'unveils a new product']) : pick(['faces a lawsuit', 'loses its CEO', 'recalls products', 'gets downgraded'])}. ${c.sym} ${x > 0 ? '+' : ''}${(x * 100).toFixed(1)}%.`, a3); }
     eqSum += r; eqN++;
     c.dayVol = Math.round(c.shares * 0.003 * (0.5 + rand()) * R.vol * (cs.war || cs.occ ? 1.5 : 1)) + (c.tradedToday || 0); c.tradedToday = 0;
     c.price = Math.max(0.5, c.price * Math.exp(r));

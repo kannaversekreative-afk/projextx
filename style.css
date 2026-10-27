@@ -353,13 +353,14 @@ body.in-city #hud { display: none; }
    white pills top-left and top-right, small white buttons bottom-left
    and bottom-right, and a city pill centred at the bottom. No Go home
    button, no bottom bar. */
-.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); }
+.hud-pill { position: absolute; top: max(12px, env(safe-area-inset-top)); background: rgba(15, 20, 30, 0.55); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); font: inherit; cursor: pointer; text-align: left; backdrop-filter: blur(6px); }
 .hud-tl { left: max(12px, env(safe-area-inset-left)); text-align: left; }
 .hud-flag { font-size: 26px; line-height: 1; }
+.hud-avatar { width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.4); display: grid; place-items: center; font-size: 17px; font-weight: 900; color: #fff; flex: none; }
 .hud-tl-text { display: flex; flex-direction: column; line-height: 1.2; }
-.hud-tl-text b { font-size: 15px; color: #1f5fd0; }
-.hud-tl-text small { font-size: 14px; color: #2f7cf6; font-weight: 700; }
-.hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; color: #1f5fd0; }
+.hud-tl-text b { font-size: 15px; color: #ffffff; }
+.hud-tl-text small { font-size: 14px; color: rgba(255, 255, 255, 0.85); font-weight: 700; }
+.hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; color: #ffffff; }
 /* Bell lives at the top of the More menu, not on the home HUD. */
 .hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }

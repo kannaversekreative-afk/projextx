@@ -1092,7 +1092,11 @@ function leaderWeek() {
       b.tax = Math.max(0, b.profit) * cs.tax;
       b.week = { profit: Math.round(b.profit), tax: Math.round(b.tax), rev: Math.round(b.revenue) };
       b.value = Math.max(1e5, b.value + b.profit * 0.5);
-      b.price = Math.max(0.5, b.price * Math.exp(gauss() * (b.vol || 0.02) + (b.profit / Math.max(1, b.value)) * 0.5));
+      b.price = Math.max(0.5, b.price * Math.exp(gauss() * (b.vol || 0.02) * 0.25 + (b.profit / Math.max(1, b.value)) * 0.5));
+      // Quarterly earnings, same as flagships: accumulate the
+      // quarter's profit; the report jumps the price on the surprise.
+      b.qProfit = (b.qProfit || 0) + b.profit;
+      if (typeof isQuarterEnd === 'function' && isQuarterEnd(S.day) && typeof extraQuarterlyReport === 'function') extraQuarterlyReport(b);
       if (typeof pushHist === 'function') pushHist(b.h, b.price, S.day, b.tradedToday || 0);
       b.tradedToday = 0;
       corpTax += b.tax;

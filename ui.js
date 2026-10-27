@@ -391,11 +391,13 @@ function renderHUD() {
   // that opens every menu item, on the right, scrollable.
   const hk = W.byA3[S.home];
   const curCity = airportFromCity();
+  const youName = (S.you && S.you.name) || 'Founder';
+  const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
   $('hud').innerHTML = `
-  <div class="hud-pill hud-tl">
-    <button class="hud-profile" data-a="panel" data-x="profile" aria-label="User profile">${ICONS.profile}</button>
-    <button class="hud-tl-text" data-a="panel" data-x="country" aria-label="Your country"><b>${esc(cname(S.home))}</b><small>${fmtMoney(S.cash)} · 👁 ${Math.round((S.person && S.person.vis) || 0)} · ⭐ ${Math.round((S.person && S.person.fame) || 0)}</small></button>
-  </div>
+  <button class="hud-pill hud-tl" data-a="panel" data-x="profile" aria-label="User profile">
+    <span class="hud-avatar">${esc(youName.charAt(0).toUpperCase())}</span>
+    <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)} · ${fmtMoney(S.cash)}</small></span>
+  </button>
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
@@ -723,6 +725,32 @@ function paperTicker(ed) {
   const line = items.join(' &nbsp;•&nbsp; ') + ' &nbsp;•&nbsp; ';
   return `<div class="pticker"><div class="pticker-inner"><span>${line}</span><span>${line}</span></div></div>`;
 }
+// Live weekly markets section for the BUSINESS page. Unlike the
+// edition's baked stories (yearly), this is computed at render time,
+// so it always covers THIS week: the stocks the player holds, what
+// each did, and why — plus the recent corporate wire.
+function paperStocksSection() {
+  const row = (name, sym, qty, ch, why) => `<div class="prow"><span>${esc(name)} (${esc(sym)})${qty ? ` · ${qty.toLocaleString()} shares` : ''}</span><b class="${ch >= 0 ? 'good' : 'bad'}">${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}% ${esc(why)}</b></div>`;
+  const rows = [];
+  for (const a3 in (S.holdings || {})) {
+    const h = S.holdings[a3], c = S.co[a3];
+    if (!h || h.qty <= 0 || !c || !c.listed) continue;
+    const ch = (typeof stockWeekChg === 'function') ? stockWeekChg(c, false) : 0;
+    const why = (typeof stockWhy === 'function') ? stockWhy(c) : '';
+    rows.push(row(c.name, c.sym, h.qty, ch, why));
+  }
+  for (const id in (S.holdingsX || {})) {
+    const h = S.holdingsX[id], b = S.extra && S.extra[id];
+    if (!h || h.qty <= 0 || !b) continue;
+    const ch = (typeof stockWeekChg === 'function') ? stockWeekChg(b, true) : 0;
+    const why = (typeof stockWhy === 'function') ? stockWhy(b) : '';
+    rows.push(row(b.name, b.sym, h.qty, ch, why));
+  }
+  const corp = (S.corpNews || []).filter(n => S.day - n.d <= 30).slice(0, 8);
+  return `<h3 class="psec">YOUR STOCKS THIS WEEK</h3>${rows.length ? `<div class="ptable">${rows.slice(0, 8).join('')}</div>` : '<p class="psmall">You hold no stocks yet. Buy shares in Markets, then this section tracks them every week — what moved, and why.</p>'}
+  <h3 class="psec">COMPANY NEWS</h3>${corp.length ? `<div class="ptable">${corp.map(n => `<div class="prow"><span>${esc(n.text)}</span><b>${fmtDate(n.d)}</b></div>`).join('')}</div>` : '<p class="psmall">No company announcements in the last 30 days.</p>'}`;
+}
+
 function paperHTML() {
   const ed = paperEdition(), total = 5, page = Math.min(paperPage, 4); paperPage = page;
   let body = '';
@@ -746,6 +774,7 @@ function paperHTML() {
       <div class="pheadline"><div class="pkicker">BUSINESS · MARKETS</div><h2>Markets ${ed.business.idxChg >= 0 ? 'rise' : 'fall'} ${fmtPct(ed.business.idxChg)}</h2></div>
       <div class="pcols">${ed.business.stories.map(paperArticle).join('')}</div>
       <div class="ptip"><b>★ THE TIP SHEET — A HINT, NOT A PROMISE</b><p>${ed.business.tip ? `Keep an eye on <b>${esc(ed.business.tip.name)} (${esc(ed.business.tip.sym)})</b> — up ${fmtPct(ed.business.tip.chg)} this year, rated ${ed.business.tip.rating.toFixed(1)} stars in ${esc(ed.business.tip.sector)}. The paper likes the look of it. Do your own homework before you buy.` : 'No tip this year.'}</p></div>
+      ${paperStocksSection()}
       <h3 class="psec">TOP RISERS</h3><div class="ptable">${ed.business.gainers.map(g => `<div class="prow"><span>${esc(g.name)} (${esc(g.sym)})</span><b class="good">${fmtPct(g.chg)}</b></div>`).join('')}</div>
       <h3 class="psec">TOP FALLERS</h3><div class="ptable">${ed.business.losers.map(g => `<div class="prow"><span>${esc(g.name)} (${esc(g.sym)})</span><b class="bad">${fmtPct(g.chg)}</b></div>`).join('')}</div>
     </div>`;
@@ -1368,24 +1397,33 @@ function tradeView(a3) {
   const volToday = (c.h.v || []).length ? c.h.v[c.h.v.length - 1] : 0;
   const prevClose = c.h.d.length >= 2 ? c.h.d[c.h.d.length - 2] : c.p0;
   const dayChg = c.price - (prevClose || c.price);
-  const res = c.res && c.res.day > S.day - 90 ? c.res : null;
+  const res = (c.res && c.res.day > S.day - 90 && c.res.expect != null) ? c.res : null;
+  const exchange = (typeof STOCK_EXCHANGE !== 'undefined') ? STOCK_EXCHANGE : 'Worl Exchange';
+  const div = (typeof ensureDiv === 'function') ? ensureDiv(c) : 0;
+  const yld = (typeof divYield === 'function') ? divYield(c) : 0;
+  const w52 = (typeof week52 === 'function') ? week52(c) : { hi: c.price, lo: c.price };
   const chartHtml = !c.listed ? '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'
     : R === '1D' ? `<div class="stats3 box"><div><span>Open (prev close)</span><b>${fmtMoney(prevClose)}</b></div><div><span>Price now</span><b>${fmtMoney(c.price)}</b></div><div><span>Change today</span><b class="${upCls(ch)}">${dayChg >= 0 ? '+' : ''}${fmtMoney(dayChg)} · ${fmtPct(ch)}</b></div></div><p class="muted small">Prices move once a day on weekdays, so there is no intraday chart — 1D shows today's move as numbers.</p>`
     : candleChart(closes, vols);
   const caption = R === '1D' ? '' : unit === 'day' ? '<p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20 (20 daily closes). Purple bars below are shares traded per day in the in-game market, including your trades. This is simulated in-game volume, not real-world volume.</p>'
     : `<p class="muted small">Candles group 5 ${unit}ly closes. Purple dashed line is SMA20 (20 daily closes). No volume bars on ${unit}ly ranges — volume is daily only.</p>`;
-  return panelShell(`${c.sym} · ${c.name}`, `${SECTORS[c.sector].icon} ${c.sector} · ${cname(a3)} · ${countryStatus(a3).t}`,
+  return panelShell(`${c.sym} · ${c.name}`, `${SECTORS[c.sector].icon} ${c.sector} · ${cname(a3)} · ${countryStatus(a3).t} · ${exchange}`,
     `<div class="trade-head"><div><div class="big">${c.listed ? fmtMoney(c.price) : 'Private'}</div><div class="${upCls(ch)}">${fmtPct(ch)} today · SMA20 ${fmtMoney(sma20v)}</div></div>
+      <button class="btn small" data-a="tradeFocus">TRADE</button>
       <button class="star-btn ${S.watch.includes(a3) ? 'on' : ''}" data-a="star" data-x="${a3}">${S.watch.includes(a3) ? '★ Starred' : '☆ Star'}</button></div>
     ${chartHtml}
     ${caption}
     ${c.listed && volToday ? `<div class="kv"><span>Shares traded today</span><b>${volToday.toLocaleString()}</b></div>` : ''}
     ${rangeSeg(['1D', '1W', '1M', '3M', '1Y', '5Y', 'All'], UI.tradeRange, 'tradeRange')}
     <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
+    <div class="stats3 box"><div><span>Dividend</span><b>${fmtMoney(div)} (${(yld * 100).toFixed(2)}%)</b></div><div><span>52-week high</span><b>${fmtMoney(w52.hi)}</b></div><div><span>52-week low</span><b>${fmtMoney(w52.lo)}</b></div></div>
+    <div class="stats3 box"><div><span>P/E ratio</span><b>${(c.pe || 0).toFixed(1)}</b></div><div><span>Shares</span><b>${(c.shares || 0).toLocaleString()}</b></div><div><span>Exchange</span><b>${exchange}</b></div></div>
+    ${(typeof topShareholders === 'function') ? `<div class="card in"><h4>Top shareholders</h4>${topShareholders(c, held.qty, c.shares).map(h => `<div class="kv"><span>${esc(h.name)}</span><b>${h.pct.toFixed(1)}%</b></div>`).join('')}</div>` : ''}
+    ${c.lastReport ? `<div class="card in"><h4>Last quarterly report · ${esc(c.lastReport.q)}</h4><p class="muted small">Earnings ${fmtMoney(c.lastReport.earnings, true)} vs expected ${fmtMoney(c.lastReport.expect, true)} — ${c.lastReport.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(c.lastReport.surprise * 100).toFixed(0)}%. Stock ${c.lastReport.move >= 0 ? '+' : ''}${(c.lastReport.move * 100).toFixed(1)}% on the report.</p></div>` : ''}
     ${S.lastTrade && S.lastTrade.a3 === a3 ? `<div class="kv"><span>Last trade</span><b class="${upCls(S.lastTrade.pnl)}">${S.lastTrade.side.toUpperCase()} ${S.lastTrade.qty.toLocaleString()} ${S.lastTrade.sym} · Realised P&amp;L ${fmtMoney(S.lastTrade.pnl, true)}</b></div><p class="muted small">That realised P&amp;L is just this trade. Net worth also moves with cash, loans, other holdings and weekly costs, so it will not match this number exactly.</p>` : ''}
     ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
-    ${res ? `<div class="card in"><b>Research</b><p class="muted small">Fair value about ${fmtMoney(res.fair, true)} · Signal ${res.strength} ${res.dir > 0 ? 'up' : 'down'}${res.pattern ? ' · Pattern: ' + res.pattern : ''}</p></div>` : ''}
-    ${c.listed ? `<div class="trade-box">
+    ${res ? `<div class="card in"><b>Research</b><p class="muted small">Analysts expect next-quarter earnings of ${fmtMoney(res.expect, true)} — that is the number the next report will be judged against.${res.lastQ ? ` Last report (${esc(res.lastQ)}): ${res.lastSurprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(res.lastSurprise * 100).toFixed(0)}%, stock ${res.lastMove >= 0 ? '+' : ''}${(res.lastMove * 100).toFixed(1)}%.` : ''}</p></div>` : ''}
+    ${c.listed ? `<div class="trade-box" id="tradeBox">
       <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${a3}">MAX</button></div>
       <div class="row"><button class="btn3d sell flex" data-a="doTrade" data-x="${a3}|sell">SELL</button><button class="btn3d buy flex" data-a="doTrade" data-x="${a3}|buy">BUY</button></div>
       <div class="row"><button class="btn flex" data-a="doTrade" data-x="${a3}|short">SHORT</button><button class="btn flex" data-a="doTrade" data-x="${a3}|cover">COVER</button><button class="btn flex" data-a="research" data-x="${a3}">RESEARCH ${fmtMoney(researchCost(), true)}</button></div>
@@ -1408,11 +1446,14 @@ function tradeViewExtra(id) {
     `<div class="trade-head"><div><div class="big">${fmtMoney(b.price)}</div><div class="${upCls(ch)}">${fmtPct(ch)} this week · Economic value ${fmtMoney(b.value, true)}</div></div></div>
     ${closes.length ? lineChart(closes, { h: 160 }) : '<p class="muted small">No weekly closes yet. This stock reprices each week in the leader economy.</p>'}
     <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(b.price * b.shares, true)}</b></div><div><span>Shares</span><b>${b.shares.toLocaleString()}</b></div></div>
+    <div class="stats3 box"><div><span>Dividend</span><b>${fmtMoney(Math.max(0.01, b.price * ((typeof sectorDivRate === 'function') ? sectorDivRate(b.sector) : 0.03)))} (${(((typeof sectorDivRate === 'function') ? sectorDivRate(b.sector) : 0.03) * 100).toFixed(2)}%)</b></div><div><span>52-week high</span><b>${fmtMoney(((typeof week52 === 'function') ? week52(b) : { hi: b.price, lo: b.price }).hi)}</b></div><div><span>52-week low</span><b>${fmtMoney(((typeof week52 === 'function') ? week52(b) : { hi: b.price, lo: b.price }).lo)}</b></div></div>
+    ${(typeof topShareholders === 'function') ? `<div class="card in"><h4>Top shareholders</h4>${topShareholders(b, held.qty, b.shares).map(h => `<div class="kv"><span>${esc(h.name)}</span><b>${h.pct.toFixed(1)}%</b></div>`).join('')}</div>` : ''}
+    ${b.lastReport ? `<div class="card in"><h4>Last quarterly report · ${esc(b.lastReport.q)}</h4><p class="muted small">Earnings ${fmtMoney(b.lastReport.earnings, true)} vs expected ${fmtMoney(b.lastReport.expect, true)} — ${b.lastReport.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(b.lastReport.surprise * 100).toFixed(0)}%. Stock ${b.lastReport.move >= 0 ? '+' : ''}${(b.lastReport.move * 100).toFixed(1)}% on the report.</p></div>` : ''}
     ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
     <div class="kv"><span>This week's profit</span><b>${fmtMoney((b.week && b.week.profit) || 0, true)}</b></div><div class="kv"><span>Rating</span><b>${(b.rating || 0).toFixed(1)} / 5</b></div>
     <div class="row"><button class="btn small" data-a="qty" data-x="-100">−100</button><button class="btn small" data-a="qty" data-x="-10">−10</button><input id="qty" class="qty" type="number" value="100" min="1"><button class="btn small" data-a="qty" data-x="10">+10</button><button class="btn small" data-a="qty" data-x="100">+100</button><button class="btn small" data-a="qtyMax" data-x="${id}">MAX</button></div>
     <div class="row"><button class="btn3d sell flex" data-a="doTradeExtra" data-x="${id}|sell">SELL</button><button class="btn3d buy flex" data-a="doTradeExtra" data-x="${id}|buy">BUY</button></div>
-    <p class="muted small">Extra stocks move once a week with their business profit and sector volatility, and only trade while markets are open.</p>`);
+    <p class="muted small">Extra stocks move slightly each week; quarterly reports do most of the moving, same as flagships. They only trade while markets are open.</p>`);
 }
 PANELS.extraStock = () => tradeViewExtra(UI.stack && UI.stack[0] ? UI.stack[0].id : null);
 PANELS.portfolio = () => {
@@ -1579,7 +1620,8 @@ PANELS.profile = () => {
   const bar = (label, v) => `<div class="kv"><span>${label}</span><b>${Math.round(v)}/100</b></div><div style="background:#dbeafe;height:10px;border-radius:5px;margin:2px 0 8px"><div style="width:${Math.round(v)}%;background:#2563eb;height:10px;border-radius:5px"></div></div>`;
   const office = P.office;
   return panelShell('You', `${esc(you.name)} · Age ${personAge()} · ${office ? esc(office.title) : esc(cur.title)}`,
-    `<div class="card in"><h4>📊 Meters</h4>${bar('👁 Visibility', P.vis)}${bar('⭐ Fame', P.fame)}${bar('❤️ Popularity', P.pop)}${bar('🗳️ Public opinion', P.opin)}<p class="muted small">Elections are won on fame, popularity, and public opinion — three separate scores. Visibility helps fame grow.</p></div>
+    `<div class="card in"><h4>✏️ Name</h4><div class="row"><input id="profileName" class="search" type="text" value="${esc(you.name)}" maxlength="24"><button class="btn" data-a="profileRename">Save name</button></div><p class="muted small">This is the name on the top pill, with your title behind it. Your title changes on its own as you win offices, run companies, and climb careers.</p></div>
+    <div class="card in"><h4>📊 Meters</h4>${bar('👁 Visibility', P.vis)}${bar('⭐ Fame', P.fame)}${bar('❤️ Popularity', P.pop)}${bar('🗳️ Public opinion', P.opin)}<p class="muted small">Elections are won on fame, popularity, and public opinion — three separate scores. Visibility helps fame grow.</p></div>
     <div class="card in"><h4>💰 Wallets</h4>
     <div class="kv"><span>Personal money</span><b>${fmtMoney(P.cash, true)}</b></div>
     <div class="kv"><span>Business money</span><b>${fmtMoney(S.cash, true)}</b></div>
@@ -2272,7 +2314,7 @@ PANELS.help = () => {
 const MENU_ITEMS = [
   ['leader', ICONS.leader, 'Leader'], ['news', ICONS.news, 'News'], ['markets', ICONS.markets, 'Markets'],
   ['airport', ICONS.airport, 'Airport'],
-  ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'],
+  ['portfolio', ICONS.portfolio, 'Portfolio'], ['web', ICONS.website, 'Web'], ['nation', ICONS.nation, 'Nation'], ['country', '🗺️', 'Your Country'],
   ['military', ICONS.military, 'Military'], ['company', ICONS.company, 'My Companies'],
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
@@ -2688,6 +2730,8 @@ const A = {
   capUp: x => act(() => upgradeCapital(x), 'District upgraded'),
   capTheme: x => { ensureCapital().theme = x; renderPanel(); },
   capRename: () => { const v = document.getElementById('capName'); if (v && v.value.trim()) { ensureCapital().name = v.value.trim(); applyCapitalName(); toast('Capital renamed', 'good'); renderPanel(); } },
+  profileRename: () => { const inp = document.getElementById('profileName'); const v = inp ? inp.value.trim() : ''; if (!v) return toast('Enter a name first.', 'bad'); if (!S.you) S.you = { name: 'Founder' }; S.you.name = v.slice(0, 24); toast('Name saved', 'good'); renderHUD(); renderPanel(); },
+  tradeFocus: () => { const el = document.getElementById('tradeBox'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   capMotto: () => { const v = document.getElementById('capMotto'); if (v) { ensureCapital().motto = v.value.trim(); toast('Motto saved', 'good'); renderPanel(); } },
   airportCont: x => { UI.airport = { cont: x, a3: null }; renderPanel(); },
   airportCountry: x => { UI.airport = { cont: UI.airport.cont, a3: x }; renderPanel(); },
