@@ -1,192 +1,220 @@
-// Crypto — its own panel, separate from Markets/Stocks. In-game cash ONLY:
-// no real money, no real deposits, no new currency. Every stake, win and
-// loss moves the same S.cash every other system uses, and cash never goes
-// below zero because a stake is capped at the cash on hand.
-//   How it works: pick Bitcoin (BTC), stake in-game cash, and bet whether
-//   the price will be ABOVE or UNDER a target price X when a time window X
-//   (1 / 5 / 15 / 60 real minutes) runs out. Win pays 2x the stake (stake
-//   back + equal winnings); an exact tie refunds the stake.
-//   Price source — REAL live BTC only, never the in-game economy: the
-//   price comes from a free public API (Coinbase spot first, CoinGecko
-//   fallback, no key on either). No GDP, growth, shock, country event,
-//   sanction, war, or any other in-game modifier may move it, scale it,
-//   or damp it — this file never reads S.countries, GDP, stability, wars
-//   or any economic state, only S.cash and its own S.crypto record. The
-//   free API lags real time by seconds to a minute; that lag is part of
-//   the game, and a sharp player can have a small edge from it. If the
-//   API is down, the panel shows the last-known price (labelled) or
-//   "unavailable" — it never invents a price and never substitutes an
-//   in-game-economy price. Bets whose settlement price cannot be fetched
-//   simply stay open until a price comes back.
-// State lives on S (saved by the existing save path). Bets settle on a
-// real clock: they are checked whenever the Crypto panel opens, on the
-// panel's Refresh / Settle buttons, and on every live tick while the
-// panel is open (see the ticker below). A bet placed and left settles
-// the next time the panel opens after its window ends.
-//   Live chart: every successfully fetched price is appended to
-// S.crypto.ticks (capped at 300 points) and drawn as a constantly
-// moving line chart while the panel is open — one new real point every
-// 10 seconds. The chart never interpolates, smooths, or invents points:
-// every point on it is a price actually fetched from the public API.
+// Crypto — FAKE coins only. No real BTC, no real price API, no real
+// money anywhere: every stake, win and loss moves the same in-game
+// S.cash every other system uses, and cash never goes below zero
+// because a stake is capped at the cash on hand.
+//   How it works: 5 fake coins ($PUMP, $MOON, $DUMP, $HODL, $FOMO).
+// Each coin's price is set when the game is created (first crypto
+// access fixes it into the save, and it never re-rolls) and then the
+// coin DOES NOT MOVE — until the player bets on it. A bet guesses UP
+// or DOWN; the coin then moves for 30 real seconds (one tick a second,
+// 30 points on the chart) and the bet settles on the final price:
+// guess right and win pays 2x the stake (stake back + equal winnings);
+// an exact tie refunds the stake.
+//   The 30-second move follows one regime, rolled per bet:
+//     Sideways 40% — fluctuates in a range around the start price
+//     Bull market 20% — generally increasing
+//     Bear market 20% — generally decreasing
+//     High volatility 15% — large movements in either direction
+//     Crash or rally shock 5% — one big sudden jump, then small noise
+//   Coins move independently: betting on $PUMP moves only $PUMP, and a
+// coin with a bet already moving cannot take another bet until it
+// settles. A movement is a real 30-second wall-clock window: the timer
+// runs while the page is open, and a movement interrupted by a reload
+// resumes or settles the next time the Crypto panel opens.
+// State lives on S (saved by the existing save path).
 'use strict';
 
-// One new real price point every 10 seconds while the Crypto panel is
-// open. 10s = 6 fetches/minute, inside both free sources' no-key limits.
-// Mutable (not const) so tests can run the ticker fast.
-let CRYPTO_TICK_MS = 10000;
-let cryptoTimer = null;
-
-// Free, no-key endpoints. Coinbase returns { data: { amount: "123..." } };
-// CoinGecko returns { bitcoin: { usd: 123... } }.
-const CRYPTO_SOURCES = [
-  { name: 'Coinbase public spot price', url: 'https://api.coinbase.com/v2/prices/BTC-USD/spot', parse: j => (j && j.data && isFinite(+j.data.amount)) ? +j.data.amount : null },
-  { name: 'CoinGecko public price', url: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', parse: j => (j && j.bitcoin && isFinite(+j.bitcoin.usd)) ? +j.bitcoin.usd : null },
+// Fake coins: symbol, display name, starting price (set at creation).
+const CRYPTO_COINS = [
+  { id: 'pump', sym: '$PUMP', name: 'Pump', start: 1.00 },
+  { id: 'moon', sym: '$MOON', name: 'Moon', start: 0.50 },
+  { id: 'dump', sym: '$DUMP', name: 'Dump', start: 3.20 },
+  { id: 'hodl', sym: '$HODL', name: 'Hodl', start: 10.00 },
+  { id: 'fomo', sym: '$FOMO', name: 'Fomo', start: 0.08 },
 ];
-const CRYPTO_WINDOWS = [1, 5, 15, 60]; // real minutes
-const CRYPTO_COIN = { id: 'bitcoin', sym: 'BTC', name: 'Bitcoin' };
+const CRYPTO_MOVE_SECS = 30;
+const CRYPTO_TICK_MS = 1000;
+const CRYPTO_REGIMES = [
+  { id: 'sideways', label: 'Sideways', w: 0.40 },
+  { id: 'bull', label: 'Bull market', w: 0.20 },
+  { id: 'bear', label: 'Bear market', w: 0.20 },
+  { id: 'highvol', label: 'High volatility', w: 0.15 },
+  { id: 'shock', label: 'Crash / rally shock', w: 0.05 },
+];
+let cryptoMoveTimer = null;
 
 function ensureCrypto() {
   if (!S) return null;
-  if (!S.crypto || typeof S.crypto !== 'object') S.crypto = { lastPrice: null, lastAt: 0, lastSource: '', bets: [], won: 0, lost: 0, lastStake: 10000, ticks: [] };
+  // Migration from the old real-BTC system: unsettled real-price bets
+  // can never settle now, so their stakes are refunded, and the old
+  // price/tick fields are dropped. Won/lost history is kept.
+  if (!S.crypto || typeof S.crypto !== 'object' || !S.crypto.coins) {
+    const old = (S.crypto && typeof S.crypto === 'object') ? S.crypto : null;
+    let refund = 0;
+    if (old && Array.isArray(old.bets)) old.bets.forEach(b => { if (!b.settled && isFinite(b.stake)) refund += b.stake; });
+    if (refund > 0 && typeof S.cash === 'number') S.cash += refund;
+    S.crypto = {
+      coins: {}, bets: [],
+      won: (old && isFinite(old.won)) ? old.won : 0,
+      lost: (old && isFinite(old.lost)) ? old.lost : 0,
+      lastStake: (old && isFinite(old.lastStake) && old.lastStake > 0) ? old.lastStake : 10000,
+    };
+    CRYPTO_COINS.forEach(c => { S.crypto.coins[c.id] = { price: c.start, hist: [c.start], moving: null }; });
+  }
   if (!Array.isArray(S.crypto.bets)) S.crypto.bets = [];
-  if (!Array.isArray(S.crypto.ticks)) S.crypto.ticks = [];
   if (!isFinite(S.crypto.lastStake) || S.crypto.lastStake <= 0) S.crypto.lastStake = 10000;
   return S.crypto;
 }
 
-// Fetch the live BTC price. fetchFn is injectable for tests; in the game
-// it defaults to the browser's fetch. Returns the price, or null when
-// every source fails (last-known price is kept, nothing is invented).
-async function cryptoRefreshPrice(fetchFn) {
-  const f = fetchFn || (typeof fetch === 'function' ? fetch : null);
-  if (!f) return null;
-  const cr = ensureCrypto(); if (!cr) return null;
-  for (const src of CRYPTO_SOURCES) {
-    try {
-      const r = await f(src.url);
-      const j = await r.json();
-      const p = src.parse(j);
-      if (p && isFinite(p) && p > 0) {
-        cr.lastPrice = p; cr.lastAt = Date.now(); cr.lastSource = src.name;
-        // Live-chart point: every real fetched price, newest last,
-        // capped so the save never grows on ticks.
-        cr.ticks.push({ t: Date.now(), p });
-        if (cr.ticks.length > 300) cr.ticks.splice(0, cr.ticks.length - 300);
-        return p;
-      }
-    } catch (e) { /* try the next source */ }
-  }
-  return null;
+function cryptoCoinDef(id) { return CRYPTO_COINS.find(c => c.id === id) || CRYPTO_COINS[0]; }
+function cryptoCoinState(id) { const cr = ensureCrypto(); if (!cr.coins[id]) { const d = cryptoCoinDef(id); cr.coins[id] = { price: d.start, hist: [d.start], moving: null }; } return cr.coins[id]; }
+
+// Roll one regime per bet, on the game's weights.
+function cryptoPickRegime() {
+  const r = Math.random();
+  let acc = 0;
+  for (const g of CRYPTO_REGIMES) { acc += g.w; if (r < acc) return g.id; }
+  return 'sideways';
 }
 
-// Place an above/under bet. Returns an error string, or null on success.
-// Cash is deducted at placement, so cash can never go below zero here:
-// the stake is rejected when it exceeds the cash on hand.
-function cryptoPlaceBet(dir, target, windowMin, stake) {
+// Build the 30-step path (prices after each 1-second tick) for a bet.
+// Steps are fractions of the current price; the price floor keeps a
+// crashed coin alive at a tiny positive price instead of zero/negative.
+function cryptoGenPath(regime, start) {
+  const path = [];
+  let p = start;
+  const push = (step) => { p = Math.max(0.0001, p * (1 + step)); path.push(p); };
+  if (regime === 'bull') { for (let i = 0; i < CRYPTO_MOVE_SECS; i++) push(0.004 + (Math.random() * 2 - 1) * 0.005); }
+  else if (regime === 'bear') { for (let i = 0; i < CRYPTO_MOVE_SECS; i++) push(-0.004 + (Math.random() * 2 - 1) * 0.005); }
+  else if (regime === 'highvol') { for (let i = 0; i < CRYPTO_MOVE_SECS; i++) push((Math.random() * 2 - 1) * 0.02); }
+  else if (regime === 'shock') {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const at = 5 + Math.floor(Math.random() * 20);
+    for (let i = 0; i < CRYPTO_MOVE_SECS; i++) push(i === at ? dir * (0.20 + Math.random() * 0.20) : (Math.random() * 2 - 1) * 0.003);
+  }
+  else { // sideways: small noise, pulled back toward the start price
+    for (let i = 0; i < CRYPTO_MOVE_SECS; i++) push((Math.random() * 2 - 1) * 0.003 - (p - start) / start * 0.05);
+  }
+  return path;
+}
+
+// Place an up/down bet on a coin. Returns an error string, or null.
+// Cash is deducted at placement; a coin already moving cannot take a
+// second bet until its movement settles.
+function cryptoPlaceBet(coinId, dir, stake) {
   const cr = ensureCrypto(); if (!cr) return 'No game loaded.';
-  if (dir !== 'above' && dir !== 'below') return 'Pick above or under.';
-  target = +target; windowMin = +windowMin; stake = Math.floor(+stake);
-  if (!isFinite(target) || target <= 0) return 'Enter a target price above $0.';
-  if (!CRYPTO_WINDOWS.includes(windowMin)) return 'Pick a time window.';
+  const def = cryptoCoinDef(coinId);
+  if (dir !== 'up' && dir !== 'down') return 'Pick up or down.';
+  stake = Math.floor(+stake);
   if (!isFinite(stake) || stake <= 0) return 'Enter a stake above $0.';
   if (stake > S.cash) return `Needs ${fmtMoney(stake, true)} — you have ${fmtMoney(S.cash, true)}.`;
+  const st = cryptoCoinState(def.id);
+  if (st.moving) return `${def.sym} is already moving — wait for it to settle.`;
   S.cash -= stake;
   if (S.cash < 0) S.cash = 0;
   cr.lastStake = stake;
   const now = Date.now();
-  cr.bets.unshift({ id: uid(), dir, target, stake, placedAt: now, expiresAt: now + windowMin * 60000, windowMin, settled: false, result: null, settlePrice: null, settledAt: null });
+  const regime = cryptoPickRegime();
+  const bet = { id: uid(), coinId: def.id, dir, stake, startPrice: st.price, regime, placedAt: now, endsAt: now + CRYPTO_MOVE_SECS * 1000, settled: false, result: null, settlePrice: null, settledAt: null };
+  cr.bets.unshift(bet);
+  st.moving = { betId: bet.id, path: cryptoGenPath(regime, st.price), step: 0, endsAt: bet.endsAt };
+  cryptoStartMoveTimer();
   return null;
 }
 
-// Settle every due bet at one freshly fetched price. Returns a summary;
-// when no price can be fetched, due bets stay open (unavailable: true).
-// priceOverride lets the live ticker settle at the price it just
-// fetched instead of fetching a second time for the same tick.
-async function cryptoSettleDue(fetchFn, priceOverride) {
-  const cr = ensureCrypto(); if (!cr) return { settled: 0, unavailable: true };
-  const due = cr.bets.filter(b => !b.settled && b.expiresAt <= Date.now());
-  if (!due.length) return { settled: 0, unavailable: false };
-  const price = (priceOverride != null) ? priceOverride : await cryptoRefreshPrice(fetchFn);
-  if (price == null) return { settled: 0, unavailable: true };
-  let won = 0, lost = 0, pushed = 0;
-  for (const b of due) {
-    b.settled = true; b.settlePrice = price; b.settledAt = Date.now();
-    if (price === b.target) { b.result = 'push'; S.cash += b.stake; pushed++; }
-    else if ((b.dir === 'above' && price > b.target) || (b.dir === 'below' && price < b.target)) { b.result = 'win'; S.cash += b.stake * 2; cr.won++; won++; }
-    else { b.result = 'lose'; cr.lost++; lost++; }
-  }
-  return { settled: due.length, won, lost, pushed, price, unavailable: false };
+function cryptoSettleCoin(coinId) {
+  const cr = ensureCrypto(); if (!cr) return;
+  const st = cryptoCoinState(coinId);
+  if (!st.moving) return;
+  const bet = cr.bets.find(b => b.id === st.moving.betId);
+  st.moving = null;
+  if (!bet || bet.settled) return;
+  bet.settled = true; bet.settlePrice = st.price; bet.settledAt = Date.now();
+  if (st.price === bet.startPrice) { bet.result = 'push'; S.cash += bet.stake; }
+  else if ((bet.dir === 'up' && st.price > bet.startPrice) || (bet.dir === 'down' && st.price < bet.startPrice)) { bet.result = 'win'; S.cash += bet.stake * 2; cr.won++; }
+  else { bet.result = 'lose'; cr.lost++; }
 }
 
-// One live tick: fetch the real price (appending a chart point),
-// settle any bets whose window ended at that fresh price, save, and
-// re-render if the panel is still open. A failed fetch changes nothing:
-// no tick is added, no bet settles, the last-known price stands.
-function cryptoTickNow(fetchFn) {
-  return cryptoRefreshPrice(fetchFn).then(price => {
-    if (price == null) return null;
-    return cryptoSettleDue(fetchFn, price);
-  }).then(() => {
+// One movement tick (1 second): advance every moving coin one step,
+// settle coins whose 30 seconds are up, stop the timer when nothing
+// is moving. Safe to call directly in tests.
+function cryptoMoveTick() {
+  const cr = ensureCrypto(); if (!cr) return;
+  const now = Date.now();
+  let anyMoving = false;
+  CRYPTO_COINS.forEach(c => {
+    const st = cryptoCoinState(c.id);
+    if (!st.moving) return;
+    if (now >= st.moving.endsAt || st.moving.step >= st.moving.path.length) {
+      while (st.moving && st.moving.step < st.moving.path.length) { st.price = st.moving.path[st.moving.step]; st.moving.step++; st.hist.push(st.price); if (st.hist.length > 300) st.hist.splice(0, st.hist.length - 300); }
+      cryptoSettleCoin(c.id);
+      return;
+    }
+    st.price = st.moving.path[st.moving.step]; st.moving.step++;
+    st.hist.push(st.price); if (st.hist.length > 300) st.hist.splice(0, st.hist.length - 300);
+    anyMoving = true;
+  });
+  if (!anyMoving) cryptoStopMoveTimer();
+  else {
     try { save(); } catch (e) {}
     if (typeof UI !== 'undefined' && UI.panel === 'crypto' && typeof renderPanelUnlessTyping === 'function') renderPanelUnlessTyping();
-  }).catch(() => {});
+  }
 }
 
-// Ticker lifecycle: runs only while the Crypto panel is open, so the
-// game never polls a price API in the background. Idempotent start.
-function startCryptoTicker() {
-  if (cryptoTimer || typeof setInterval === 'undefined') return;
-  cryptoTimer = setInterval(() => { cryptoTickNow(); }, CRYPTO_TICK_MS);
+function cryptoStartMoveTimer() {
+  if (cryptoMoveTimer || typeof setInterval === 'undefined') return;
+  cryptoMoveTimer = setInterval(() => { cryptoMoveTick(); }, CRYPTO_TICK_MS);
 }
-function stopCryptoTicker() {
-  if (cryptoTimer && typeof clearInterval !== 'undefined') clearInterval(cryptoTimer);
-  cryptoTimer = null;
+function cryptoStopMoveTimer() {
+  if (cryptoMoveTimer && typeof clearInterval !== 'undefined') clearInterval(cryptoMoveTimer);
+  cryptoMoveTimer = null;
 }
 
-function cryptoCountdown(b) {
-  const ms = b.expiresAt - Date.now();
-  if (ms <= 0) return 'due';
-  const s = Math.floor(ms / 1000);
-  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+// Panel open: resume movements interrupted by a reload (settle ones
+// whose 30 seconds already passed, restart the timer for the rest).
+function cryptoResumeMoves() {
+  const cr = ensureCrypto(); if (!cr) return;
+  let anyMoving = false;
+  CRYPTO_COINS.forEach(c => {
+    const st = cryptoCoinState(c.id);
+    if (!st.moving) return;
+    if (Date.now() >= st.moving.endsAt) {
+      while (st.moving.step < st.moving.path.length) { st.price = st.moving.path[st.moving.step]; st.moving.step++; st.hist.push(st.price); if (st.hist.length > 300) st.hist.splice(0, st.hist.length - 300); }
+      cryptoSettleCoin(c.id);
+    } else anyMoving = true;
+  });
+  if (anyMoving) cryptoStartMoveTimer();
+}
+
+function cryptoCountdownSec(moving) {
+  const s = Math.max(0, Math.ceil((moving.endsAt - Date.now()) / 1000));
+  return `${s}s`;
 }
 
 function cryptoPanelHTML() {
   const cr = ensureCrypto();
-  const price = cr.lastPrice;
-  const priceLine = price
-    ? `<b style="font-size:22px">${fmtMoney(price)}</b><div class="muted small">Last known · ${cr.lastSource} · updated ${new Date(cr.lastAt).toLocaleTimeString()} · free API, lags real time slightly — that lag is part of the game</div>`
-    : `<b style="font-size:22px">Price unavailable</b><div class="muted small">The free price API could not be reached. No price is shown rather than an invented one — tap Refresh to try again. Bets stay open until a real price comes back.</div>`;
-  // Controlled inputs: render FROM the state the player typed, so a
-  // price refresh or frame-loop re-render preserves edits. The target
-  // follows the live price until the player touches it (typing or a
-  // quick-target button), then it sticks to what they set.
-  const targetVal = (typeof UI !== 'undefined' && UI.cryptoTargetEdited && UI.cryptoTargetVal != null && UI.cryptoTargetVal !== '') ? UI.cryptoTargetVal : (price ? Math.round(price) : '');
+  const selId = (typeof UI !== 'undefined' && UI.cryptoCoin) ? UI.cryptoCoin : 'pump';
+  const def = cryptoCoinDef(selId);
+  const st = cryptoCoinState(def.id);
+  const hist = (st.hist || []).filter(v => isFinite(v));
+  const chg = hist.length >= 2 ? (hist[hist.length - 1] / hist[0] - 1) : 0;
   const stakeVal = (typeof UI !== 'undefined' && UI.cryptoStakeVal != null && UI.cryptoStakeVal !== '') ? UI.cryptoStakeVal : cr.lastStake;
-  const windowVal = (typeof UI !== 'undefined' && UI.cryptoWindowVal != null) ? UI.cryptoWindowVal : 1;
   const pending = cr.bets.filter(b => !b.settled);
   const done = cr.bets.filter(b => b.settled).slice(0, 10);
-  const betRow = b => `<div class="kv"><span>${b.dir === 'above' ? '▲' : '▼'} ${b.dir.toUpperCase()} ${fmtMoney(b.target)} · ${fmtMoney(b.stake, true)} · ${b.windowMin} min${b.settled ? ` · settled ${fmtMoney(b.settlePrice)}` : ` · ${cryptoCountdown(b)}`}</span><b>${b.settled ? (b.result === 'win' ? 'WON +'+fmtMoney(b.stake, true) : b.result === 'push' ? 'PUSH refunded' : 'LOST') : 'OPEN'}</b></div>`;
-  // Live chart: every point is a price actually fetched from the public
-  // API — no interpolation, no smoothing, no invented points. Under two
-  // points there is no line to draw yet, so say so instead of faking one.
-  const ticks = (cr.ticks || []).filter(t => t && isFinite(t.p));
-  const tickChg = ticks.length >= 2 ? (ticks[ticks.length - 1].p / ticks[0].p - 1) : 0;
-  const chartCard = `<div class="card in"><h4><span class="livedot"></span> LIVE · Bitcoin price — moving chart</h4>
-    ${ticks.length >= 2 ? lineChart(ticks.map(t => t.p), { h: 160 }) : '<p class="muted small">Chart builds live — one real price point every 10 seconds while this panel is open. Keep it open a few seconds and the line starts moving.</p>'}
-    <div class="stats3 box"><div><span>Now</span><b>${price ? fmtMoney(price) : '—'}</b></div><div><span>Since first point</span><b class="${upCls(tickChg)}">${ticks.length >= 2 ? fmtPct(tickChg) : '—'}</b></div><div><span>Points</span><b>${ticks.length} live</b></div></div>
-    <p class="muted small">New point every 10 seconds from ${cr.lastSource || 'the free price API'} · each point is a real fetched BTC price, never simulated.</p></div>`;
-  return panelShell('Crypto', 'In-game cash only · not in Stocks · real live BTC price only',
-    `<div class="card in"><h4>${(typeof ICONS !== 'undefined' && ICONS.crypto) ? ICONS.crypto : ''} Bitcoin (BTC)</h4>${priceLine}
-    <p class="muted small">Price is the real live BTC price from a free public API — wars, sanctions, GDP, growth and events never move it. Source: ${cr.lastSource || 'none yet'}.</p>
-    <div class="row wrap"><button class="btn" data-a="cryptoRefresh">REFRESH PRICE</button><button class="btn" data-a="cryptoSettle">SETTLE DUE BETS</button></div></div>
-    ${chartCard}
-    <div class="card in"><h4>Place an above / under bet</h4><p class="muted small">Stake in-game cash. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
-    <div class="row"><span class="muted small" style="min-width:90px">Target price $</span><input id="cryptoTarget" class="search" type="number" min="1" step="1" value="${targetVal}" placeholder="e.g. 100000"></div>
-    <div class="row wrap"><span class="muted small">Quick target:</span>${[-5, -1, 1, 5].map(p => `<button class="btn small" data-a="cryptoTarget" data-x="${p}">${p > 0 ? '+' : ''}${p}%</button>`).join('')}</div>
-    <div class="row"><span class="muted small" style="min-width:90px">Time window</span><select id="cryptoWindow" class="search">${CRYPTO_WINDOWS.map(w => `<option value="${w}"${w === windowVal ? ' selected' : ''}>${w} minute${w === 1 ? '' : 's'}</option>`).join('')}</select></div>
+  const regimeLabel = id => (CRYPTO_REGIMES.find(g => g.id === id) || {}).label || id;
+  const betRow = b => { const d = cryptoCoinDef(b.coinId); return `<div class="kv"><span>${d.sym} ${b.dir === 'up' ? '▲ UP' : '▼ DOWN'} from ${fmtMoney(b.startPrice)} · ${fmtMoney(b.stake, true)}${b.settled ? ` · settled ${fmtMoney(b.settlePrice)} · ${regimeLabel(b.regime)}` : ` · ${cryptoCountdownSec({ endsAt: b.endsAt })} left · ${regimeLabel(b.regime)}`}</span><b>${b.settled ? (b.result === 'win' ? 'WON +'+fmtMoney(b.stake, true) : b.result === 'push' ? 'PUSH refunded' : 'LOST') : 'MOVING'}</b></div>`; };
+  return panelShell('Crypto', 'Fake coins only · in-game cash only · not real crypto',
+    `<div class="card in"><h4>Fake coins</h4><p class="muted small">Prices are set when the game is created and do not move — until you bet. A bet moves its coin for 30 seconds, then settles on the final price. Nothing here is real crypto and no real money is involved.</p>
+    <div class="row wrap">${CRYPTO_COINS.map(c => { const s2 = cryptoCoinState(c.id); const mv = s2.moving ? ' · MOVING' : ''; return `<button class="chip ${c.id === def.id ? 'on' : ''}" data-a="cryptoCoin" data-x="${c.id}">${c.sym}${mv}</button>`; }).join('')}</div></div>
+    <div class="card in"><h4><span class="livedot"></span> ${def.sym} · ${def.name}</h4>
+    <div class="trade-head"><div><div class="big">${fmtMoney(st.price)}</div><div class="${upCls(chg)}">${fmtPct(chg)} since creation${st.moving ? ` · MOVING ${cryptoCountdownSec(st.moving)} left · ${regimeLabel(cr.bets.find(b => b.id === st.moving.betId)?.regime)}` : ' · still — bet to move it'}</div></div></div>
+    ${hist.length >= 2 ? lineChart(hist, { h: 160 }) : '<p class="muted small">No movement yet — place a bet and the chart draws the 30-second move live.</p>'}
+    <p class="muted small">Chart shows every price this coin has had, starting at its creation price. A coin only moves during its 30-second bet window.</p></div>
+    <div class="card in"><h4>Bet on ${def.sym}</h4><p class="muted small">Guess up or down. Win pays 2× your stake (stake back + equal winnings). An exact tie refunds your stake. Cash: ${fmtMoney(S.cash, true)}.</p>
     <div class="row"><span class="muted small" style="min-width:90px">Stake $</span><input id="cryptoStake" class="search" type="number" min="1" step="1" value="${stakeVal}"></div>
-    <div class="row wrap"><button class="btn3d orange flex" data-a="cryptoPlace" data-x="above">BET ABOVE ▲</button><button class="btn3d orange flex" data-a="cryptoPlace" data-x="below">BET UNDER ▼</button></div></div>
-    <div class="card in"><h4>Open bets (${pending.length})</h4>${pending.map(betRow).join('') || '<p class="muted small">No open bets. Bets settle when this panel opens after their window ends, or on Settle.</p>'}</div>
+    <div class="row wrap"><button class="btn3d orange flex" data-a="cryptoPlace" data-x="up">BET UP ▲</button><button class="btn3d orange flex" data-a="cryptoPlace" data-x="down">BET DOWN ▼</button></div>
+    ${st.moving ? `<p class="muted small">${def.sym} is moving — wait ${cryptoCountdownSec(st.moving)} for it to settle before betting on it again.</p>` : ''}</div>
+    <div class="card in"><h4>Open bets (${pending.length})</h4>${pending.map(betRow).join('') || '<p class="muted small">No open bets.</p>'}</div>
     <div class="card in"><h4>Recent results · Won ${cr.won} · Lost ${cr.lost}</h4>${done.map(betRow).join('') || '<p class="muted small">Nothing settled yet.</p>'}</div>
-    <p class="muted small">Crypto is not a stock: nothing here appears in Markets, your portfolio, or any stock card. No real money is involved at any point.</p>`);
+    <p class="muted small">Regimes per bet: Sideways 40% (fluctuates in a range), Bull 20% (generally up), Bear 20% (generally down), High volatility 15% (large moves either way), Crash / rally shock 5% (one big jump).</p>`);
 }

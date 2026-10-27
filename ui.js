@@ -291,13 +291,10 @@ function openModal(html, kind) {
 function closeModal() { UI.modal = null; $('modal').innerHTML = ''; }
 function openPanel(name, args) {
   closeModal(); if (CityView.isOpen()) leaveCity();
-  // Crypto live ticker runs only while the Crypto panel is open.
-  if (name === 'crypto' && typeof startCryptoTicker === 'function') startCryptoTicker();
-  else if (typeof stopCryptoTicker === 'function') stopCryptoTicker();
   UI.panel = name; UI.stack = args ? [args] : []; renderPanel(); renderHUD();
 }
 function pushPanel(args) { UI.stack.push(args); renderPanel(); }
-function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } if (typeof stopCryptoTicker === 'function') stopCryptoTicker(); UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
+function closePanel() { if (UI.panel === 'warbattle' && UI.warBattle && !UI.warBattle.resolved && UI.pendingWarPlan) { const plan = UI.pendingWarPlan; UI.warBattle.resolved = true; startOngoingWar(plan); save(); toast('Battle closed — the war continues as an ongoing war.', 'bad'); } UI.panel = null; UI.stack = []; UI.marketsScroll = null; $('panel').classList.remove('open'); renderHUD(); }
 function panelShell(title, sub, body) {
   const back = UI.stack.length ? `<button class="pback" data-a="panelBack">${IC.back}</button>` : '';
   return `<div class="panel-head"><div class="panel-title">${back}<div><h3>${title}</h3>${sub ? `<div class="muted small">${sub}</div>` : ''}</div></div><button class="xbtn" data-a="closePanel" aria-label="Close panel">${IC.close}</button></div><div class="panel-body">${body}</div>`;
@@ -2110,16 +2107,9 @@ PANELS.airport = () => {
 PANELS.mars = () => marsPanelHTML();
 PANELS.casino = () => casinoPanelHTML();
 PANELS.crypto = () => {
-  // Belt and braces: the ticker starts in openPanel, but a panel
-  // restored by any other path still gets live ticks.
-  if (typeof startCryptoTicker === 'function') startCryptoTicker();
-  // Auto-refresh + auto-settle on open, at most once per 15s, so the
-  // re-render these trigger does not loop back into another fetch.
-  if (!UI.cryptoAutoAt || Date.now() - UI.cryptoAutoAt > 15000) {
-    UI.cryptoAutoAt = Date.now();
-    cryptoSettleDue().then(() => { if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {});
-    cryptoRefreshPrice().then(() => { if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {});
-  }
+  // Resume movements interrupted by a reload (settle ones whose 30
+  // seconds already passed, restart the timer for the rest).
+  if (typeof cryptoResumeMoves === 'function') cryptoResumeMoves();
   return cryptoPanelHTML();
 };
 PANELS.offices = () => {
@@ -2311,7 +2301,7 @@ function openMenuPopup() {
   ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['progress', 'Levels 1-100 and what each unlocks'], ['leaderboard', 'Global leaderboards']])}
   ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['web', 'Your business websites']])}
   ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mars', 'Mars']])}
-  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Trade Bitcoin on the live price'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
+  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Fake coins — bet up or down'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
   </div>`, 'menu');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
@@ -2544,24 +2534,19 @@ const A = {
   casinoRouletteNumber: () => { const n = $('rouletteNum') ? $('rouletteNum').value : ''; const err = casinoRoulette('number', n); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
   casinoBuild: () => { const el = $('casinoCity'); if (!el) return toast('Pick a city first.', 'bad'); const err = casinoBuild(+el.value); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino opened.', 'good'); },
   casinoSell: x => { const err = casinoSell(x); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); toast('Casino sold.', 'good'); },
-  cryptoRefresh: () => { UI.cryptoAutoAt = 0; renderPanel(); },
-  cryptoSettle: () => { cryptoSettleDue().then(r => { if (r.unavailable) toast('Price unavailable — bets stay open.', 'bad'); else if (r.settled) toast(`Settled ${r.settled}: ${r.won || 0} won, ${r.lost || 0} lost.`, 'good'); save(); if (UI.panel === 'crypto') renderPanelUnlessTyping(); }).catch(() => {}); },
-  cryptoTarget: x => { const cr = ensureCrypto(); if (cr.lastPrice) { UI.cryptoTargetVal = String(Math.round(cr.lastPrice * (1 + (+x) / 100))); UI.cryptoTargetEdited = true; renderPanel(); } else toast('Fetch a price first.', 'bad'); },
+  cryptoCoin: x => { UI.cryptoCoin = x; renderPanel(); },
   cryptoPlace: x => {
-    // Prefer controlled UI state over the live DOM inputs: if a
-    // re-render replaced the inputs mid-click, the DOM values may be
+    // Prefer controlled UI state over the live DOM input: if a
+    // re-render replaced the input mid-click, the DOM value may be
     // stale or missing, but the state the player actually typed survives.
-    // A validation failure keeps the attempted values in state (and
+    // A validation failure keeps the attempted value in state (and
     // shows a toast) instead of silently doing nothing.
-    const domT = $('cryptoTarget') ? $('cryptoTarget').value : '';
-    const domW = $('cryptoWindow') ? $('cryptoWindow').value : '';
     const domS = $('cryptoStake') ? $('cryptoStake').value : '';
-    const t = (UI.cryptoTargetEdited && UI.cryptoTargetVal != null && UI.cryptoTargetVal !== '') ? +UI.cryptoTargetVal : +domT;
-    const w = UI.cryptoWindowVal != null ? +UI.cryptoWindowVal : +domW;
     const s = (UI.cryptoStakeVal != null && UI.cryptoStakeVal !== '') ? +UI.cryptoStakeVal : +domS;
-    const err = cryptoPlaceBet(x, t, w, s);
-    if (err) { if (domS !== '') UI.cryptoStakeVal = domS; if (domT !== '') { UI.cryptoTargetVal = domT; UI.cryptoTargetEdited = true; } if (domW !== '') UI.cryptoWindowVal = +domW; return toast(err, 'bad'); }
-    UI.cryptoStakeVal = String(s); save(); renderPanel(); renderHUD(); toast('Bet placed.', 'good');
+    const coin = UI.cryptoCoin || 'pump';
+    const err = cryptoPlaceBet(coin, x, s);
+    if (err) { if (domS !== '') UI.cryptoStakeVal = domS; return toast(err, 'bad'); }
+    UI.cryptoStakeVal = String(s); save(); renderPanel(); renderHUD(); toast('Bet placed — coin moves for 30 seconds.', 'good');
   },
   cat: x => { UI.cat = x; UI.q = ''; renderPanel(); },
   starFilter: () => { UI.starOnly = !UI.starOnly; renderPanel(); },
@@ -2873,7 +2858,6 @@ function onInput(e) {
   // Deliberately no renderPanel() here — re-rendering on input would
   // fight the keystroke that just happened.
   if (t.id === 'cryptoStake') { UI.cryptoStakeVal = t.value; return; }
-  if (t.id === 'cryptoTarget') { UI.cryptoTargetVal = t.value; UI.cryptoTargetEdited = true; return; }
   const k = t.dataset.in; if (!k) return;
   if (k === 'price' || k === 'quality' || k === 'wage') {
     const c = S.co[t.dataset.x]; if (c) c.set[k] = +t.value;
@@ -2894,8 +2878,6 @@ function marketsListHTML() {
 }
 function onChange(e) {
   const t = e.target;
-  // Crypto window select is controlled state too, so a re-render keeps
-  // the window the player picked instead of snapping back to 1 minute.
-  if (t && t.id === 'cryptoWindow') { UI.cryptoWindowVal = +t.value; return; }
+  if (!t) return;
 }
 boot();
