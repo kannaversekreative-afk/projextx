@@ -1344,17 +1344,43 @@ function tradeView(a3) {
   const held = S.holdings[a3] || { qty: 0, cost: 0 };
   const ch = chgVs(c), val = held.qty > 0 ? held.qty * c.price : held.qty < 0 ? -held.qty * c.price : 0;
   const pnl = held.qty !== 0 ? (c.price - held.cost) * held.qty : 0;
-  const closes = UI.tradeRange === '1M' ? c.h.d.slice(-22) : UI.tradeRange === 'All' ? c.h.d.slice() : c.h.d.slice(-130);
-  const vols = UI.tradeRange === '1M' ? (c.h.v || []).slice(-22) : UI.tradeRange === 'All' ? (c.h.v || []).slice() : (c.h.v || []).slice(-130);
-  const sma20 = sma(closes, 20), sma20v = sma20.length ? sma20[sma20.length - 1] : c.price;
+  // Range series. Daily closes cap at 400, so 1Y (260 closes) is the
+  // longest honest daily range; 5Y and All fall back to weekly, then
+  // monthly, the way the portfolio chart does. 1D has no intraday
+  // series — prices move once a day on weekdays — so it shows today's
+  // move as numbers instead of a faked chart.
+  const R = UI.tradeRange;
+  let closes, vols, unit;
+  if (R === '1W') { closes = c.h.d.slice(-5); vols = (c.h.v || []).slice(-5); unit = 'day'; }
+  else if (R === '1M') { closes = c.h.d.slice(-22); vols = (c.h.v || []).slice(-22); unit = 'day'; }
+  else if (R === '3M') { closes = c.h.d.slice(-63); vols = (c.h.v || []).slice(-63); unit = 'day'; }
+  else if (R === '5Y') { closes = (c.h.w || []).slice(-260); vols = []; unit = 'week'; }
+  else if (R === 'All') {
+    if (c.h.m && c.h.m.length > 1) { closes = c.h.m.slice(); unit = 'month'; }
+    else if (c.h.w && c.h.w.length) { closes = c.h.w.slice(); unit = 'week'; }
+    else { closes = c.h.d.slice(); unit = 'day'; }
+    vols = [];
+  }
+  else { closes = c.h.d.slice(-260); vols = (c.h.v || []).slice(-260); unit = 'day'; }
+  // SMA20 is always 20 daily closes, whatever the chart range shows —
+  // a weekly chart must not relabel a 20-week average as SMA20.
+  const sma20 = sma(c.h.d, 20), sma20v = sma20.length ? sma20[sma20.length - 1] : c.price;
+  const volToday = (c.h.v || []).length ? c.h.v[c.h.v.length - 1] : 0;
+  const prevClose = c.h.d.length >= 2 ? c.h.d[c.h.d.length - 2] : c.p0;
+  const dayChg = c.price - (prevClose || c.price);
   const res = c.res && c.res.day > S.day - 90 ? c.res : null;
+  const chartHtml = !c.listed ? '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'
+    : R === '1D' ? `<div class="stats3 box"><div><span>Open (prev close)</span><b>${fmtMoney(prevClose)}</b></div><div><span>Price now</span><b>${fmtMoney(c.price)}</b></div><div><span>Change today</span><b class="${upCls(ch)}">${dayChg >= 0 ? '+' : ''}${fmtMoney(dayChg)} · ${fmtPct(ch)}</b></div></div><p class="muted small">Prices move once a day on weekdays, so there is no intraday chart — 1D shows today's move as numbers.</p>`
+    : candleChart(closes, vols);
+  const caption = R === '1D' ? '' : unit === 'day' ? '<p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20 (20 daily closes). Purple bars below are shares traded per day in the in-game market, including your trades. This is simulated in-game volume, not real-world volume.</p>'
+    : `<p class="muted small">Candles group 5 ${unit}ly closes. Purple dashed line is SMA20 (20 daily closes). No volume bars on ${unit}ly ranges — volume is daily only.</p>`;
   return panelShell(`${c.sym} · ${c.name}`, `${SECTORS[c.sector].icon} ${c.sector} · ${cname(a3)} · ${countryStatus(a3).t}`,
     `<div class="trade-head"><div><div class="big">${c.listed ? fmtMoney(c.price) : 'Private'}</div><div class="${upCls(ch)}">${fmtPct(ch)} today · SMA20 ${fmtMoney(sma20v)}</div></div>
       <button class="star-btn ${S.watch.includes(a3) ? 'on' : ''}" data-a="star" data-x="${a3}">${S.watch.includes(a3) ? '★ Starred' : '☆ Star'}</button></div>
-    ${c.listed ? candleChart(closes, vols) : '<p class="muted small">This company is private, so there is no market chart. List it with an IPO, or buy it outright with a takeover offer after it lists.</p>'}
-    <p class="muted small">Candles group 5 daily closes. Purple dashed line is SMA20. Purple bars below are shares traded per day in the in-game market, including your trades. This is simulated in-game volume, not real-world volume.</p>
-    ${c.listed && vols.length ? `<div class="kv"><span>Shares traded today</span><b>${(vols[vols.length - 1] || 0).toLocaleString()}</b></div>` : ''}
-    ${rangeSeg(['1M', '1Y', 'All'], UI.tradeRange, 'tradeRange')}
+    ${chartHtml}
+    ${caption}
+    ${c.listed && volToday ? `<div class="kv"><span>Shares traded today</span><b>${volToday.toLocaleString()}</b></div>` : ''}
+    ${rangeSeg(['1D', '1W', '1M', '3M', '1Y', '5Y', 'All'], UI.tradeRange, 'tradeRange')}
     <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
     ${S.lastTrade && S.lastTrade.a3 === a3 ? `<div class="kv"><span>Last trade</span><b class="${upCls(S.lastTrade.pnl)}">${S.lastTrade.side.toUpperCase()} ${S.lastTrade.qty.toLocaleString()} ${S.lastTrade.sym} · Realised P&amp;L ${fmtMoney(S.lastTrade.pnl, true)}</b></div><p class="muted small">That realised P&amp;L is just this trade. Net worth also moves with cash, loans, other holdings and weekly costs, so it will not match this number exactly.</p>` : ''}
     ${held.qty !== 0 ? `<div class="kv"><span>Average cost</span><b>${fmtMoney(held.cost)}</b></div><div class="kv"><span>Position value</span><b>${fmtMoney(val, true)}</b></div><div class="kv"><span>Unrealised P&amp;L</span><b class="${upCls(pnl)}">${fmtMoney(pnl, true)}</b></div>` : ''}
