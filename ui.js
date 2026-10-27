@@ -686,12 +686,14 @@ function tickWatch() {
   const ic = document.getElementById('watch-prog-icon'); if (ic) ic.style.left = pct + '%';
 }
 
-// ---------- newspaper: 1920s style, 4 pages, Age Up edition ----------
-// One edition is made every time you age up. It is world news, not
+// ---------- newspaper: 1920s style, 4 pages, weekly edition ----------
+// One edition is made every week, at the end of the week (see stepDay:
+// pushPaperEdition runs with businessWeek). It is world news, not
 // news about you: world politics and countries, business and markets,
 // sports from every league, and the numbers behind it all.
-// Only two editions are kept: this one and the last one. When a new
-// edition arrives, older ones rotate out on their own.
+// Only the last four editions are kept. When a new edition arrives,
+// older ones rotate out on their own. Age Up still opens the latest
+// edition, but it no longer creates the only editions.
 let paperPage = 0, paperEdIdx = 0;
 const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS', 'YOUR YEAR', 'ADVERTISEMENTS', 'ADVERTISEMENTS'];
 function ensurePapers() {
@@ -702,8 +704,8 @@ function ensurePapers() {
 function pushPaperEdition() {
   ensurePapers();
   const ed = makePaperEdition(yearOf(S.day));
-  if (S.papers[0] && S.papers[0].year === ed.year) S.papers[0] = ed; else S.papers.unshift(ed);
-  S.papers = S.papers.slice(0, 2);
+  if (S.papers[0] && S.papers[0].year === ed.year && S.papers[0].week === ed.week) S.papers[0] = ed; else S.papers.unshift(ed);
+  S.papers = S.papers.slice(0, 4);
   paperEdIdx = 0; paperPage = 0;
 }
 function paperChg(h) {
@@ -805,7 +807,7 @@ function makePaperEdition(year) {
     return { l: lg.l, champ: a, runner: b, score: `${sa}–${sb}`, mvp: `${FIRST[Math.floor(r() * FIRST.length)]} ${LAST[Math.floor(r() * LAST.length)]}` };
   });
   return {
-    year, day: S.day, date: fmtDate(S.day),
+    year, week: Math.floor(S.day / 7), day: S.day, date: fmtDate(S.day),
     front: { headline, body: headBody, deck: frontDeck, stories: frontStories.slice(0, 4), kind: frontKind, caption: frontCaption },
     business: { idx: S.idx.v, idxChg, oil: S.oil, gainers, losers, tip, stories: bizStories },
     sports: { leagues: sports, story: `Champions are crowned in every league this year, from the gridiron to the diamond to the ice. The ${sports[0].champ} took the ${sports[0].l} crown, and the ${sports[1].champ} did the same in the ${sports[1].l}. New stars, old rivalries, and one more season for the history books.` },
@@ -2504,7 +2506,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
-    const src = { pro: 'minigames/pro.html?v=20261026dq', college: 'minigames/college.html?v=20261026dq', baseball: 'minigames/baseball.html?v=20261026dq' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dr', college: 'minigames/college.html?v=20261026dr', baseball: 'minigames/baseball.html?v=20261026dr' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
