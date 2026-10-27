@@ -1405,6 +1405,7 @@ function gameOver() {
     <div class="big center">${o.score} points</div>
     <div class="stats3 box"><div><span>👥 Population</span><b class="${upCls(o.pop)}">${fmtPct(o.pop)}</b></div><div><span>💰 Net worth</span><b>${fmtMoney(o.nw, true)}</b></div><div><span>📈 vs Market</span><b class="${upCls(o.beat)}">${fmtPct(o.beat)}</b></div></div>
     <p class="muted">You finished as <b>${o.stage}</b>. The market returned ${fmtPct(o.mkt)}; you returned ${fmtPct(o.mine)}.</p>
+    ${o.bankrupt ? `<p class="muted">Bankruptcy is 5 negative years — and rebirth keeps nothing, but the world keeps going.</p><button class="btn3d orange wide" data-a="rebirthPanel">REBIRTH IN ANOTHER COUNTRY</button>` : ''}
     <button class="btn3d orange wide" data-a="newGame">PLAY AGAIN</button>`, 'center');
 }
 let lastT = 0;
@@ -1488,6 +1489,7 @@ PANELS.markets = () => {
     `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
     <button class="btn small" data-a="panel" data-x="etf">ETFs — baskets of core businesses</button>
     <button class="btn small" data-a="panel" data-x="economy">Economy — farms → factories → shops</button>
+    <button class="btn small" data-a="panel" data-x="bankruptcy">Bankruptcy — 5-year rule</button>
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
     <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
     <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
@@ -1875,6 +1877,22 @@ PANELS.office = () => {
       return `<div class="card in"><h4>${esc(d.name)}</h4><p class="muted small">✅ ${esc(d.good)}</p><p class="muted small">⚠️ ${esc(d.bad)}${cost ? ` · Costs ${fmtMoney(cost, true)}` : ''}</p>${taken ? `<p class="muted small">Made this year — you can make it again in ${365 - (S.day - last)} days.</p>` : `<button class="btn" data-a="officeDecision" data-x="${d.id}">YES — DO IT</button>`}</div>`;
     }).join('')}
     <p class="muted small">No is just skipping it — no reward, no penalty. A decision can be taken once a year.</p>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
+PANELS.bankruptcy = () => {
+  const st = bankruptcyState();
+  const P = ensurePerson();
+  const unclaimed = Object.keys(S.countries || {}).filter(a3 => S.countries[a3].unclaimed);
+  const options = W.playable.filter(k => k.a3 !== S.home && !(S.countries[k.a3] && S.countries[k.a3].unclaimed));
+  return panelShell('Bankruptcy', '5 negative years = bankrupt. 1 profitable year breaks the streak. Warning at 4 years.',
+    `<div class="card in"><h4>YOUR STREAKS</h4>
+    <div class="kv"><span>Personal bank balance</span><b>${fmtMoney(P.cash, true)} · ${st.personal.years} negative year${st.personal.years === 1 ? '' : 's'}${st.personal.warned ? ' · ⚠️ WARNING' : ''}</b></div>
+    <div class="kv"><span>Business bank balance</span><b>${fmtMoney(S.cash, true)} · ${st.business.years} negative year${st.business.years === 1 ? '' : 's'}${st.business.warned ? ' · ⚠️ WARNING' : ''}</b></div>
+    <p class="muted small">No recession — only bankruptcy. A bankrupt company is delisted and halved, and emerges after one profitable year. A bankrupt country becomes unclaimed territory, and its neighbours move to annex it.</p></div>
+    <div class="card in"><h4>UNCLAIMED TERRITORY</h4>${unclaimed.length ? unclaimed.map(a3 => `<div class="kv"><span>${esc(cname(a3))}</span><b>Unclaimed — neighbours will annex it</b></div>`).join('') : '<p class="muted small">No unclaimed countries yet.</p>'}</div>
+    <div class="card in"><h4>REBIRTH — SAME GAME, NEW COUNTRY, KEEPS NOTHING</h4><p class="muted small">Pick a country that still stands. You start again as a new person there, with $5,000, no holdings, no stores, no loans, no office, no degrees. The world, the day, and every other country keep going.</p>
+    <select id="rebirthCountry" class="search">${options.map(k => `<option value="${k.a3}">${esc(k.name)}</option>`).join('')}</select>
+    <button class="btn wide" data-a="doRebirth">REBIRTH HERE</button></div>
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 // World leaders, with the exact names Tawk uses (seeded per country),
@@ -3159,6 +3177,8 @@ const A = {
   etfBuy: x => { const [id, q] = x.split('|'); act(() => buyETF(id, +q), 'ETF bought'); },
   etfSell: x => { const [id, q] = x.split('|'); act(() => sellETF(id, +q), 'ETF sold'); },
   officeDecision: x => act(() => takeOfficeDecision(x), 'Decision made'),
+  rebirthPanel: () => { closeModal(); openPanel('bankruptcy'); },
+  doRebirth: () => { const sel = $('rebirthCountry'); const a3 = sel ? sel.value : null; const err = rebirthAs(a3); if (err) toast(err, 'bad'); else { closePanel(); refreshAll(); save(); toast('Reborn — you keep nothing.', 'good'); } },
   takeCityLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeCityLoan(UI.bankCity, amt, mo), 'Loan taken'); },
   walletSel: x => { UI.wallet = x; document.querySelectorAll('.wallet-pick').forEach(el => { el.querySelectorAll('.wallet-opt').forEach(b => b.classList.toggle('on', b.dataset.x === x)); const cc = el.querySelector('.wallet-cash'); if (cc) cc.textContent = 'Available Cash: ' + fmtMoney(walletCash(x)); }); save(); },
   bankJob: x => { act(() => switchJob(x), 'New job'); },

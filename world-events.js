@@ -703,6 +703,9 @@ function yearEnd(year) {
     c.yearStats = { satW: 0, satN: 0, rev: 0, profit: 0, weeks: 0 };
     if (controlled(a3) || a3 === S.home) entries.push({ a3, name: c.name, sym: c.sym, old, new: r.newR, reasons: r.reasons });
   }
+  // Bankruptcy year: lastYearProfit is now set, so company streaks
+  // can be counted, along with personal, business and country balances.
+  if (typeof bankruptcyYear === 'function') { try { bankruptcyYear(year); } catch (e) {} }
   const cs = country(S.home), prev = S.homeTaxPrev || { tax: cs.tax, incTax: cs.incTax, vat: cs.vat };
   const taxLines = [];
   const dCorp = cs.tax - prev.tax, dInc = (cs.incTax || 0.20) - (prev.incTax || 0.20), dVat = (cs.vat || 0.05) - (prev.vat || 0.05);
@@ -767,9 +770,10 @@ function stepDay() {
   S.nh.d.push([S.day, Math.round(S.netWorth)]); if (S.nh.d.length > 400) S.nh.d.shift();
   checkCareer();
   // No time limit: the game does NOT end at 100 years, or any age. It
-  // only ends on bankruptcy below. A long life just means more chances
-  // for a CPU superpower to try a takeover or a war.
-  if (S.netWorth < -Math.max(2e6, S.stats.startNet)) { S.broke = (S.broke || 0) + 1; if (S.broke === 1) news('Business', 'Warning: you are close to bankruptcy. Close losing locations or sell assets.'); if (S.broke > 60) finishGame(true); } else S.broke = 0;
+  // only ends on bankruptcy — and bankruptcy is the 5-year rule in
+  // bankruptcy.js, not this old 60-day net-worth check, which is
+  // retired so the 5-year rule is the only bankruptcy rule.
+  S.broke = 0;
 }
 
 // ---------- career, rewards, shop ----------
