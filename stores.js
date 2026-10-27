@@ -407,6 +407,7 @@ function takeLoan(amount, months) {
 }
 function loansWeek() {
   ensureStores();
+  if (typeof cityBanksWeek === 'function') { try { cityBanksWeek(); } catch (e) {} }
   for (const ln of S.loans) {
     const pay = Math.min(ln.weekly, ln.amount - ln.paid + ln.amount * ln.rate / 52 * 0); // principal + interest handled in weekly figure
     S.cash -= ln.weekly; ln.paid += ln.weekly; ln.weeksLeft--;

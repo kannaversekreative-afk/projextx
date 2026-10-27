@@ -119,6 +119,24 @@ function bankPanelHTML() {
     <p class="wbank-label">CAREER PATHS</p>
     ${tracks.map(([t, name, title, sal, note]) => `<div class="wbank-jobrow"><span><b>${esc(name)}</b><small>${esc(title)} · ${fmtMoney(sal, true)}/week · ${esc(note)}</small></span><button class="wbank-smallbtn" data-a="bankJob" data-x="${t}">${job.track === (t === 'dom' ? 'agency-dom' : t === 'for' ? 'agency-for' : t) ? 'Current' : 'Take job'}</button></div>`).join('')}
     <p class="wbank-note">Jobs pay you every week into your personal money.</p>`;
+  } else if (view === 'citybanks') {
+    const cities = (W.cities || []).filter(c => c.a3 === S.home);
+    body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
+    <h3 class="wbank-h">City banks — ${esc(cname(S.home))}</h3><p class="wbank-note">Worl Bank is the banking app in your phone. Every city also has its own bank business — Bank of Moscow, Bank of New York, and so on. They lend on approval, and they make or lose money on their loans, just like any business.</p>
+    ${cities.map(c => { const b = cityBank(c.id); return `<div class="wbank-loanrow"><span><b>${esc(b.name)}</b><small>${(b.rate * 100).toFixed(2)}% · Capital ${fmtMoney(b.capital, true)} · Profit ${fmtMoney(b.profit, true)} · ${b.loans} player loan${b.loans === 1 ? '' : 's'}</small></span><button class="wbank-smallbtn" data-a="bankCity" data-x="${c.id}">Borrow</button></div>`; }).join('') || '<p class="wbank-note">No cities yet.</p>'}`;
+  } else if (view === 'cityloan') {
+    const b = cityBank(UI.bankCity);
+    if (!b) body = `<button class="wbank-back" data-a="bankView" data-x="citybanks">← City banks</button><p class="wbank-note">No bank in that city.</p>`;
+    else {
+      const my = (S.loans || []).filter(l => l.bank === b.cityId);
+      body = `<button class="wbank-back" data-a="bankView" data-x="citybanks">← City banks</button>
+      <h3 class="wbank-h">${esc(b.name)}</h3><p class="wbank-note">Interest ${(b.rate * 100).toFixed(2)}% a year · Capital ${fmtMoney(b.capital, true)} · Profit so far ${fmtMoney(b.profit, true)} · Approved up to ${fmtMoney(cityBankMaxLoan(b), true)} (and no more than your overall position allows).</p>
+      <label class="wbank-label">LOAN AMOUNT</label><input id="loanAmt" class="wbank-input" type="number" value="1000000">
+      <label class="wbank-label">MATURITY (months)</label><input id="loanMonths" class="wbank-input" type="number" value="36">
+      <button class="btn3d orange wide" data-a="takeCityLoan">TAKE LOAN FROM ${esc(b.name).toUpperCase()}</button>
+      <h3 class="wbank-h">Your loans here</h3>
+      ${my.map(l => `<div class="wbank-loanrow"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || '<p class="wbank-note">No loans from this bank yet.</p>'}`;
+    }
   } else {
     const accts = bankAccounts();
     body = `<div class="wbank-cards">${accts.map(a => `<button class="wbank-tile" data-a="bankAcct" data-x="${a.id}"><b>${a.name}</b><span>${fmtMoney(a.bal, true)}</span><small>${esc(a.note)}</small></button>`).join('')}</div>
@@ -130,9 +148,88 @@ function bankPanelHTML() {
     </div>
     <div class="wbank-cards">
       <button class="wbank-tile" data-a="bankView" data-x="loan"><b>Loans</b><span>${lt.count === 0 ? 'No loans' : `${lt.count} loan${lt.count === 1 ? '' : 's'} · ${fmtMoney(lt.remaining, true)} left`}</span><small>${lt.weekly > 0 ? fmtMoney(lt.weekly) + '/week' : 'View loans →'}</small></button>
+      <button class="wbank-tile" data-a="bankView" data-x="citybanks"><b>City banks</b><span>Bank of every city</span><small>Loans on approval, profit and loss →</small></button>
     </div>
     ${lt.count > 0 ? `<div class="wbank-next"><b>Up next: loan payment ${fmtMoney(lt.weekly)}/week</b><span>${lt.loans.reduce((t, l) => t + l.weeksLeft, 0)} payments left across your loans</span></div>` : `<div class="wbank-next"><b>Up next: take your first loan</b><span>Borrow to build, repay weekly from your cash</span></div>`}`;
   }
   return panelShell('Bank', 'Worl Bank — your money, loans, and career.',
     `<div class="wbank">${head}${body}</div>`);
+}
+
+// ---------- city banks ----------
+// Every CITY gets its own bank business, not every country. Worl Bank
+// stays the banking app in your phone; these are the businesses in
+// the cities — Bank of Moscow, Bank of New York, and so on. They lend
+// to you and to other countries on approval, and they are profit-and-
+// loss businesses: interest collected is profit, defaults are losses.
+function cityBankName(city) { return 'Bank of ' + city.name; }
+function cityBankRate(city) { return 0.05 + (city.id % 9) * 0.005; }
+function cityBankCapital(city) { return Math.round((city.gdpAlloc || 0) * 0.02); }
+function cityBank(cityId) {
+  if (!S.cityBanks) S.cityBanks = {};
+  const city = (typeof W !== 'undefined' && W.cities) ? W.cities[cityId] : null;
+  if (!city) return null;
+  if (!S.cityBanks[cityId]) S.cityBanks[cityId] = { cityId, name: cityBankName(city), rate: cityBankRate(city), capital: cityBankCapital(city), profit: 0, loaned: 0, loans: 0, cpuLoans: [] };
+  return S.cityBanks[cityId];
+}
+function cityBankMaxLoan(bank) { return Math.max(100000, Math.floor(bank.capital * 0.5)); }
+function takeCityLoan(cityId, amount, months) {
+  ensureStores();
+  const bank = cityBank(cityId);
+  if (!bank) return 'No bank in that city.';
+  amount = Math.floor(amount); months = clamp(Math.floor(months), 6, 60);
+  if (!amount || amount < 1000) return 'Enter a loan amount of at least $1,000.';
+  const limit = Math.min(Math.max(100000, S.cash * 5 + 500000), cityBankMaxLoan(bank));
+  if (amount > limit) return `${bank.name} approved you for up to ${fmtMoney(limit, true)} — not ${fmtMoney(amount, true)}.`;
+  const rate = bank.rate, weeks = Math.max(4, Math.round(months * 4.33)), weekly = loanWeeklyPayment(amount, rate, months);
+  S.cash += amount;
+  S.loans.push({ id: uid(), amount, rate, months, weeksLeft: weeks, weeksTotal: weeks, weekly, paid: 0, bank: cityId });
+  bank.loaned += amount; bank.loans++;
+  news('Bank', `Loan from ${bank.name}: ${fmtMoney(amount, true)} at ${(rate * 100).toFixed(2)}% for ${months} months, ${fmtMoney(weekly)}/week.`, S.home);
+  return null;
+}
+// Weekly city-bank bookkeeping, run from loansWeek: interest profit
+// on your loans, CPU country borrowing, and CPU loan repayments/defaults.
+function cityBanksWeek() {
+  if (!S.cityBanks) S.cityBanks = {};
+  // Your loans: interest portion of this week's payment is bank profit.
+  (S.loans || []).forEach(ln => {
+    if (ln.bank == null) return;
+    const b = cityBank(ln.bank);
+    if (b && ln.weeksTotal) b.profit += ln.weekly - ln.amount / ln.weeksTotal;
+  });
+  // One new CPU country loan a week, from a random city's bank, on
+  // approval: only if that country can carry it and the bank can fund it.
+  try {
+    const cities = W.cities || [];
+    if (cities.length) {
+      const city = cities[Math.floor(Math.random() * cities.length)];
+      const b = cityBank(city.id);
+      const cs = typeof country === 'function' ? country(city.a3) : null;
+      if (b && cs && (cs.treasury || 0) > 0) {
+        const amount = Math.min(Math.round(b.capital * 0.05), 10000000, Math.round((cs.treasury || 0) * 0.5));
+        if (amount >= 100000) {
+          const weeks = 52, weekly = Math.round(amount * 1.065 / weeks);
+          cs.treasury += amount; b.loaned += amount;
+          b.cpuLoans.push({ a3: city.a3, amount, weeksLeft: weeks, weeksTotal: weeks, weekly });
+        }
+      }
+    }
+  } catch (e) {}
+  // Repay CPU loans, or write them off if the country cannot pay.
+  for (const id in S.cityBanks) {
+    const b = S.cityBanks[id];
+    if (!Array.isArray(b.cpuLoans)) b.cpuLoans = [];
+    const kept = [];
+    b.cpuLoans.forEach(l => {
+      const cs = typeof country === 'function' ? country(l.a3) : null;
+      if (cs && (cs.treasury || 0) >= l.weekly) {
+        cs.treasury -= l.weekly; b.profit += l.weekly - l.amount / l.weeksTotal; l.weeksLeft--;
+        if (l.weeksLeft > 0) kept.push(l);
+      } else {
+        b.profit -= l.amount * (l.weeksLeft / l.weeksTotal);
+      }
+    });
+    b.cpuLoans = kept;
+  }
 }

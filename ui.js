@@ -3096,6 +3096,8 @@ const A = {
   bankView: x => { UI.bankView = x; renderPanel(); },
   bankWallet: x => { UI.bankAcctSel = x === 'private' ? 'personal' : x === 'company' ? 'business' : x; UI.bankView = 'account'; openPanel('bank'); },
   bankAcct: x => { UI.bankAcctSel = x; UI.bankView = 'account'; renderPanel(); },
+  bankCity: x => { UI.bankCity = +x; UI.bankView = 'cityloan'; renderPanel(); },
+  takeCityLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeCityLoan(UI.bankCity, amt, mo), 'Loan taken'); },
   walletSel: x => { UI.wallet = x; document.querySelectorAll('.wallet-pick').forEach(el => { el.querySelectorAll('.wallet-opt').forEach(b => b.classList.toggle('on', b.dataset.x === x)); const cc = el.querySelector('.wallet-cash'); if (cc) cc.textContent = 'Available Cash: ' + fmtMoney(walletCash(x)); }); save(); },
   bankJob: x => { act(() => switchJob(x), 'New job'); },
   newsView: x => { UI.newsView = x; UI.newsSection = null; renderPanel(); },
