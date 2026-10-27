@@ -9,7 +9,6 @@ const MAJOR_CITIES = [
   // USA
   {n:'New York', c:'USA', code:'NYC', lat:40.71, lon:-74.01, pop:19500000, port:1},
   {n:'Miami', c:'USA', code:'MIA', lat:25.76, lon:-80.19, pop:6200000, port:1},
-  {n:'San Francisco', c:'USA', code:'SFO', lat:37.77, lon:-122.42, pop:4700000, port:1},
   // China (capital Beijing already in data)
   {n:'Shanghai', c:'CHN', code:'SHA', lat:31.23, lon:121.47, pop:24000000, port:1},
   // India (capital New Delhi already in data)

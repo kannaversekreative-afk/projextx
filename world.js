@@ -399,7 +399,6 @@ const CITY_SIGNATURES = {
   'USA:Los Angeles': { core: 'downtown', tower: 30, coreH: [8, 20], industry: 'small' },
   'USA:Chicago': { core: 'financial', tower: 36, coreH: [12, 28], res: 'brownstone' },
   'USA:Houston': { core: 'downtown', tower: 32, coreH: [10, 24], industry: 'big' },
-  'USA:San Francisco': { core: 'tech', tower: 30, coreH: [8, 22] },
   'USA:Miami': { core: 'downtown', tower: 34, coreH: [10, 26], hotel: true },
   'USA:Seattle': { core: 'tech', tower: 30, coreH: [8, 22] },
   'USA:Boston': { core: 'downtown', tower: 26, coreH: [8, 18], res: 'brownstone' },
