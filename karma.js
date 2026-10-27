@@ -65,9 +65,9 @@ function karmaPanelHTML() {
   const cur = hist[hist.length - 1];
   const prev = hist.length > 1 ? hist[hist.length - 2] : null;
   const delta = prev ? cur.score - prev.score : null;
-  const deltaTxt = delta === null ? 'First year — no previous year to compare.' :
-    delta === 0 ? 'No change since last year.' :
-    (delta > 0 ? `+${delta} since last year.` : `${delta} since last year.`);
+  const deltaTxt = delta === null ? 'First year • Next check at the new year' :
+    delta === 0 ? 'No change • Next check at the new year' :
+    (delta > 0 ? `+${delta} • Next check at the new year` : `${delta} • Next check at the new year`);
   const rows = hist.slice().reverse().map(h => {
     const p = hist[hist.indexOf(h) - 1];
     const d = p ? h.score - p.score : null;
@@ -90,15 +90,8 @@ function karmaPanelHTML() {
   }).join('');
   return panelShell('Karma', 'Your reputation score — built from what you actually do in the game',
     `<div class="karma-hero"><div class="karma-score">${f.score}</div><div class="karma-band">${karmaBand(f.score)}</div>
-    <p class="muted small">${deltaTxt} Next update at the new year.</p></div>
+    <p class="muted small">${deltaTxt}</p></div>
     <div class="card in"><h4>Score over time</h4>${karmaChart(hist)}</div>
-    <div class="card in"><h4>What feeds it now</h4>
-    <div class="kv"><span>Popularity ${f.pop}</span><span>+${f.pts.pop} pts</span></div>
-    <div class="kv"><span>Public opinion ${f.opin}</span><span>+${f.pts.opin} pts</span></div>
-    <div class="kv"><span>Fame ${f.fame}</span><span>+${f.pts.fame} pts</span></div>
-    <div class="kv"><span>Visibility ${f.vis}</span><span>+${f.pts.vis} pts</span></div>
-    <div class="kv"><span>Companies controlled ${f.cos}</span><span>+${f.pts.cos} pts</span></div>
-    <div class="kv"><span>Office ${f.office || 'None'}</span><span>+${f.pts.office} pts</span></div>
-    <div class="kv"><span>Open loans ${f.loans}</span><span>${f.pts.loans} pts</span></div></div>
-    <h4>See what changed</h4><p class="muted small">Tap a year to see why your score moved.</p>${rows}`);
+    <button class="btn3d orange wide" data-a="karmaYears">${UI.karmaShowYears ? 'Hide changes' : "See what's changed"}</button>
+    ${UI.karmaShowYears ? `<p class="muted small">Tap a year to see why your score moved.</p>${rows}` : ''}`);
 }

@@ -147,6 +147,15 @@ function promoteJob() {
   if (typeof news === 'function') news('Person', `You were promoted to ${next.title}.`, S.home);
   return null;
 }
+// Find a job: switch career track. Agency and military switches reuse
+// their existing gates; switching to the civilian track is free.
+function switchJob(track) {
+  if (track === 'dom' || track === 'for') return joinAgency(track);
+  if (track === 'military') return enlistMilitary();
+  const P = ensurePerson();
+  P.job = { track: 'civilian', rank: 0, weeks: 0 };
+  return null;
+}
 function joinAgency(kind) {
   const P = ensurePerson();
   if (P.fame < 10) return 'Agencies want known faces: you need 10 fame first.';

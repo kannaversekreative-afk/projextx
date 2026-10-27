@@ -2328,16 +2328,7 @@ PANELS.offices = () => {
   return panelShell('Offices', 'You are the CEO. Hire 5 executives — COO, CFO, CPO, CMO, CTO — and each hires a manager in their own domain. The CFO hires nobody: IPO, loans and forecasts are advice. Higher level members boost revenue more — and cost more.',
     `${hireSection()}<h4>Your companies</h4>${compCards}<h4>Your teams</h4>${teamCards}`);
 };
-PANELS.bank = () => {
-  ensureStores();
-  return panelShell('Bank', 'Business loans. Borrow to build, repay every week from your cash.',
-    `<div class="card in"><h4>New business loan</h4><p class="muted small">Interest 6.50% a year. Weekly payment is fixed for the whole term.</p>
-    <label class="muted small">LOAN AMOUNT</label><input id="loanAmt" class="search" type="number" value="1000000">
-    <label class="muted small">MATURITY (months)</label><input id="loanMonths" class="search" type="number" value="36">
-    <button class="btn3d orange wide" data-a="takeLoan">TAKE LOAN</button></div>
-    <div class="card in"><h4>Your loans</h4>${S.loans.map(l => `<div class="kv"><span>${fmtMoney(l.amount, true)} · ${(l.rate * 100).toFixed(2)}% · ${l.months} months</span><b>${fmtMoney(l.weekly)}/week · ${l.weeksLeft} weeks left</b></div>`).join('') || '<p class="muted small">No loans outstanding.</p>'}
-    <p class="muted small">Your main loan balance is in Portfolio. These business loans are separate, for stores, stadiums and buildings.</p></div>`);
-};
+PANELS.bank = () => bankPanelHTML();
 // New Markets format: sector cards with sparkline, plus Market / Equity / M&A tabs.
 PANELS.markets = () => {
   const mkt = UI.mktTab || 'market';
@@ -2672,6 +2663,9 @@ const A = {
   radioSearch: () => { const inp = document.getElementById('radioSearch'); UI.radioQuery = inp ? inp.value.trim() : ''; UI.radioView = 'home'; renderPanel(); },
   radioSleep: x => { const m = parseInt(x, 10) || 0; UI.radioSleepMin = m; UI.radioSleepUntil = m > 0 ? Date.now() + m * 60000 : null; UI.radioSlept = false; renderPanel(); },
   karmaYear: x => { UI.karmaYear = UI.karmaYear === x ? null : x; renderPanel(); },
+  karmaYears: () => { UI.karmaShowYears = !UI.karmaShowYears; renderPanel(); },
+  bankView: x => { UI.bankView = x; renderPanel(); },
+  bankJob: x => { act(() => switchJob(x), 'New job'); },
   newsView: x => { UI.newsView = x; UI.newsSection = null; renderPanel(); },
   newsSection: x => { UI.newsSection = x; renderPanel(); },
   newsSearch: () => { const inp = document.getElementById('newsSearch'); UI.newsQuery = inp ? inp.value.trim() : ''; UI.newsView = 'search'; renderPanel(); },
