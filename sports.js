@@ -12,18 +12,32 @@ const SPORT_LEAGUES = [
   { id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾',
     positions: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] },
 ];
-// Country clubs for the football + baseball leagues: 6 teams, country + mascot.
-// Same clubs in both leagues, so a club is recognisable in either sport.
-// Basketball was removed (2026-10-27 order). Names picked by the assistant:
-// Egypt Eagles and USA Fighters are his examples; the rest follow the same
-// country + classic-mascot pattern. New games only for the new leagues;
-// see ensureSports migration (owned saves keep their old leagues).
+// Country clubs for the football + baseball leagues: ALL 17 playable
+// countries, country + mascot, same clubs in both leagues so a club is
+// recognisable in either sport. Basketball was removed (2026-10-27 order).
+// Names picked by the assistant: Egypt Eagles, USA Fighters, Japan Giants
+// and UAE Pistons are his examples; the rest follow the same country +
+// classic-mascot pattern, one mascot per country. New games only for the
+// new leagues; see ensureSports migration (owned saves keep their old
+// leagues). Season is still double round-robin + top-4 playoffs, first
+// to 4 wins (max 7 games) — with 17 teams that is 32 games per team.
 const COUNTRY_CLUBS = [
-  { a3: 'ZAF', country: 'South Africa', mascot: 'Lions', abbr: 'ZAF', c1: '#007A4D', c2: '#FFB612' },
+  { a3: 'CAN', country: 'Canada', mascot: 'Huskies', abbr: 'CAN', c1: '#FF0000', c2: '#FFFFFF' },
+  { a3: 'CHN', country: 'China', mascot: 'Dragons', abbr: 'CHN', c1: '#DE2910', c2: '#FFDE00' },
   { a3: 'EGY', country: 'Egypt', mascot: 'Eagles', abbr: 'EGY', c1: '#CE1126', c2: '#C09300' },
+  { a3: 'FRA', country: 'France', mascot: 'Roosters', abbr: 'FRA', c1: '#0055A4', c2: '#EF4135' },
+  { a3: 'DEU', country: 'Germany', mascot: 'Panthers', abbr: 'DEU', c1: '#000000', c2: '#FFCC00' },
   { a3: 'IND', country: 'India', mascot: 'Tigers', abbr: 'IND', c1: '#FF9933', c2: '#000080' },
+  { a3: 'ITA', country: 'Italy', mascot: 'Gladiators', abbr: 'ITA', c1: '#009246', c2: '#CE2B37' },
+  { a3: 'JPN', country: 'Japan', mascot: 'Giants', abbr: 'JPN', c1: '#BC002D', c2: '#FFFFFF' },
+  { a3: 'MEX', country: 'Mexico', mascot: 'Jaguars', abbr: 'MEX', c1: '#006847', c2: '#CE1126' },
+  { a3: 'RUS', country: 'Russia', mascot: 'Bears', abbr: 'RUS', c1: '#0039A6', c2: '#D52B1E' },
   { a3: 'SGP', country: 'Singapore', mascot: 'Sharks', abbr: 'SGP', c1: '#ED2939', c2: '#FFFFFF' },
+  { a3: 'ZAF', country: 'South Africa', mascot: 'Lions', abbr: 'ZAF', c1: '#007A4D', c2: '#FFB612' },
+  { a3: 'KOR', country: 'South Korea', mascot: 'Warriors', abbr: 'KOR', c1: '#003478', c2: '#CD2E3A' },
   { a3: 'TUR', country: 'Turkey', mascot: 'Wolves', abbr: 'TUR', c1: '#E30A17', c2: '#FFFFFF' },
+  { a3: 'ARE', country: 'UAE', mascot: 'Pistons', abbr: 'ARE', c1: '#00732F', c2: '#FFFFFF' },
+  { a3: 'GBR', country: 'UK', mascot: 'Bulldogs', abbr: 'GBR', c1: '#012169', c2: '#C8102E' },
   { a3: 'USA', country: 'USA', mascot: 'Fighters', abbr: 'USA', c1: '#0A3161', c2: '#FFFFFF' },
 ];
 // Shared team identities with the Mini Games (baseball minigame uses the same
@@ -146,7 +160,7 @@ function ensureSports() {
   const baseLg = S.sports.leagues.find(l => l.id === 'base');
   const wantNames = COUNTRY_CLUBS.map(c => c.country + ' ' + c.mascot).join('|');
   const baseNames = baseLg ? baseLg.teams.map(t => t.name).join('|') : '';
-  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== 6 || !baseLg.teams[0].country || S.sports.leagues.some(l => l.id === 'basket') || baseNames !== wantNames;
+  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== COUNTRY_CLUBS.length || !baseLg.teams[0].country || S.sports.leagues.some(l => l.id === 'basket') || baseNames !== wantNames;
   const anyOwned = S.sports.leagues.some(lg => lg.teams.some(tm => tm.owner === 'you'));
   if (needsNewLeagues && !anyOwned) { S.sports = null; return ensureSports(); }
   S.sports.leagues.forEach(lg => {

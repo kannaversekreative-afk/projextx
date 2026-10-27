@@ -182,7 +182,7 @@ function tawkRoundPairings(teams, round) {
   const n = teams.length, idx = teams.map((_, i) => i);
   const rest = idx.slice(1), rot = rest.map((_, i) => rest[(i + round) % rest.length]);
   const order = [idx[0]].concat(rot), pairs = [];
-  for (let i = 0; i < n / 2; i++) pairs.push([order[i], order[n - 1 - i]]);
+  for (let i = 0; i < n / 2; i++) { if (order[i] !== order[n - 1 - i]) pairs.push([order[i], order[n - 1 - i]]); }
   return pairs;
 }
 function tawkSportGames(lgId, weekOff) {
