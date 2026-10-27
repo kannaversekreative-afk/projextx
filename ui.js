@@ -1568,6 +1568,7 @@ function webHomeHTML() {
 }
 PANELS.tawk = () => tawkPanelHTML();
 PANELS.radio = () => radioPanelHTML();
+PANELS.karma = () => karmaPanelHTML();
 PANELS.ads = () => adsPanelHTML();
 PANELS.web = () => {
   const w = UI.web;
@@ -2331,7 +2332,7 @@ const MENU_ITEMS = [
   ['hq', ICONS.hq, 'HQ'], ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
   ['progress', '🏆', 'Progress'],
-  ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'],
+  ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['tawk', '💬', 'Tawk'], ['radio', '📻', 'Robot Radio'], ['ads', '📣', 'Advertising'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
@@ -2574,6 +2575,7 @@ const A = {
   radioFav: x => { const inp = document.getElementById('radioSearch'); if (inp) UI.radioQuery = inp.value; const r = radioState(); if (r.favs[x]) delete r.favs[x]; else r.favs[x] = true; save(); renderPanel(); },
   radioSearch: () => { const inp = document.getElementById('radioSearch'); UI.radioQuery = inp ? inp.value.trim() : ''; UI.radioView = 'home'; renderPanel(); },
   radioSleep: x => { const m = parseInt(x, 10) || 0; UI.radioSleepMin = m; UI.radioSleepUntil = m > 0 ? Date.now() + m * 60000 : null; UI.radioSlept = false; renderPanel(); },
+  karmaYear: x => { UI.karmaYear = UI.karmaYear === x ? null : x; renderPanel(); },
   paperEdPrev: () => flipEdition(1),
   paperEdNext: () => flipEdition(-1),
   scrim: (x, el, e) => { if (e.target === el && (UI.modal === 'sheet' || UI.modal === 'menu')) closeModal(); },
