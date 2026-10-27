@@ -2503,7 +2503,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college') {
-    const src = UI.mgGame === 'pro' ? 'minigames/pro.html?v=20261026db' : 'minigames/college.html?v=20261026db';
+    const src = UI.mgGame === 'pro' ? 'minigames/pro.html?v=20261026di' : 'minigames/college.html?v=20261026di';
     const title = UI.mgGame === 'pro' ? 'Pro Football' : 'College Football';
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
