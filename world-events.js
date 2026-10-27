@@ -552,7 +552,31 @@ function businessWeek() {
       if (!Array.isArray(c.weekNets)) c.weekNets = [];
       c.weekNets.push(Math.round(netP)); if (c.weekNets.length > 4) c.weekNets.shift();
       mineProfit += netP * stake(a3);
-    } else aiWeek(c);
+    } else {
+      // CPU boards cost and benefit like player boards, with salaries
+      // scaled to company size (cpuBoardCost): full pay at $1B+ of
+      // value, down to a 2% floor for the smallest flagships. A CPU
+      // company has no cash balance, so the net lands on its own
+      // weekly profit average — the channel CPU health flows through
+      // (fair value, stock price, and aiWeek grow/trim decisions).
+      // The controlled block above is untouched, so player economics
+      // do not change.
+      const bc = (typeof cpuBoardCost === 'function') ? cpuBoardCost(c) : ((typeof boardWeeklyCost === 'function') ? boardWeeklyCost(c) : 0);
+      const boost = (typeof boardBoost === 'function') ? boardBoost(c) : 0;
+      const netP = w.profit - bc + Math.max(0, w.rev) * boost;
+      const delta = netP - w.profit;
+      if (delta !== 0) {
+        c.week.profit = Math.round(netP);
+        c.week.boardCost = Math.round(bc);
+        c.week.boardBoost = Math.round(Math.max(0, w.rev) * boost);
+        // companyWeek already folded the gross profit into the average
+        // at 20%; swap in the net figure at the same weight.
+        c.avg = Math.round(c.avg + delta * 0.2);
+        if (c.yearStats) c.yearStats.profit += delta;
+        if (c.hist.length) c.hist[c.hist.length - 1] = Math.round(netP);
+      }
+      aiWeek(c);
+    }
   }
   let teamProfit = 0;
   if (typeof sportWeek === 'function') { try { teamProfit = sportWeek() || 0; } catch (e) {} }

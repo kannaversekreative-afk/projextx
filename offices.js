@@ -12,10 +12,13 @@
 // more and make you more, and they want more money and more stock.
 // Offer state lives in UI.hire (not in the DOM), so a panel rerender
 // from a stepper click never loses the offer in progress.
-// CPU companies get structure here, not competition: every CPU
+// CPU companies get structure here, not just competition: every CPU
 // flagship carries an office and a full board (see cpuOfficeAndBoard
-// below). CPU competition/expansion is still later — nothing here
-// changes what CPU companies DO, only what they HAVE.
+// below), and those boards now cost and benefit like player boards —
+// with salaries scaled to company size (see cpuBoardCost), so small
+// flagships are not bankrupted by a flat executive payroll. CPU
+// competition/expansion abroad is on: profitable flagships cover
+// their home cities, then open foreign branches.
 var BOARD_ROLES = [
   { role: 'COO', salary: 180000 }, { role: 'CFO', salary: 200000 },
   { role: 'CPO', salary: 175000 }, { role: 'CMO', salary: 170000 },
@@ -67,10 +70,9 @@ function boardFull(e) { const b = ensureBoard(e); return BOARD_ROLES.every(r => 
 // executives (average rating 20 or less, the Lv 1 band). Staff and
 // stock already exist for flagships (locations start at 1 staff, all
 // flagships are listed with real shares and prices), so this fills
-// the two missing pieces. No salaries are charged and no board boost
-// is applied for CPU boards yet: businessWeek only charges/applies
-// boards for companies you control, so this changes no behavior —
-// it is structure and readiness for CPU expansion later.
+// the two missing pieces. CPU boards are charged and boosted in
+// businessWeek (same formulas as player boards, folded into the
+// company's own weekly profit average).
 function cpuOfficeAndBoard(c) {
   if (!c) return;
   if (!c.office) c.office = { day: 0, cost: 0, level: 1 };
@@ -82,6 +84,19 @@ function cpuOfficeAndBoard(c) {
   });
 }
 function boardWeeklyCost(e) { return ensureBoard(e).reduce((a, x) => a + (x.salary || 0) / 52, 0); }
+// CPU board cost, scaled to company size: full salary at $1B+ of
+// company value, scaling down linearly, with a 2% floor so even the
+// smallest flagship pays something. Flat salaries bankrupted ~60% of
+// CPU flagships in a 52-week test (profitable 153 -> 59); scaled cost
+// keeps boards real without killing small companies. Player boards
+// always pay the full salary — only CPU boards scale.
+function cpuBoardCost(e) {
+  const full = boardWeeklyCost(e);
+  if (!full) return 0;
+  const v = (typeof companyFairTotal === 'function') ? companyFairTotal(e) : 0;
+  const f = Math.min(1, Math.max(0.02, v / 1e9));
+  return full * f;
+}
 // Benefit rate: each member adds skillAvg/100 * 2% of the base
 // (company weekly revenue, or team weekly net). Higher level = higher
 // skills = higher rate, and higher salary, so the trade is real.
