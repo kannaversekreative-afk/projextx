@@ -2037,7 +2037,7 @@ PANELS.elections = () => {
     <div class="card in"><h4>📣 Campaign</h4><div class="row wrap"><button class="btn small" data-a="campaign" data-x="rally">Rally · $25K</button><button class="btn small" data-a="campaign" data-x="ads">Campaign ads · $100K</button><button class="btn small" data-a="campaign" data-x="donate">Donate · $50K</button></div><p class="muted small">Rallies raise visibility, fame, and opinion. Ads raise opinion and popularity. Donations raise popularity. A strategist makes campaigning 25% stronger.</p></div>
     <div class="card in"><h4>🗳️ Offices</h4>${rows}${office ? `<button class="btn" data-a="panel" data-x="office">OFFICE DECISIONS — ${esc(office.title)}</button>` : ''}</div>`);
 };
-PANELS.country = () => {
+const countryBody = () => {
   const cs = country(S.home), k = W.byA3[S.home], cap = W.cities[k.capital];
   const gdpSorted = W.playable.slice().sort((a, b) => b.gdp0 - a.gdp0);
   const gdpRank = gdpSorted.findIndex(c => c.a3 === S.home) + 1;
@@ -2059,7 +2059,7 @@ PANELS.country = () => {
     <p class="muted small">Business ratings live in My Companies — this panel is the country only: nation, taxes, military, rankings and history.</p>
     <h4>History</h4><div class="card in">${hist.map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No history yet — play a week and it lands here.</p>'}</div>`);
 };
-PANELS.nation = () => {
+const nationBody = () => {
   const cs = country(S.home), k = W.byA3[S.home];
   const nbs = k.nb.filter(n => W.byA3[n] && W.byA3[n].playable).map(n => {
     const rel = getRel(S.home, n), err = canAttack(n);
@@ -2256,7 +2256,7 @@ PANELS.minigames = () => {
   battleTickRender(b);
   return panelShell('Mini Games — battle grid', 'Standalone · No country, no consequences', battleHTML(b, { tile: 'miniPanelTile', tool: 'miniPanelTool', leave: 'miniPanelLeave', again: 'miniPanelAgain' }));
 };
-PANELS.military = () => {
+const militaryBody = () => {
   const cs = country(S.home);
   return panelShell('Military', `Power ${Math.round(milPower(S.home)).toLocaleString()} · Rank #${milRank(S.home)}`,
     Object.entries(MILITARY).map(([b, d]) => {
@@ -2266,6 +2266,10 @@ PANELS.military = () => {
     `<div class="card in"><h4>🛡️ Military bases</h4><p class="muted small">You start with one base. Each extra base adds +5% to your war power. You have ${facilityCount(S.home)} base${facilityCount(S.home) === 1 ? '' : 's'}.</p><button class="btn" data-a="buyBase">BUY MILITARY BASE · ${fmtMoney(baseCost(), true)}</button></div>
     <h4>Wars elsewhere</h4>${S.wars.map(w => `<div class="kv"><span>${esc(cname(w.a))} vs ${esc(cname(w.b))}</span><b>Ongoing · Front ${Math.round(w.front)}% · Troops ${Math.round(w.troopsA ?? 100)}/${Math.round(w.troopsB ?? 100)}% · Weapons ${Math.round(w.weaponsA ?? 100)}/${Math.round(w.weaponsB ?? 100)}%</b></div>`).join('') || '<p class="muted small">No wars right now.</p>'}${(S.wars || []).some(w => w.a === S.home || w.b === S.home) ? '<button class="btn wide" data-a="panel" data-x="war">OPEN ONGOING WAR</button>' : ''}`);
 };
+// Nation, Your Country and Military are one app now: Nation.
+PANELS.nation = () => nationBody() + countryBody() + militaryBody();
+PANELS.country = countryBody;
+PANELS.military = militaryBody;
 PANELS.estate = () => {
   return panelShell('My Estate', `${S.props.length} buildings · Value ${fmtMoney(propValue(), true)}`,
     `<div class="list">${S.props.map(p => {
@@ -2275,14 +2279,14 @@ PANELS.estate = () => {
 };
 PANELS.hq = PANELS.company; // HQ and My Companies are one app now.
 
-PANELS.goals = () => {
+const goalsBody = () => {
   const stage = CAREER[S.career];
   return panelShell('Daily goals', `Career: ${careerName()} · Streak ${S.daily.streak} days`,
     `<div class="stats3 box"><div><span>Level</span><b>Lv ${level()}</b></div><div><span>XP</span><b>${S.xp}</b></div><div><span>Companies controlled</span><b>${mine().length}</b></div></div>
     ${stage ? `<h4>${stage.name}</h4>${stage.goals.map((g, i) => `<div class="goal ${S.goalsDone.includes(S.career + ':' + i) ? 'done' : ''}"><span>${S.goalsDone.includes(S.career + ':' + i) ? '✓' : '○'}</span>${g.t}</div>`).join('')}` : '<p class="muted small">Legend status reached 👑</p>'}
     <h4>Daily reward</h4><div class="kv"><span>Today</span><b>${fmtMoney(dailyRewardInfo().amount, true)}</b></div><p class="muted small">Added to your cash automatically each day, no claiming needed.</p>`);
 };
-PANELS.progress = () => {
+const progressBody = () => {
   const p = ensureProgress(), sel = UI.progressSel || p.level;
   const need = p.level >= 100 ? 0 : progressXPNeeded(p.level);
   const pct = need ? Math.round(p.xp / need * 100) : 100;
@@ -2300,6 +2304,37 @@ PANELS.progress = () => {
     <h4>Rewards map — tap a level</h4><div class="row wrap">${tiles.join('')}</div>
     <div class="card in"><h4>Level ${sel}</h4><p>${selText ? esc(selText) : (sel < p.level ? 'No unlock at this level — it was a step toward the next one.' : sel === p.level ? 'Your current level.' : `Locked. ${next ? `Next unlock is Lv ${next.level}.` : ''}`)}</p></div>
     <p class="muted small">First pass — unlocks will be adjusted as the game grows.</p>`);
+};
+// Daily goals and Progress are one app now: Progress.
+PANELS.progress = () => goalsBody() + progressBody();
+PANELS.goals = goalsBody;
+// ---------- Calendar: month grid with the game's real events ----------
+const CAL_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CAL_MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const calDayNum = (y, m, d) => Math.round((Date.UTC(y, m, d) - START_MS) / DAY_MS);
+PANELS.calendar = () => {
+  const now = dateOf(S.day);
+  if (!UI.calYM) UI.calYM = { y: now.getUTCFullYear(), m: now.getUTCMonth() };
+  const { y, m } = UI.calYM;
+  const sel = (UI.calSel != null) ? UI.calSel : S.day;
+  const startWd = new Date(Date.UTC(y, m, 1)).getUTCDay();
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const evs = calendarEvents();
+  const byDay = {};
+  evs.forEach(e => { const d = dateOf(e.day); if (d.getUTCFullYear() === y && d.getUTCMonth() === m) (byDay[d.getUTCDate()] = byDay[d.getUTCDate()] || []).push(e); });
+  let cells = '';
+  for (let i = 0; i < startWd; i++) cells += `<span class="wcal-cell blank"></span>`;
+  for (let d = 1; d <= dim; d++) {
+    const num = calDayNum(y, m, d);
+    const chips = (byDay[d] || []).map(e => `<span class="wcal-chip">${esc(e.title)}</span>`).join('');
+    cells += `<button class="wcal-cell${num === S.day ? ' today' : ''}${num === sel ? ' sel' : ''}" data-a="calDay" data-x="${num}"><b>${d}</b>${chips}</button>`;
+  }
+  const selEvs = evs.filter(e => e.day === sel);
+  return panelShell('Calendar', '',
+    `<div class="wcal"><div class="wcal-head"><button class="btn" data-a="calPrev">‹</button><b>${CAL_MON[m]} ${y}</b><button class="btn" data-a="calNext">›</button><button class="btn" data-a="calToday">Today</button></div>
+    <div class="wcal-grid wcal-wd">${CAL_WD.map(w => `<span>${w[0]}</span>`).join('')}</div>
+    <div class="wcal-grid">${cells}</div>
+    <div class="wcal-sel"><h4>${fmtDate(sel)}</h4>${selEvs.length ? selEvs.map(e => `<div class="card in"><b>${esc(e.title)}</b><p class="muted small">${esc(e.desc || '')}</p></div>`).join('') : '<p class="muted small">Nothing on this day.</p>'}</div></div>`);
 };
 PANELS.inbox = () => {
   S.mail.forEach(m => { m.read = true; });
@@ -2877,7 +2912,7 @@ const MENU_ITEMS = [
   ['mars', ICONS.mars, 'Mars'],
   ['goals', ICONS.goals, 'Daily goals'],
   ['progress', '🏆', 'Progress'],
-  ['tawk', '💬', 'Tawk'],
+  ['tawk', '💬', 'Tawk'], ['calendar', '📅', 'Calendar'],
   ['cabinet', '👥', 'Advisors'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['markets', ICONS.markets, 'Trade'],
@@ -2894,29 +2929,36 @@ function moreSheet() {
 // (personal money), Business (company money), Country (office and
 // nation), Apps (everything else), Settings. Each money page opens
 // with its own $ tile, which jumps straight to that account in Bank.
+// Two home pages: real stuff (the game) and the rest (chat, calendar,
+// settings). The money tiles ride on the real-stuff page.
 const PHONE_PAGES = [
-  { name: 'Financial', wallet: 'private', apps: ['karma', 'crypto'] },
-  { name: 'Business', wallet: 'company', apps: ['company', 'leader', 'goals', 'progress', 'mars'] },
-  { name: 'Country', wallet: 'country', apps: ['country', 'nation', 'military', 'elections', 'cabinet', 'leaderboard'] },
-  { name: 'Apps', wallet: null, apps: ['tawk', 'newsapp', 'sports', 'radio', 'airport'] },
-  { name: 'Settings', wallet: null, apps: ['settings', 'help'] },
+  { name: 'Real stuff', wallets: ['private', 'company', 'country'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport'] },
+  { name: 'More', wallets: [], apps: ['tawk', 'calendar', 'settings', 'help'] },
 ];
 function phoneHTML() {
   // The phone frame: home grid, or one app on its screen. No X button
   // anywhere - tapping outside the phone goes back (to the grid from
   // an app, to the map from the grid), and Apps goes to the grid.
-  // Top row, like a real phone: date top-left, notch centred, nothing
-  // top-right. No mail indicator here (mail still lives in the Web app).
-  const toprow = `<div class="phone-toprow"><span>${fmtDate(S.day)}</span><div class="phone-notch"></div><span></span></div>`;
+  // Top row, like a real phone: just the notch, centred. No date up
+  // here — the date lives on the Calendar tile instead.
+  const toprow = `<div class="phone-toprow"><span></span><div class="phone-notch"></div><span></span></div>`;
   // Home-screen layout: 4-across icon tiles, pages with dots, and a
   // bottom bar (dock) pinned at the bottom of the grid AND of every
   // app. The dock's first, bottom-left slot is Home — tapping it
   // returns to the grid, so apps need no back button in their chrome.
-  // Apps sit on category pages (Financial, Business, Country, Apps,
-  // Settings); the dock holds only Home, Bank and Trade.
+  // Apps sit on two pages (real stuff, and the rest); the dock holds
+  // only Home, Bank and Trade.
   const TILE_COLORS = ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#1f5fd0', '#8a5a2b', '#334155', '#b45309', '#0f766e'];
   const tileBg = x => { let h = 0; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) >>> 0; return TILE_COLORS[h % TILE_COLORS.length]; };
-  const appBtn = ([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic" style="background:${tileBg(x)}">${ic}</span><span class="phone-app-label">${t}</span></button>`;
+  const appBtn = ([x, ic, t]) => {
+    // Calendar tile: live date on the tile itself, like a real phone —
+    // weekday in red on top, day number big below. No need to open it.
+    if (x === 'calendar') {
+      const d = dateOf(S.day), wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+      return `<button class="phone-app" data-a="panel" data-x="calendar"><span class="phone-app-ic phone-app-cal" style="background:#fff"><b class="cal-wd">${wd}</b><b class="cal-day">${d.getUTCDate()}</b></span><span class="phone-app-label">Calendar</span></button>`;
+    }
+    return `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic" style="background:${tileBg(x)}">${ic}</span><span class="phone-app-label">${t}</span></button>`;
+  };
   const dockKeys = ['bank', 'markets'];
   const dock = MENU_ITEMS.filter(m => dockKeys.includes(m[0])).sort((a, b) => dockKeys.indexOf(a[0]) - dockKeys.indexOf(b[0]));
   const dockHTML = () => `<div class="phone-dock"><button class="phone-app" data-a="phoneHome"><span class="phone-app-ic" style="background:#334155">🏠</span><span class="phone-app-label">Home</span></button>${dock.map(appBtn).join('')}</div>`;
@@ -2925,9 +2967,10 @@ function phoneHTML() {
     const page = Math.min(UI.phonePage || 0, pages - 1);
     const pdef = PHONE_PAGES[page];
     const apps = pdef.apps.map(k => MENU_ITEMS.find(m => m[0] === k)).filter(Boolean);
-    const dollar = pdef.wallet ? `<button class="phone-app" data-a="bankWallet" data-x="${pdef.wallet}"><span class="phone-app-ic" style="background:#12a150">$</span><span class="phone-app-label">${pdef.wallet === 'private' ? 'Personal $' : pdef.wallet === 'company' ? 'Business $' : 'Country $'}</span></button>` : '';
+    const walletLabel = w => w === 'private' ? 'Personal $' : w === 'company' ? 'Business $' : 'Country $';
+    const dollars = (pdef.wallets || []).map(w => `<button class="phone-app" data-a="bankWallet" data-x="${w}"><span class="phone-app-ic" style="background:#12a150">$</span><span class="phone-app-label">${walletLabel(w)}</span></button>`).join('');
     const dots = `<div class="phone-dots">${PHONE_PAGES.map((p, i) => `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="${p.name}"></button>`).join('')}</div>`;
-    return `${toprow}<div class="phone-grid">${dollar}${apps.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
+    return `${toprow}<div class="phone-grid">${dollars}${apps.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
   }
   return `${toprow}<div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
 }
@@ -3395,6 +3438,11 @@ const A = {
   mgrSalary: x => { const [id, d] = x.split('|'); act(() => adjustManagerSalary(id, +d), 'Manager salary changed'); },
   fireMgr: x => act(() => fireStoreManager(x), 'New manager hired'),
   progressSel: x => { UI.progressSel = +x; renderPanel(); },
+  calShift: dm => { const now = dateOf(S.day), cur = UI.calYM || { y: now.getUTCFullYear(), m: now.getUTCMonth() }; const d = new Date(Date.UTC(cur.y, cur.m + dm, 1)); UI.calYM = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; renderPhoneApp(); },
+  calPrev: () => A.calShift(-1),
+  calNext: () => A.calShift(1),
+  calToday: () => { const now = dateOf(S.day); UI.calYM = { y: now.getUTCFullYear(), m: now.getUTCMonth() }; UI.calSel = S.day; renderPhoneApp(); },
+  calDay: x => { UI.calSel = +x; renderPhoneApp(); },
   storeDev: x => { const [id, idx] = x.split('|'); act(() => developProduct(id, +idx), 'Product developed'); },
   storeUp: x => act(() => upgradeStore(x), 'Store upgraded'),
   storeIconOpen: x => { openModal(`<h2>Pick a logo</h2><p class="muted">Tap a logo for this business.</p><div class="row wrap">${STORE_LOGOS.map(lg => `<button class="btn" style="padding:6px" data-a="storeIconDo" data-x="${x}|logo:${lg}"><img src="${(typeof STORE_LOGO_DATA !== 'undefined' && STORE_LOGO_DATA[lg]) || ('store-logos/' + lg + '.png')}" alt="${lg}" style="width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px"><br><small>${(STORE_TYPES[lg] || {}).name || lg}</small></button>`).join('')}</div><p class="muted small">More icons</p><div class="row wrap">${STORE_ICONS.map(ic => `<button class="btn" style="font-size:22px;padding:8px 10px" data-a="storeIconDo" data-x="${x}|${ic}">${ic}</button>`).join('')}</div>`, 'sheet'); },

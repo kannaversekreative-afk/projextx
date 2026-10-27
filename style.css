@@ -810,6 +810,25 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .phone-grid { background: linear-gradient(180deg, #b9bec6, #878d96 60%, #6f747c); padding: 12px 12px 8px; gap: 20px 8px; }
 .phone-app-ic { width: 64px; height: 64px; border-radius: 18px; font-size: 30px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
 .phone-app-label { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.65); }
+/* Calendar tile: live date on the tile, like a real phone. */
+.phone-app-ic.phone-app-cal { flex-direction: column; gap: 0; }
+.phone-app-cal .cal-wd { color: #e5484d; font-size: 12px; font-weight: 800; line-height: 1.2; }
+.phone-app-cal .cal-day { color: #111; font-size: 30px; font-weight: 800; line-height: 1; }
+/* Calendar app: dark month grid. */
+.phone-card.app-calendar { background: #101418; color: #fff; }
+.phone-card.app-calendar .panel-body { background: #101418; }
+.wcal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.wcal-head b { flex: 1; font-size: 18px; }
+.wcal-head .btn { background: #1e293b; color: #fff; }
+.phone-card.app-calendar .muted { color: #94a3b8; }
+.wcal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.wcal-wd { text-align: center; color: #8b949e; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.wcal-cell { background: #1e293b; border: none; color: #fff; border-radius: 10px; min-height: 52px; padding: 4px 2px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wcal-cell.blank { background: transparent; }
+.wcal-cell.today b { background: #2f7cf6; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+.wcal-cell.sel { outline: 2px solid #2f7cf6; }
+.wcal-chip { font-size: 8px; background: #2f7cf6; color: #fff; border-radius: 4px; padding: 1px 3px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcal-sel { margin-top: 14px; }
 .phone-dots { display: flex; justify-content: center; gap: 8px; padding: 8px 0 4px; }
 .phone-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.45); border: none; padding: 0; cursor: pointer; }
 .phone-dot.on { background: #fff; }
