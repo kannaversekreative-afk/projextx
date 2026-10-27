@@ -620,6 +620,7 @@ function businessWeek() {
   if (typeof loansWeek === 'function') { try { loansWeek(); } catch (e) {} }
   if (typeof personWeek === 'function') { try { personWeek(); } catch (e) {} }
   if (typeof flowDominanceCheck === 'function') { try { flowDominanceCheck(); } catch (e) {} }
+  if (typeof etfWeek === 'function') { try { etfWeek(); } catch (e) {} }
   if (typeof marsWeek === 'function') { try { marsWeek(); } catch (e) {} }
   if (typeof casinoWeek === 'function') { try { casinoWeek(); } catch (e) {} }
   S.stats.bestWeek = Math.max(S.stats.bestWeek, profit);

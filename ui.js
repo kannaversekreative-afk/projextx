@@ -1486,6 +1486,7 @@ PANELS.markets = () => {
   const rows = marketRows();
   return panelShell('Markets', `${rows.length} companies · World Index ${S.idx.v.toFixed(0)}${marketOpen() ? '' : ' · Markets closed (weekend)'}`,
     `<input id="msearch" class="search" placeholder="Search stocks, companies, countries" value="${esc(UI.q)}" autocomplete="off">
+    <button class="btn small" data-a="panel" data-x="etf">ETFs — baskets of core businesses</button>
     <div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
     <button class="btn small" data-a="starFilter">${UI.starOnly ? '★ Showing starred only' : '☆ Star filter'}</button>
     <div class="list" id="mlist">${rows.slice(0, 120).map(c => {
@@ -1819,6 +1820,23 @@ PANELS.analyst = () => {
     <div class="card in"><h4>💲 Price</h4><div class="row wrap">${btn('price', 0.8, 'Cut to 80% — more customers, less per sale')}${btn('price', 1, 'Normal 100%')}${btn('price', 1.25, 'Raise to 125% — more per sale, fewer customers')}</div><p class="muted small">Now: ${Math.round(set.price * 100)}%</p></div>
     <div class="card in"><h4>⭐ Quality</h4><div class="row wrap">${btn('quality', 2, 'Lower to 2★ — cheaper, worse satisfaction')}${btn('quality', 3, 'Normal 3★')}${btn('quality', 4, 'Raise to 4★ — better, costs more')}</div><p class="muted small">Now: ${set.quality}★</p></div>
     <div class="card in"><h4>👷 Wage</h4><div class="row wrap">${btn('wage', 0.8, 'Cut to 80% — cheaper, staff unhappy')}${btn('wage', 1, 'Normal 100%')}${btn('wage', 1.25, 'Raise to 125% — happier staff, higher wages')}</div><p class="muted small">Now: ${Math.round(set.wage * 100)}%</p></div>
+    <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
+};
+PANELS.etf = () => {
+  if (!S.etfs) S.etfs = [];
+  const rows = S.etfs.map(e => {
+    const p = etfPrice(e), h = (S.etfHoldings || {})[e.id];
+    const mgr = e.manager === 'player' ? 'You' : (S.co[e.manager] ? S.co[e.manager].name : e.manager);
+    return `<div class="card in"><div class="kv"><span><b>${esc(e.sym)}</b> · ${esc(e.name)}</span><b>${fmtMoney(p)}</b></div>
+    <div class="kv"><span>Manager</span><b>${esc(mgr)} · ${(ETF_FEE * 100).toFixed(2)}%/yr fee</b></div>
+    <div class="kv"><span>Basket</span><b>${e.basket.length} core businesses · Since $100: ${p >= 100 ? '+' : ''}${((p / 100 - 1) * 100).toFixed(1)}%</b></div>
+    ${h ? `<div class="kv"><span>Your holding</span><b>${h.qty} shares · Cost ${fmtMoney(h.cost, true)} · P&amp;L ${fmtMoney((p - h.cost) * h.qty, true)}</b></div>` : ''}
+    <div class="row wrap"><button class="btn small" data-a="etfBuy" data-x="${e.id}|10">Buy 10</button><button class="btn small" data-a="etfBuy" data-x="${e.id}|100">Buy 100</button><button class="btn small" data-a="etfSell" data-x="${e.id}|10">Sell 10</button><button class="btn small" data-a="etfSell" data-x="${e.id}|100">Sell 100</button></div></div>`;
+  }).join('');
+  return panelShell('ETFs', 'Baskets of core businesses, managed by finance companies — or by you. IPO means listed, not free cash: the manager earns the fee.',
+    `<div class="card in"><h4>CREATE AN ETF — IPO IT</h4><p class="muted small">Pick a basket. You become the manager and earn the 0.50%/yr fee as a price drag — no cash windfall, because you do not own the basket. Finance companies do the same, and CPU finance companies launch their own over time.</p>
+    <div class="row wrap">${ETF_GROUPS.map(g => `<button class="btn small" data-a="etfCreate" data-x="${g.id}">${esc(g.name)} ETF</button>`).join('')}</div></div>
+    ${rows || '<p class="muted small">No ETFs yet. Create one above, or wait for a finance company to launch one.</p>'}
     <button class="btn wide" data-a="closePanel">RETURN TO MAP</button>`);
 };
 // World leaders, with the exact names Tawk uses (seeded per country),
@@ -3097,6 +3115,9 @@ const A = {
   bankWallet: x => { UI.bankAcctSel = x === 'private' ? 'personal' : x === 'company' ? 'business' : x; UI.bankView = 'account'; openPanel('bank'); },
   bankAcct: x => { UI.bankAcctSel = x; UI.bankView = 'account'; renderPanel(); },
   bankCity: x => { UI.bankCity = +x; UI.bankView = 'cityloan'; renderPanel(); },
+  etfCreate: x => act(() => createETF(x, 'player'), 'ETF created and listed!'),
+  etfBuy: x => { const [id, q] = x.split('|'); act(() => buyETF(id, +q), 'ETF bought'); },
+  etfSell: x => { const [id, q] = x.split('|'); act(() => sellETF(id, +q), 'ETF sold'); },
   takeCityLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeCityLoan(UI.bankCity, amt, mo), 'Loan taken'); },
   walletSel: x => { UI.wallet = x; document.querySelectorAll('.wallet-pick').forEach(el => { el.querySelectorAll('.wallet-opt').forEach(b => b.classList.toggle('on', b.dataset.x === x)); const cc = el.querySelector('.wallet-cash'); if (cc) cc.textContent = 'Available Cash: ' + fmtMoney(walletCash(x)); }); save(); },
   bankJob: x => { act(() => switchJob(x), 'New job'); },
