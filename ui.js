@@ -1783,25 +1783,45 @@ PANELS.profile = () => {
     <p class="muted small">Companies, stocks and business money live in Trade, My Companies and Offices — not here.</p>
     <div class="row wrap"><button class="btn" data-a="panel" data-x="cabinet">ADVISORS (${P.cabinet.length}/10)</button><button class="btn" data-a="panel" data-x="elections">ELECTIONS</button></div></div>`);
 };
+// World leaders, with the exact names Tawk uses (seeded per country),
+// cached — the names are deterministic per a3, so the cache is valid
+// across games.
+let _worldLeaders = null;
+function worldLeaders() {
+  if (_worldLeaders) return _worldLeaders;
+  try { _worldLeaders = tawkAccounts().filter(a => a.type === 'leader').map(a => ({ id: a.id, name: a.name, title: a.title, a3: a.a3 })); }
+  catch (e) { _worldLeaders = []; }
+  return _worldLeaders;
+}
 PANELS.cabinet = () => {
-  // Advisors, laid out like a contacts list: your card on top, then
-  // advisors grouped A-Z with a letter rail on the right, a search
-  // row, and + to add one. The panel key stays 'cabinet' (saves store
-  // advisors under S.person.cabinet) — only the name changed.
+  // Advisors, laid out like the reference contacts screen: centered
+  // title, My Card, your advisors separated on top, then every world
+  // leader A-Z with a letter rail, and a bottom search pill + add
+  // button. The panel key stays 'cabinet' (saves store advisors under
+  // S.person.cabinet) — this is Advisors, not a new Contacts app.
   const P = ensurePerson();
-  const q = (UI.advQuery || '').toLowerCase();
-  const list = P.cabinet.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const shown = q ? list.filter(ad => ad.name.toLowerCase().includes(q) || CAB_TYPES[ad.type].name.toLowerCase().includes(q)) : list;
-  const groups = {};
-  shown.forEach(ad => { const L = /^[A-Z]$/i.test(ad.name[0] || '') ? ad.name[0].toUpperCase() : '#'; (groups[L] = groups[L] || []).push(ad); });
-  const letters = Object.keys(groups).sort((a, b) => (a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b)));
-  const avCol = n => { let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return ['#2f7cf6', '#e5484d', '#12a150', '#7c4dff', '#e0812b', '#0ea5b7', '#d63384', '#b45309'][h % 8]; };
-  const row = ad => {
+  const q = (UI.advQuery || '').toLowerCase().trim();
+  const cmp = (a, b) => { const x = a.name.toLowerCase(), y = b.name.toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; };
+  const advisors = P.cabinet.slice().sort(cmp);
+  const shownAd = q ? advisors.filter(ad => ad.name.toLowerCase().includes(q) || CAB_TYPES[ad.type].name.toLowerCase().includes(q)) : advisors;
+  const leaders = worldLeaders().slice().sort(cmp);
+  const shownLd = q ? leaders.filter(l => l.name.toLowerCase().includes(q) || cname(l.a3).toLowerCase().includes(q)) : leaders;
+  const gLd = {};
+  shownLd.forEach(l => { const L = /^[A-Z]$/i.test(l.name[0] || '') ? l.name[0].toUpperCase() : '#'; (gLd[L] = gLd[L] || []).push(l); });
+  const rail = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
+  const adRow = ad => {
     const open = UI.advOpen === ad.id;
     const detail = open ? `<div class="adv-detail"><span>${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐ developable' : ''}</span><span><button class="btn small" data-a="cabTip" data-x="${ad.id}">BUY TIP · ${fmtMoney(tipStake(), true)}</button> <button class="btn small" data-a="cabFire" data-x="${ad.id}">FIRE</button></span></div>` : '';
-    return `<div class="adv-row"><button class="adv-person" data-a="advOpen" data-x="${ad.id}"><span class="adv-av" style="background:${avCol(ad.name)}">${esc((ad.name[0] || '?').toUpperCase())}</span><span class="adv-nm"><b>${esc(ad.name)}</b><small>${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐' : ''}</small></span></button>${detail}</div>`;
+    return `<div class="adv-row"><button class="adv-person" data-a="advOpen" data-x="${ad.id}"><span class="adv-av">${esc((ad.name[0] || '?').toUpperCase())}</span><span class="adv-nm"><b>${esc(ad.name)}</b><small>${esc(CAB_TYPES[ad.type].name)} · Rating ${ad.rating}${ad.star ? ' ⭐' : ''}</small></span></button>${detail}</div>`;
   };
-  const sections = letters.map(L => `<div class="adv-sec" id="adv-sec-${L}"><div class="adv-letter">${L}</div>${groups[L].map(row).join('')}</div>`).join('');
+  const ldRow = l => {
+    const open = UI.advOpen === l.id;
+    const k = W.byA3[l.a3] || {};
+    const flag = (typeof flagEmoji === 'function' && k.a2) ? flagEmoji(k.a2) : '';
+    const detail = open ? `<div class="adv-detail"><span>${flag} ${esc(l.title)} of ${esc(cname(l.a3))}</span></div>` : '';
+    return `<div class="adv-row"><button class="adv-person" data-a="advOpen" data-x="${l.id}"><span class="adv-av">${esc((l.name[0] || '?').toUpperCase())}</span><span class="adv-nm"><b>${esc(l.name)}</b></span></button>${detail}</div>`;
+  };
+  const ldSections = rail.filter(L => gLd[L]).map(L => `<div class="adv-sec" id="adv-sec-${L}"><div class="adv-letter">${L}</div>${gLd[L].map(ldRow).join('')}</div>`).join('');
   let hire = '';
   if (UI.cabHire) {
     const type = UI.cabHire.type;
@@ -1812,13 +1832,13 @@ PANELS.cabinet = () => {
     return `<div class="kv"><span>${esc(CAB_TYPES[t].name)} · ${fmtMoney(CAB_TYPES[t].cost, true)}</span><b><button class="btn small" data-a="cabType" data-x="${t}">ADD</button></b></div>`;
   }).join('');
   const add = UI.advAdd ? `<div class="card in"><h4>Add an advisor</h4>${types}</div>` : '';
+  const myCard = q ? '' : `<button class="adv-person adv-mycard" data-a="panel" data-x="profile"><span class="adv-av">👤</span><span class="adv-nm"><b>My Card</b><small>${esc(S.you.name)} · ${esc(personTitle())}</small></span></button>`;
+  const adSec = shownAd.length ? `<div class="adv-sec"><div class="adv-letter">Advisors</div>${shownAd.map(adRow).join('')}</div>` : '';
+  const empty = (!shownAd.length && !shownLd.length) ? '<p class="muted small">No contacts match.</p>' : '';
   return panelShell('Advisors', `Your advisors — ${P.cabinet.length}/10 seats.`,
-    `<div class="adv"><button class="adv-person adv-mycard" data-a="panel" data-x="profile"><span class="adv-av" style="background:#334155">${esc(((S.you && S.you.name) || 'Y')[0].toUpperCase())}</span><span class="adv-nm"><b>My Card</b><small>${esc(S.you.name)} · ${esc(personTitle())}</small></span></button>
-    <div class="adv-search"><input id="advSearch" placeholder="Search" value="${esc(UI.advQuery || '')}"><button class="btn" data-a="advSearch">Search</button>${q ? `<button class="btn" data-a="advClear">Clear</button>` : ''}<button class="btn" data-a="advAdd">＋</button></div>
-    <p class="muted small">Advisors boost you weekly and sell inside tips for money. Tips can be wrong, and getting caught means a fine, an arrest, or impeachment.</p>
-    ${hire}${add}
-    <div class="adv-wrap"><div class="adv-list">${sections || '<p class="muted small">No advisors yet. Family and friends are free — tap ＋ to add one.</p>'}</div><div class="adv-index">${letters.map(L => `<button data-a="advJump" data-x="${L}">${L}</button>`).join('')}</div></div></div>`);
+    `<div class="adv"><div class="adv-title">Advisors</div>${myCard}${hire}${add}${adSec}<div class="adv-wrap"><div class="adv-list">${ldSections || empty}</div><div class="adv-index">${rail.map(L => `<button data-a="advJump" data-x="${L}">${L}</button>`).join('')}</div></div><div class="adv-bottombar"><div class="adv-searchpill"><span class="adv-ic">🔍</span><input id="advSearch" placeholder="Search" value="${esc(UI.advQuery || '')}" autocomplete="off"><button class="adv-ic" data-a="advMic" title="Search">🎙️</button></div><button class="adv-addbtn" data-a="advAdd">＋</button></div></div>`);
 };
+
 PANELS.elections = () => {
   const P = ensurePerson();
   const home = W.byA3[S.home];
@@ -3274,7 +3294,8 @@ const A = {
   advClear: () => { UI.advQuery = ''; renderPanel(); },
   advAdd: () => { UI.advAdd = !UI.advAdd; renderPanel(); },
   advOpen: x => { UI.advOpen = UI.advOpen === x ? null : x; renderPanel(); },
-  advJump: x => { const el = document.getElementById('adv-sec-' + x); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); },
+  advJump: x => { const rail = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split(''); let i = rail.indexOf(x); if (i < 0) i = 0; let el = null; while (i < rail.length && !el) { el = document.getElementById('adv-sec-' + rail[i]); i++; } if (!el) el = document.getElementById('adv-sec-' + rail[0]); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); },
+  advMic: () => { const el = document.querySelector('#advSearch'); if (el) el.focus(); },
   cabTip: x => act(() => buyCabTip(x), 'Tip bought — it pays off next week'),
   runOffice: x => act(() => runOffice(x), 'Election won!'),
   electVote: x => {
@@ -3409,6 +3430,7 @@ function onInput(e) {
     else if (UI.panel === 'search') { const pos = t.selectionStart; renderPanel(); const n = $('msearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }
     return;
   }
+  if (t.id === 'advSearch') { UI.advQuery = t.value; const pos = t.selectionStart; renderPanel(); const n = $('advSearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
   if (t.id === 'wsearch') { UI.web.q = t.value; const pos = t.selectionStart; renderPanel(); const n = $('wsearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
   // Crypto inputs are CONTROLLED state: the value is stored here on
   // every keystroke and the panel renders FROM it, so a price refresh

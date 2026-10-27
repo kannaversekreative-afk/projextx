@@ -863,21 +863,27 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .phone-card.app-cabinet { background: #000; color: #fff; }
 .phone-card.app-cabinet .panel-body { background: #000; }
 .adv { background: #000; color: #fff; }
-.adv-mycard { border-bottom: 1px solid #222; }
-.adv-search { position: sticky; top: 0; z-index: 5; background: #000; display: flex; gap: 8px; padding: 10px 0; }
-.adv-search input { flex: 1; min-width: 0; background: #1c1c1e; border: 0; border-radius: 10px; color: #fff; padding: 10px 12px; font-size: 15px; }
+.adv-title { text-align: center; font-size: 30px; font-weight: 700; letter-spacing: -0.5px; padding: 6px 0 18px; }
 .adv-wrap { display: flex; gap: 6px; align-items: flex-start; }
-.adv-list { flex: 1; min-width: 0; }
-.adv-index { position: sticky; top: 64px; display: flex; flex-direction: column; gap: 1px; flex: none; }
-.adv-index button { background: none; border: 0; color: #2f7cf6; font-size: 11px; font-weight: 700; padding: 1px 3px; cursor: pointer; }
-.adv-letter { color: #8b949e; font-size: 13px; font-weight: 700; padding: 14px 0 4px; }
-.adv-row { border-bottom: 1px solid #222; }
-.adv-person { display: flex; gap: 12px; align-items: center; width: 100%; background: none; border: 0; color: #fff; padding: 10px 0; text-align: left; cursor: pointer; }
-.adv-av { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; flex: none; color: #fff; }
+.adv-list { flex: 1; min-width: 0; padding-bottom: 76px; }
+.adv-index { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 1px; flex: none; }
+.adv-index button { background: none; border: 0; color: #0a84ff; font-size: 11px; font-weight: 700; padding: 1px 3px; cursor: pointer; }
+.adv-letter { color: #8e8e93; font-size: 13px; font-weight: 700; padding: 16px 0 4px; border-bottom: 1px solid #26262a; }
+.adv-row { position: relative; }
+.adv-row::after { content: ''; position: absolute; left: 68px; right: 0; bottom: 0; height: 1px; background: #26262a; }
+.adv-person { display: flex; gap: 12px; align-items: center; width: 100%; background: none; border: 0; color: #fff; padding: 8px 0; text-align: left; cursor: pointer; }
+.adv-av { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; flex: none; color: #fff; background: linear-gradient(180deg, #4a4a64, #2c2c40); }
 .adv-nm { display: flex; flex-direction: column; min-width: 0; }
-.adv-nm b { font-size: 17px; }
-.adv-nm small { color: #8b949e; font-size: 13px; }
-.adv-detail { display: flex; justify-content: space-between; gap: 8px; padding: 0 0 10px 56px; flex-wrap: wrap; color: #c9d1d9; font-size: 13px; }
+.adv-nm b { font-size: 20px; font-weight: 600; }
+.adv-nm small { color: #8e8e93; font-size: 13px; }
+.adv-mycard .adv-nm b { color: #8e8e93; font-weight: 500; }
+.adv-detail { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0 10px 68px; flex-wrap: wrap; color: #c9d1d9; font-size: 13px; }
+.adv-bottombar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; align-items: center; padding: 12px 0 6px; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 35%, #000 100%); }
+.adv-searchpill { flex: 1; display: flex; align-items: center; gap: 8px; background: #1c1c1e; border-radius: 22px; padding: 0 12px; min-width: 0; }
+.adv-searchpill input { flex: 1; min-width: 0; background: none; border: 0; color: #fff; font-size: 17px; padding: 11px 0; outline: none; }
+.adv-searchpill input::placeholder { color: #8e8e93; }
+.adv-searchpill .adv-ic { color: #8e8e93; font-size: 18px; flex: none; background: none; border: 0; cursor: pointer; padding: 0; line-height: 1; }
+.adv-addbtn { width: 44px; height: 44px; border-radius: 50%; background: #1c1c1e; color: #fff; border: 0; font-size: 26px; line-height: 1; flex: none; cursor: pointer; }
 
 /* Company/Private wallet picker (purchase sheets, trade boxes). */
 .wallet-pick{margin:10px 0}
