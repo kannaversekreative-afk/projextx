@@ -673,6 +673,14 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
    must not become a second scroller, or sticky stops working. */
 .phone-card { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: #fff; border-radius: 28px; }
 .phone-card .panel-body { overflow: visible; }
+/* Dark apps fill the whole rounded card: no white ring around them.
+   The panel body's padding area takes the app's own background, and
+   the app's inner corners go square so the card's rounding clips it. */
+.phone-card.app-tawk, .phone-card.app-newsapp { background: #000; }
+.phone-card.app-radio { background: #191d27; }
+.phone-card.app-tawk .panel-body, .phone-card.app-newsapp .panel-body { background: #000; }
+.phone-card.app-radio .panel-body { background: #191d27; }
+.phone-card.app-tawk .tawk, .phone-card.app-radio .rradio, .phone-card.app-newsapp .wnews { border-radius: 0; }
 .phone-card .tawk, .phone-card .rradio { overflow: visible; border-radius: 0; }
 .tawk-head { position: sticky; top: 0; z-index: 5; background: #000; }
 .phone-card .tawk-nav, .phone-card .rr-nav, .phone-card .wnews-nav { position: sticky; bottom: 0; z-index: 5; }

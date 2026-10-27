@@ -2422,13 +2422,13 @@ function phoneHTML() {
   // anywhere - tapping outside the phone goes back (to the grid from
   // an app, to the map from the grid), and Apps goes to the grid.
   const unread = (S.mail || []).filter(m => !m.read).length;
-  const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span><span>${fmtMoney(S.cash)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
+  const status = `<div class="phone-status"><span>${fmtDate(S.day)}</span>${unread ? `<span>\u2709\ufe0f ${unread}</span>` : ''}</div>`;
   if (!UI.phoneApp) {
     const apps = MENU_ITEMS.map(([x, ic, t]) => `<button class="phone-app" data-a="panel" data-x="${x}"><span class="phone-app-ic">${ic}</span><span class="phone-app-label">${t}</span></button>`).join('');
     return `<div class="phone-notch"></div>${status}<div class="phone-grid">${apps}</div>`;
   }
   const entry = MENU_ITEMS.find(m => m[0] === UI.phoneApp);
-  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><button data-a="phoneBack">\u2190 Apps</button><b>${esc(entry ? entry[2] : UI.phoneApp)}</b><span></span></div><div id="phoneCard" class="phone-card" data-stop></div>`;
+  return `<div class="phone-notch"></div>${status}<div class="phone-appbar"><button data-a="phoneBack">\u2190 Apps</button><b>${esc(entry ? entry[2] : UI.phoneApp)}</b><span></span></div><div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>`;
 }
 function openMenuPopup() {
   // The phone: every menu item is an app on a home screen. Tapping
