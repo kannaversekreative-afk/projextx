@@ -11,21 +11,20 @@ const SPORT_LEAGUES = [
     positions: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'] },
   { id: 'base', name: 'World Baseball League', short: 'Baseball', icon: '⚾',
     positions: ['SP', 'RP', 'CP', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] },
-  { id: 'basket', name: 'World Basketball League', short: 'Basketball', icon: '🏀',
-    positions: ['PG', 'SG', 'SF', 'PF', 'C'] },
 ];
-// Country clubs for the football + baseball leagues: 6 teams, country + mascot
-// (Japan Fighters / USA Eagles style). Same clubs in both leagues, so a club
-// is recognisable in either sport. Basketball keeps the old city teams.
-// The 6th club is USA (the example given); swap it for Japan in one word if
-// wanted. New games only for the new leagues; see ensureSports migration.
+// Country clubs for the football + baseball leagues: 6 teams, country + mascot.
+// Same clubs in both leagues, so a club is recognisable in either sport.
+// Basketball was removed (2026-10-27 order). Names picked by the assistant:
+// Egypt Eagles and USA Fighters are his examples; the rest follow the same
+// country + classic-mascot pattern. New games only for the new leagues;
+// see ensureSports migration (owned saves keep their old leagues).
 const COUNTRY_CLUBS = [
   { a3: 'ZAF', country: 'South Africa', mascot: 'Lions', abbr: 'ZAF', c1: '#007A4D', c2: '#FFB612' },
-  { a3: 'EGY', country: 'Egypt', mascot: 'Pharaohs', abbr: 'EGY', c1: '#CE1126', c2: '#C09300' },
+  { a3: 'EGY', country: 'Egypt', mascot: 'Eagles', abbr: 'EGY', c1: '#CE1126', c2: '#C09300' },
   { a3: 'IND', country: 'India', mascot: 'Tigers', abbr: 'IND', c1: '#FF9933', c2: '#000080' },
-  { a3: 'SGP', country: 'Singapore', mascot: 'Merlions', abbr: 'SGP', c1: '#ED2939', c2: '#FFFFFF' },
-  { a3: 'TUR', country: 'Turkey', mascot: 'Stars', abbr: 'TUR', c1: '#E30A17', c2: '#FFFFFF' },
-  { a3: 'USA', country: 'USA', mascot: 'Eagles', abbr: 'USA', c1: '#0A3161', c2: '#FFFFFF' },
+  { a3: 'SGP', country: 'Singapore', mascot: 'Sharks', abbr: 'SGP', c1: '#ED2939', c2: '#FFFFFF' },
+  { a3: 'TUR', country: 'Turkey', mascot: 'Wolves', abbr: 'TUR', c1: '#E30A17', c2: '#FFFFFF' },
+  { a3: 'USA', country: 'USA', mascot: 'Fighters', abbr: 'USA', c1: '#0A3161', c2: '#FFFFFF' },
 ];
 // Shared team identities with the Mini Games (baseball minigame uses the same
 // 30 names, abbreviations, colours and shield logos). The two games are NOT
@@ -145,7 +144,9 @@ function ensureSports() {
   }
   if (!S.sports.leagues) S.sports.leagues = [];
   const baseLg = S.sports.leagues.find(l => l.id === 'base');
-  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== 6 || !baseLg.teams[0].country;
+  const wantNames = COUNTRY_CLUBS.map(c => c.country + ' ' + c.mascot).join('|');
+  const baseNames = baseLg ? baseLg.teams.map(t => t.name).join('|') : '';
+  const needsNewLeagues = !S.sports.leagues.some(l => l.id === 'foot') || !baseLg || baseLg.teams.length !== 6 || !baseLg.teams[0].country || S.sports.leagues.some(l => l.id === 'basket') || baseNames !== wantNames;
   const anyOwned = S.sports.leagues.some(lg => lg.teams.some(tm => tm.owner === 'you'));
   if (needsNewLeagues && !anyOwned) { S.sports = null; return ensureSports(); }
   S.sports.leagues.forEach(lg => {
@@ -278,8 +279,8 @@ function sportSeason() {
       // Weekly cash is already paid in sportWeek. Do not pay the annual net again here.
     });
     const sorted = [...lg.teams].sort((a, b) => b.wins - a.wins);
-    const semi1 = sportPlaySeries(sorted[0], sorted[3], 2), semi2 = sportPlaySeries(sorted[1], sorted[2], 2);
-    const champ = sportPlaySeries(semi1, semi2, 2);
+    const semi1 = sportPlaySeries(sorted[0], sorted[3], 4), semi2 = sportPlaySeries(sorted[1], sorted[2], 4);
+    const champ = sportPlaySeries(semi1, semi2, 4);
     champ.champions++; champ.value = Math.round(champ.value * 1.15);
     if (champ.history[0]) champ.history[0].champion = true;
     lg.champion = champ.id; lg.seasonYear = year;
