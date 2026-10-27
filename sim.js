@@ -137,8 +137,10 @@ function newGame(opt) {
   if (opt.leader) {
     // Current-day start: treasury is 5% of real GDP, debt is 54% of GDP.
     // Struggling countries start struggling — that is the challenge.
-    const homeCs = s.countries[opt.home];
-    s.cash = homeCs.treasury;
+    // Money split: S.cash is BUSINESS money only ($750k startup, like a
+    // tycoon). The treasury stays in countries[home].treasury — it is
+    // government money, never business money, and never shown as such.
+    s.cash = 750000;
     s.holdings = {};
   } else {
     s.holdings[opt.home] = { qty: home.shares, cost: 0 };
@@ -152,8 +154,8 @@ function newGame(opt) {
   s.homeTaxPrev = { tax: s.countries[opt.home].tax, incTax: s.countries[opt.home].incTax, vat: s.countries[opt.home].vat };
   if (opt.leader) {
     const biz = businessesInCountry(opt.home);
-    news('World', `You have inherited ${cname(opt.home)}. Treasury ${fmtMoney(s.cash, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}.`, opt.home);
-    mail('Welcome', `You have inherited ${cname(opt.home)}`, `You are now the leader of ${cname(opt.home)}, as it is today. Treasury ${fmtMoney(s.cash, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}, population ${fmtPop(s.countries[opt.home].pop)}. Businesses: ${biz.map(b => b.name + ' (' + b.sector + ')').join(', ')}. Tax them, pay your people, trade, and grow — or invade a neighbour for the challenge.`);
+    news('World', `You have inherited ${cname(opt.home)}. Treasury ${fmtMoney(s.countries[opt.home].treasury, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}.`, opt.home);
+    mail('Welcome', `You have inherited ${cname(opt.home)}`, `You are now the leader of ${cname(opt.home)}, as it is today. Treasury ${fmtMoney(s.countries[opt.home].treasury, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}, population ${fmtPop(s.countries[opt.home].pop)}. Businesses: ${biz.map(b => b.name + ' (' + b.sector + ')').join(', ')}. Tax them, pay your people, trade, and grow — or invade a neighbour for the challenge. Your business money is separate: $750,000 to build your own businesses with.`);
   } else {
     news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
     mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
@@ -532,7 +534,10 @@ function bookValue(c) {
 }
 function companyFairTotal(c) { return Math.max(1e6, Math.max(0, c.avg * 52) * c.pe + (c.book != null ? c.book : bookValue(c)) * 0.6); }
 function fairValue(c) { return companyFairTotal(c) / c.shares; }
-function companyValue(c) { return c.listed ? c.price * c.shares : companyFairTotal(c); }
+// Valuation is NOT market cap: selling shares at $100 x 1B shares does
+// not make a company worth $100B. Valuation is fundamentals — annual
+// profit x P/E plus book value x 0.6, $1M floor — whether listed or not.
+function companyValue(c) { return companyFairTotal(c); }
 
 // ---------- money ----------
 function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const a3 in (S.holdingsP || {})) { const h = S.holdingsP[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const id in (S.holdingsX || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsX[id].qty * b.price; } for (const id in (S.holdingsXP || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsXP[id].qty * b.price; } return v; }

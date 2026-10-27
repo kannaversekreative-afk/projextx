@@ -1581,7 +1581,7 @@ function tradeView(a3) {
     ${caption}
     ${c.listed && volToday ? `<div class="kv"><span>Shares traded today</span><b>${volToday.toLocaleString()}</b></div>` : ''}
     ${rangeSeg(['1D', '1W', '1M', '3M', '1Y', '5Y', 'All'], UI.tradeRange, 'tradeRange')}
-    <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Market cap</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
+    <div class="stats3 box"><div><span>Position</span><b>${held.qty ? held.qty.toLocaleString() + ' shares' : 'None open'}</b></div><div><span>Valuation</span><b>${fmtMoney(companyValue(c), true)}</b></div><div><span>Your stake</span><b>${(stake(a3) * 100).toFixed(1)}%</b></div></div>
     <div class="stats3 box"><div><span>Dividend</span><b>${fmtMoney(div)} (${(yld * 100).toFixed(2)}%)</b></div><div><span>52-week high</span><b>${fmtMoney(w52.hi)}</b></div><div><span>52-week low</span><b>${fmtMoney(w52.lo)}</b></div></div>
     <div class="stats3 box"><div><span>P/E ratio</span><b>${(c.pe || 0).toFixed(1)}</b></div><div><span>Shares</span><b>${(c.shares || 0).toLocaleString()}</b></div><div><span>Exchange</span><b>${exchange}</b></div></div>
     ${(typeof topShareholders === 'function') ? `<div class="card in"><h4>Top shareholders</h4>${topShareholders(c, held.qty, c.shares).map(h => `<div class="kv"><span>${esc(h.name)}</span><b>${h.pct.toFixed(1)}%</b></div>`).join('')}</div>` : ''}
@@ -2091,7 +2091,7 @@ PANELS.leader = () => {
   const cs = country(S.home), k = W.byA3[S.home], lw = cs.lastWeek || {};
   const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(S.home) : [S.co[S.home]];
   return panelShell('Leader', `${k.flag} ${esc(cname(S.home))} · You are the leader, as of today`,
-    `<div class="stats3 box"><div><span>Treasury</span><b>${fmtMoney(S.cash, true)}</b></div><div><span>Debt</span><b>${fmtMoney(cs.debt || 0, true)}</b></div><div><span>Debt / GDP</span><b>${Math.round((cs.debt || 0) / Math.max(1, cs.gdp * 1e6) * 100)}%</b></div></div>
+    `<div class="stats3 box"><div><span>Treasury</span><b>${fmtMoney(cs.treasury || 0, true)}</b></div><div><span>Business money</span><b>${fmtMoney(S.cash, true)}</b></div><div><span>Debt</span><b>${fmtMoney(cs.debt || 0, true)}</b></div><div><span>Debt / GDP</span><b>${Math.round((cs.debt || 0) / Math.max(1, cs.gdp * 1e6) * 100)}%</b></div></div>
     <div class="kv"><span>Population</span><b>${fmtPop(nationPop())}</b></div><div class="kv"><span>GDP</span><b>${fmtMoney(cs.gdp * 1e6, true)}</b></div><div class="kv"><span>Stability</span><b>${Math.round(cs.stab)} / 100</b></div>
     <h4>Last week — economy, straight</h4><p class="muted small">Every payment has a payer and a recipient. Taxes go to the treasury, the treasury pays people, services, military upkeep and debt interest. No free money in leader mode.</p>
     <div class="kv"><span>Revenue</span><b>${fmtMoney(lw.revenue || 0, true)} / week</b></div>
@@ -2116,7 +2116,7 @@ PANELS.warplan = () => {
   const { att, def, winP } = warPlanScore(plan);
   const approaches = approachList(plan.target);
   const commitRow = (branch, label) => `<div class="kv"><span>${label} Lv ${country(S.home).milLv[branch]} · Commit ${plan[branch]}%</span><span><button class="btn small" data-a="warCommit" data-x="${branch}|-25">−25</button> <button class="btn small" data-a="warCommit" data-x="${branch}|25">+25</button></span></div>`;
-  return panelShell(`Invade ${cname(plan.target)}`, `${W.byA3[plan.target].flag} ${esc(cname(plan.target))} · Relations ${getRel(S.home, plan.target)} · Treasury ${fmtMoney(S.cash, true)}`,
+  return panelShell(`Invade ${cname(plan.target)}`, `${W.byA3[plan.target].flag} ${esc(cname(plan.target))} · Relations ${getRel(S.home, plan.target)} · Treasury ${fmtMoney((typeof govCash === 'function' ? govCash() : S.cash), true)}`,
     `${err ? `<div class="card in"><p class="muted">${esc(err)}</p></div>` : ''}
     <h4>1 · Position — where do you attack from?</h4><p class="muted small">Put your troops where you think they will work, then submit. The game decides from power and endurance, not just army size.</p>
     ${approaches.map(a => a.ok ? `<button class="btn ${plan.approach === a.id ? 'btn3d orange' : ''} wide" data-a="warApproach" data-x="${plan.target}|${a.id}">${a.name} · +${Math.round(a.bonus * 100)}% power — ${a.why}</button>` : `<p class="muted small">${a.name} — not available: ${a.why}</p>`).join('')}
@@ -2506,7 +2506,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
-    const src = { pro: 'minigames/pro.html?v=20261026ds', college: 'minigames/college.html?v=20261026ds', baseball: 'minigames/baseball.html?v=20261026ds' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dt', college: 'minigames/college.html?v=20261026dt', baseball: 'minigames/baseball.html?v=20261026dt' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
     return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
@@ -2773,7 +2773,7 @@ PANELS.offices = () => {
   };
   const companies = Object.values(S.co).filter(c => controlled(c.a3));
   const teams = (typeof ownedSportTeams === 'function') ? ownedSportTeams() : [];
-  const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Value ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div>${S.flow ? (c.office ? `<div class="kv"><span>Office</span><b>Opened</b></div>` : `<div class="row"><button class="btn" data-a="buyOffice" data-x="${c.a3}">BUY OFFICE (${fmtMoney(50000, true)})</button><span class="muted small">Needed before hiring a board here.</span></div>`) : ''}
+  const compCards = companies.map(c => `<div class="card in"><b>${esc(c.name)}</b><div class="muted small">${esc(cname(c.a3))} · Valuation ${fmtMoney(companyFairTotal(c), true)} · Rating ${c.rating.toFixed(1)} / 5</div><div class="muted small">Valuation = profit ${fmtMoney(Math.max(0, c.avg * 52), true)}/yr × P/E ${c.pe.toFixed(1)} + book ${fmtMoney((c.book != null ? c.book : (typeof bookValue === 'function' ? bookValue(c) : 0)), true)} × 0.6. Share price × shares is market cap, not valuation.</div>${S.flow ? (c.office ? `<div class="kv"><span>Office</span><b>Opened</b></div>` : `<div class="row"><button class="btn" data-a="buyOffice" data-x="${c.a3}">BUY OFFICE (${fmtMoney(50000, true)})</button><span class="muted small">Needed before hiring a board here.</span></div>`) : ''}
     <div class="kv"><span>Board room</span><b>${(typeof boardFull === 'function' && boardFull(c)) ? 'Full' : 'Not full'}</b></div><div class="kv"><span>Board boost</span><b>+${((typeof boardBoost === 'function' ? boardBoost(c) : 0) * 100).toFixed(1)}% of weekly revenue</b></div><div class="kv"><span>Profitable weeks in a row</span><b>${c.weekProfitStreak || 0} / 2</b></div>
     ${boardRow(c, 'co', c.a3)}
     ${mgrSection(c)}
@@ -2898,7 +2898,7 @@ PANELS.markets = () => {
   }
   if (tab === 'ma') {
     const rows = marketRows().filter(c => c.listed && !c.isExtra).slice(0, 30);
-    return wrap(`<h4 class="wtrade-h">MERGERS &amp; ACQUISITIONS</h4><p style="color:#8b949e">Offer to buy a whole company.</p>${walletPickerHTML()}${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="wtrade-card"><div class="row between"><div><b>${esc(c.name)}</b><div style="color:#8b949e;font-size:13px">${c.sym} · Market cap ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="wtrade-btn buy" style="width:100%;margin-top:8px" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}`);
+    return wrap(`<h4 class="wtrade-h">MERGERS &amp; ACQUISITIONS</h4><p style="color:#8b949e">Offer to buy a whole company.</p>${walletPickerHTML()}${rows.map(c => { const cap = companyValue(c), hi = Math.max(...(c.h.d || [c.price])), lo = Math.min(...(c.h.d || [c.price])); return `<div class="wtrade-card"><div class="row between"><div><b>${esc(c.name)}</b><div style="color:#8b949e;font-size:13px">${c.sym} · Valuation ${fmtMoney(cap, true)} · Dividend ${fmtMoney(c.price * (SECTORS[c.sector].div || 0), true)} · P/E ${c.pe.toFixed(1)}</div></div><b>${fmtMoney(c.price)}</b></div><div class="kv"><span>52-week high</span><b>${fmtMoney(hi)}</b></div><div class="kv"><span>52-week low</span><b>${fmtMoney(lo)}</b></div><button class="wtrade-btn buy" style="width:100%;margin-top:8px" data-a="takeover" data-x="${c.a3}|0.4">OFFER M&amp;A · +40% · ${fmtMoney(takeoverCost(c, 0.4), true)}</button></div>`; }).join('')}`);
   }
   if (tab === 'portfolio') {
     const pos = tradePositions(), dpnl = tradeDailyPnl(), nlv = S.cash + ensurePerson().cash + holdingsValue();

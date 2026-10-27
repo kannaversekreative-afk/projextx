@@ -946,9 +946,10 @@ function businessesInCountry(a3) {
 //   spending = pay people (wages) + services + military upkeep + debt interest
 //   treasury += revenue - spending
 //   if treasury < 0: debt += -treasury, treasury = 0, stability falls
-// Home treasury is S.cash, so player spending (military, projects,
-// diplomacy) already deducted from S.cash is counted once: we sync
-// treasury from S.cash at the start of the home week, then add the net.
+// Money split: the home treasury is countries[home].treasury, NOT
+// S.cash (business money). Government spending (military, projects,
+// diplomacy, capital) pays from the treasury via govPay/govCash; the
+// treasury grows only by tax revenue minus spending, week by week.
 // ---------- bilateral trade ----------
 // Each country trades with its neighbours (up to 5, biggest first) plus
 // the 2 biggest economies it does not neighbour. A link's weekly volume
@@ -1086,7 +1087,6 @@ function leaderWeek() {
     const cs = S.countries[a3], k = W.byA3[a3]; if (!k) continue;
     if (cs.treasury == null) cs.treasury = cs.gdp * 1e6 * 0.05;
     if (cs.debt == null) cs.debt = cs.gdp * 1e6 * 0.54;
-    if (a3 === S.home) cs.treasury = S.cash;
     const gdpDollars = cs.gdp * 1e6;
     // Corporate tax: flagship week.tax + extras week.tax (computed below).
     let corpTax = 0;
@@ -1153,7 +1153,7 @@ function leaderWeek() {
       cs.stab = clamp(cs.stab - 0.1, 0, 100);
     }
     else if (cs.treasury > gdpDollars * 0.1) cs.stab = clamp(cs.stab + 0.05, 0, 100);
-    if (a3 === S.home) { S.cash = cs.treasury; homeRev = revenue; homeSpend = spending; }
+    if (a3 === S.home) { homeRev = revenue; homeSpend = spending; }
   }
   S.week = S.week || {};
   S.week.leader = { revenue: Math.round(homeRev), spending: Math.round(homeSpend) };

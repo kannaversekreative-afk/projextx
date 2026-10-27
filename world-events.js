@@ -27,8 +27,8 @@ function milCost(branch) {
 }
 function upgradeMilitary(branch) {
   const cost = milCost(branch); if (cost == null) return 'Already at the top level.';
-  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; country(S.home).milLv[branch]++;
+  if (govCash() < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  govPay(cost); country(S.home).milLv[branch]++;
   S.xp += 150; news('Nation', `${cname(S.home)}'s ${MILITARY[branch].name.toLowerCase()} now fields ${MILITARY[branch].levels[country(S.home).milLv[branch]].toLowerCase()}.`, S.home);
   return null;
 }
@@ -80,7 +80,7 @@ function canAttack(target) {
   if (left > 0) return `You can declare war again in ${Math.ceil(left / 365)} year${Math.ceil(left / 365) === 1 ? '' : 's'}.`;
   return null;
 }
-function treasuryOf(a3) { return a3 === S.home ? S.cash : (country(a3).treasury || 0); }
+function treasuryOf(a3) { return a3 === S.home ? govCash() : (country(a3).treasury || 0); }
 function approachList(target) {
   const h = country(S.home), neighbour = W.byA3[S.home].nb.includes(target), coastal = !!W.byA3[target].coastal;
   return [
@@ -117,9 +117,9 @@ function warPlanScore(plan) {
 }
 function researchWarCost() { return Math.round(Math.max(5e6, W.byA3[S.home].gdp0 * 1e6 * 0.001) / 1e5) * 1e5; }
 function researchWar(plan) {
-  const cost = researchWarCost(); if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  const cost = researchWarCost(); if (govCash() < cost) return `Costs ${fmtMoney(cost, true)}.`;
   if (plan.research) return 'Already researched for this attack.';
-  S.cash -= cost; plan.research = true; return null;
+  govPay(cost); plan.research = true; return null;
 }
 function sellForWar() {
   // Sell 25% of every open holding at its current price, for war funds.
@@ -133,12 +133,12 @@ function baseCost() {
   return Math.round(200e6 * Math.max(0.3, Math.pow(W.byA3[S.home].gdp0 / 500000, 0.35)) * (1 + n * 0.5) / 1e5) * 1e5;
 }
 function buyBase() {
-  const cost = baseCost(); if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  const cost = baseCost(); if (govCash() < cost) return `Costs ${fmtMoney(cost, true)}.`;
   if (!S.facilities) S.facilities = {}; if (!S.facilities[S.home]) S.facilities[S.home] = { bases: [] };
   const f = facilitiesFor(S.home); const cap = W.cities[W.byA3[S.home].capital];
   const n = (S.facilities[S.home].bases || []).length, ang = (n * 1.1) + 0.5, radius = 48 + n * 16;
   const xy = { x: cap.x + Math.cos(ang) * radius, y: cap.y + Math.sin(ang) * radius * 0.6 };
-  S.facilities[S.home].bases.push(xy); S.cash -= cost; S.xp += 100;
+  S.facilities[S.home].bases.push(xy); govPay(cost); S.xp += 100;
   news('Nation', `New military base built in ${cname(S.home)}. It adds +5% to your war power.`, S.home);
   return null;
 }
@@ -179,14 +179,14 @@ function minigamesEnabled() {
 function beginWar(plan) {
   const err = canAttack(plan.target); if (err) return { err };
   const { att, def, winP, roll } = warStatsRoll(S.home, plan.target, plan);
-  const attCost = Math.min(S.cash, country(S.home).gdp * 1e6 * 0.02 + att.power0 * 10000);
+  const attCost = Math.min(govCash(), country(S.home).gdp * 1e6 * 0.02 + att.power0 * 10000);
   // Rare instant branch: under 5% of invasions resolve on the spot,
   // split by the stats roll — overwhelming wins lose rarely, and
   // overwhelming defeats win rarely. Everything else goes to the
   // mini-game (if on) or straight to an ongoing war (if off).
   if (rand() < WAR_INSTANT_CHANCE) {
     if (roll >= 0.5) {
-      S.cash = Math.max(0, S.cash - attCost);
+      govPay(attCost);
       country(plan.target).treasury = Math.max(0, (country(plan.target).treasury || 0) * 0.9);
       setRel(S.home, plan.target, -100);
       for (const a3 in S.countries) if (a3 !== S.home && a3 !== plan.target && rand() < 0.4) setRel(S.home, a3, getRel(S.home, a3) - 10);
@@ -200,7 +200,7 @@ function beginWar(plan) {
       S.lastWarResult = { target: plan.target, outcome: 'instant-win', attackerWins: true, winP, roll, att, def, cost: attCost, days: 0 };
       return { outcome: 'instant-win' };
     }
-    S.cash = Math.max(0, S.cash - attCost);
+    govPay(attCost);
     country(plan.target).treasury = Math.max(0, (country(plan.target).treasury || 0) * 0.9);
     setRel(S.home, plan.target, -100);
     country(S.home).stab = clamp(country(S.home).stab - 15, 0, 100);
@@ -271,7 +271,7 @@ function warSupply(w, side) {
   return clamp((troops / 100 * 0.5 + weapons / 100 * 0.5) * (paid ? 1 : 0.7), 0.2, 1);
 }
 function warSideTreasury(a3, amount) {
-  if (a3 === S.home) { const paid = Math.min(S.cash, amount); S.cash -= paid; return paid; }
+  if (a3 === S.home) { const paid = Math.min(govCash(), amount); govPay(paid); return paid; }
   const c = country(a3); const paid = Math.min(c.treasury || 0, amount); c.treasury = Math.max(0, (c.treasury || 0) - paid); return paid;
 }
 // One day of war cost: money, troops and weapons drain for both sides.
@@ -341,8 +341,8 @@ function resolveOngoingWar(w, trigger) {
   } else if (outcome === 'treaty-att' || outcome === 'treaty-def') {
     const favAtt = outcome === 'treaty-att';
     const rep = Math.round((favAtt ? B.treasury || 0 : A.treasury || 0) * 0.10);
-    if (favAtt) { if (w.a === S.home) S.cash += rep; else A.treasury = (A.treasury || 0) + rep; B.treasury = Math.max(0, (B.treasury || 0) - rep); }
-    else { if (w.b === S.home) S.cash += rep; else B.treasury = (B.treasury || 0) + rep; A.treasury = Math.max(0, (A.treasury || 0) - rep); }
+    if (favAtt) { if (w.a === S.home) govAdd(rep); else A.treasury = (A.treasury || 0) + rep; B.treasury = Math.max(0, (B.treasury || 0) - rep); }
+    else { if (w.b === S.home) govAdd(rep); else B.treasury = (B.treasury || 0) + rep; A.treasury = Math.max(0, (A.treasury || 0) - rep); }
     setRel(w.a, w.b, favAtt ? -10 : 0);
     A.stab = clamp(A.stab + 3, 0, 100); B.stab = clamp(B.stab + 3, 0, 100);
     shockCountry(w.a, 'peace'); shockCountry(w.b, 'peace');
@@ -350,14 +350,14 @@ function resolveOngoingWar(w, trigger) {
   } else if (outcome === 'sanctions') {
     A.fx.push({ g: -0.01, until: S.day + 730, sanction: true }); shockCountry(w.a, 'sanctions');
     A.treasury = Math.max(0, (A.treasury || 0) * 0.95); B.treasury = Math.max(0, (B.treasury || 0) * 0.95);
-    if (w.a === S.home) S.cash = Math.max(0, S.cash * 0.95);
+    if (w.a === S.home) { if (S.leader) S.countries[S.home].treasury = Math.max(0, (S.countries[S.home].treasury || 0) * 0.95); else S.cash = Math.max(0, S.cash * 0.95); }
     setRel(w.a, w.b, -80);
     news('World', `Sanctions end the war between ${cname(w.a)} and ${cname(w.b)}: the world punishes the aggressor, both economies pay, and no territory changes hands.`, w.a);
   } else if (outcome === 'nuke') {
     A.stab = clamp(A.stab - 30, 0, 100); B.stab = clamp(B.stab - 30, 0, 100);
     A.treasury = Math.max(0, (A.treasury || 0) * 0.8); B.treasury = Math.max(0, (B.treasury || 0) * 0.8);
-    if (w.a === S.home) S.cash = Math.max(0, S.cash * 0.8);
-    if (w.b === S.home) S.cash = Math.max(0, S.cash * 0.8);
+    if (w.a === S.home) { if (S.leader) S.countries[S.home].treasury = Math.max(0, (S.countries[S.home].treasury || 0) * 0.8); else S.cash = Math.max(0, S.cash * 0.8); }
+    if (w.b === S.home) { if (S.leader) S.countries[S.home].treasury = Math.max(0, (S.countries[S.home].treasury || 0) * 0.8); else S.cash = Math.max(0, S.cash * 0.8); }
     shockCountry(w.a, 'war', 2); shockCountry(w.b, 'war', 2);
     for (const a3 in S.countries) if (a3 !== w.a && a3 !== w.b) setRel(w.a, a3, getRel(w.a, a3) - 20);
     setRel(w.a, w.b, -100);
@@ -544,16 +544,16 @@ function countryStatus(a3) {
 function projectCost(d) { return Math.round(d.cost * Math.max(0.3, Math.pow(W.byA3[S.home].gdp0 / 500000, 0.35)) / 10000) * 10000; }
 function fundProject(id) {
   const d = PROJECTS.find(x => x.id === id), c = country(S.home), cost = projectCost(d);
-  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  if (govCash() < cost) return `Costs ${fmtMoney(cost, true)}.`;
   if (c.proj.some(p => p.id === id && p.until > S.day)) return 'Already running.';
-  S.cash -= cost; c.proj.push({ id, until: S.day + d.years * 365 });
+  govPay(cost); c.proj.push({ id, until: S.day + d.years * 365 });
   S.xp += 150; news('Nation', `You funded ${d.name.toLowerCase()} in ${cname(S.home)}.`, S.home);
   return null;
 }
 function diplomacyCost(a3) { return Math.round(Math.max(100000, W.byA3[a3].gdp0 * 0.6) / 1000) * 1000; }
 function diplomacy(a3) {
-  const cost = diplomacyCost(a3); if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; setRel(S.home, a3, Math.min(90, getRel(S.home, a3) + 20));
+  const cost = diplomacyCost(a3); if (govCash() < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  govPay(cost); setRel(S.home, a3, Math.min(90, getRel(S.home, a3) + 20));
   news('Nation', `Your diplomats improved relations between ${cname(S.home)} and ${cname(a3)}.`, S.home);
   return null;
 }
@@ -621,7 +621,15 @@ function businessWeek() {
     S.cash += (profit - mineProfit);
     if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ weekly profit', amt: personalProfit });
   } else {
-    S.cash += profit;
+    // Leader, same split as flow: private-company net + CEO salary go
+    // to personal money, rent/teams/placed go to the business pot.
+    // Business profit never lands in the treasury — tax revenue does,
+    // through leaderWeek, and that is the only government income.
+    ceoSalary = (typeof weeklyCeoSalary === 'function') ? weeklyCeoSalary() : 0;
+    personalProfit = Math.round(preIpoNet + ceoSalary);
+    ensurePerson().cash += personalProfit;
+    S.cash += (profit - mineProfit);
+    if (typeof bankFeedPush === 'function') bankFeedPush({ d: S.day, text: '+ weekly profit', amt: personalProfit });
   }
   const own = mine(); let satW = 0, satN = 0;
   own.forEach(c => c.locs.forEach(l => { satW += l.sat * Math.max(1, l.cust); satN += Math.max(1, l.cust); }));
@@ -655,6 +663,14 @@ function businessWeek() {
     });
   }
 }
+
+// ---------- government money (leader only) ----------
+// In leader games, government spending comes from the home treasury,
+// never from business money (S.cash). In flow/tycoon games there is no
+// player treasury, so government-style spending still uses S.cash.
+function govCash() { return S.leader ? ((S.countries[S.home] && S.countries[S.home].treasury) || 0) : S.cash; }
+function govPay(amt) { if (govCash() < amt) return false; if (S.leader) S.countries[S.home].treasury -= amt; else S.cash -= amt; return true; }
+function govAdd(amt) { if (S.leader) S.countries[S.home].treasury = Math.max(0, ((S.countries[S.home].treasury || 0) + amt)); else S.cash += amt; }
 
 // ---------- year end: rating, tax reactions ----------
 /*

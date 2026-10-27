@@ -55,15 +55,22 @@ function countryBalance() {
 function countryNote() {
   const P = ensurePerson();
   if (P.office && P.office.title) return P.office.title + ' budget · pays for policies, never for stocks or purchases';
-  if (S.leader) return 'National treasury · in leader games this is the same pot as Business';
+  if (S.leader) return 'National treasury · government money, not business money';
   return 'Hold an office to get a country budget';
 }
+function holdsOffice() { return !!S.leader || !!(ensurePerson().office && ensurePerson().office.title); }
+function controlledValuationTotal() {
+  if (typeof mine !== 'function') return 0;
+  try { return mine().reduce((t, c) => t + companyFairTotal(c), 0); } catch (e) { return 0; }
+}
 function bankAccounts() {
-  // Personal is the only account. Business and country are statistics
-  // (see the Business P&L and Country P&L views), never balances.
+  // Personal and Business are accounts. Country is a statistic (see
+  // the Country P&L view), never a spendable balance — and it is only
+  // shown at all once you hold office.
   const P = ensurePerson();
   return [
     { id: 'personal', name: 'Personal', bal: P.cash, note: 'Your own money · spend as Private' },
+    { id: 'business', name: 'Business', bal: S.cash, note: 'Business money · spend as Company · shown at the top of the game' },
   ];
 }
 function bankLoanTotals() {
@@ -142,7 +149,7 @@ function bankPanelHTML() {
     else {
       const my = (S.loans || []).filter(l => l.bank === b.cityId);
       body = `<button class="wbank-back" data-a="bankView" data-x="citybanks">← City banks</button>
-      <h3 class="wbank-h">${esc(b.name)}</h3><p class="wbank-note">Interest ${(b.rate * 100).toFixed(2)}% a year · Capital ${fmtMoney(b.capital, true)} · Profit so far ${fmtMoney(b.profit, true)} · Approved up to ${fmtMoney(cityBankMaxLoan(b), true)} (and no more than your overall position allows).</p>
+      <h3 class="wbank-h">${esc(b.name)}</h3><p class="wbank-note">Interest ${(b.rate * 100).toFixed(2)}% a year · Capital ${fmtMoney(b.capital, true)} · Profit so far ${fmtMoney(b.profit, true)} · Approved up to ${fmtMoney(Math.min(controlledValuationTotal(), cityBankMaxLoan(b)), true)} — 100% of your companies' valuation, and no more than the bank's capital allows. Share price times shares is market cap, not valuation, so it does not raise this cap.</p>
       <label class="wbank-label">LOAN AMOUNT</label><input id="loanAmt" class="wbank-input" type="number" value="1000000">
       <label class="wbank-label">MATURITY (months)</label><input id="loanMonths" class="wbank-input" type="number" value="36">
       <button class="btn3d orange wide" data-a="takeCityLoan">TAKE LOAN FROM ${esc(b.name).toUpperCase()}</button>
@@ -157,6 +164,10 @@ function bankPanelHTML() {
     <div class="wbank-kv"><span>This week's company net</span><b>${fmtMoney(tot, true)}</b></div>
     ${cos.map(c => `<div class="wbank-loanrow"><span><b>${esc(c.name)}</b><small>${c.listed ? 'Listed' : 'Private'} · Value ${fmtMoney(companyValue(c), true)}</small></span><b>${fmtMoney((c.week && c.week.profit) || 0, true)}/week</b></div>`).join('') || '<p class="wbank-note">No companies you control yet.</p>'}`;
   } else if (view === 'countrypnl') {
+    if (!holdsOffice()) {
+      body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
+      <h3 class="wbank-h">Country money</h3><p class="wbank-note">Government money is a math sheet until you hold office — you cannot see it, spend it, or borrow against it. Win an election (or start a leader game) to see your country's budget.</p>`;
+    } else {
     const cs = country(S.home);
     body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
     <h3 class="wbank-h">Country profit and loss</h3><p class="wbank-note">Your country is statistics, not a bank account. ${esc(countryNote())}</p>
@@ -164,6 +175,7 @@ function bankPanelHTML() {
     <div class="wbank-kv"><span>Tax revenue so far</span><b>${fmtMoney(cs.taxRev || 0, true)}</b></div>
     <div class="wbank-kv"><span>Corporate tax</span><b>${Math.round(cs.tax * 100)}%</b></div>
     <div class="wbank-kv"><span>Stability</span><b>${Math.round(cs.stab)}/100</b></div>`;
+    }
   } else {
     const accts = bankAccounts();
     body = `<div class="wbank-cards">${accts.map(a => `<button class="wbank-tile" data-a="bankAcct" data-x="${a.id}"><b>${a.name}</b><span>${fmtMoney(a.bal, true)}</span><small>${esc(a.note)}</small></button>`).join('')}</div>
@@ -177,7 +189,7 @@ function bankPanelHTML() {
       <button class="wbank-tile" data-a="bankView" data-x="loan"><b>Loans</b><span>${lt.count === 0 ? 'No loans' : `${lt.count} loan${lt.count === 1 ? '' : 's'} · ${fmtMoney(lt.remaining, true)} left`}</span><small>${lt.weekly > 0 ? fmtMoney(lt.weekly) + '/week' : 'View loans →'}</small></button>
       <button class="wbank-tile" data-a="bankView" data-x="citybanks"><b>City banks</b><span>Bank of every city</span><small>Loans on approval, profit and loss →</small></button>
       <button class="wbank-tile" data-a="bankView" data-x="bizpnl"><b>Business P&L</b><span>Profit and loss, not a balance</span><small>Your companies →</small></button>
-      <button class="wbank-tile" data-a="bankView" data-x="countrypnl"><b>Country P&L</b><span>Budget and tax, not a balance</span><small>Your country →</small></button>
+      ${holdsOffice() ? `<button class="wbank-tile" data-a="bankView" data-x="countrypnl"><b>Country P&L</b><span>Budget and tax, not a balance</span><small>Your country →</small></button>` : ''}
     </div>
     ${lt.count > 0 ? `<div class="wbank-next"><b>Up next: loan payment ${fmtMoney(lt.weekly)}/week</b><span>${lt.loans.reduce((t, l) => t + l.weeksLeft, 0)} payments left across your loans</span></div>` : `<div class="wbank-next"><b>Up next: take your first loan</b><span>Borrow to build, repay weekly from your cash</span></div>`}
     <h3 class="wbank-h">Recent payments</h3>${bankFeedHTML(8)}`;
@@ -209,7 +221,9 @@ function takeCityLoan(cityId, amount, months) {
   if (!bank) return 'No bank in that city.';
   amount = Math.floor(amount); months = clamp(Math.floor(months), 6, 60);
   if (!amount || amount < 1000) return 'Enter a loan amount of at least $1,000.';
-  const limit = Math.min(Math.max(100000, S.cash * 5 + 500000), cityBankMaxLoan(bank));
+  const valCap = controlledValuationTotal();
+  const limit = Math.min(valCap > 0 ? valCap : 0, cityBankMaxLoan(bank));
+  if (valCap <= 0) return 'No company you control to borrow against — borrow up to 100% of your companies\' valuation, and you control none yet.';
   if (amount > limit) return `${bank.name} approved you for up to ${fmtMoney(limit, true)} — not ${fmtMoney(amount, true)}.`;
   const rate = bank.rate, weeks = Math.max(4, Math.round(months * 4.33)), weekly = loanWeeklyPayment(amount, rate, months);
   S.cash += amount;

@@ -56,8 +56,9 @@ function upgradeCapital(districtId) {
   const cap = ensureCapital(); const L = cap.districts[districtId] || 0;
   if (L >= 5) return 'Already at level 5.';
   const cost = capitalCost(districtId);
-  if (S.cash < cost) return `Costs ${fmtMoney(cost, true)}.`;
-  S.cash -= cost; cap.districts[districtId] = L + 1; S.xp += 100;
+  const cs = country(S.home);
+  if ((cs.treasury || 0) < cost) return `Costs ${fmtMoney(cost, true)}.`;
+  cs.treasury -= cost; cap.districts[districtId] = L + 1; S.xp += 100;
   return null;
 }
 function applyCapitalName() {
@@ -76,7 +77,7 @@ function capitalWeek() {
   if (trans) cash += gdpDollars * 0.2 * 0.04 * 0.01 * trans / 1; // trade volume x 1% per level, weekly
   const prestige = capitalPrestige();
   if (prestige >= 4.5) cash += gdpDollars * 0.00001;
-  if (cash) { S.cash += cash; cs.treasury = S.cash; }
+  if (cash) { cs.treasury += cash; }
 }
 function capitalSkyline() {
   const cap = ensureCapital();
