@@ -354,6 +354,10 @@ function companyWeek(c, quiet) {
   });
   const f = fleetEconomics(c), o = onlineEconomics(c), ads = adsCost(c), upkeep = WEB_TIERS[c.web.tier].cost * 0.002;
   rev += f.rev + o.rev; profit += f.profit + o.profit - ads - upkeep;
+  // Paid advertising (ads.js): active routes lift revenue a little.
+  // Quiet/seeding calls never tick durations or trigger CPU buys.
+  const adBoost = (typeof adWeek === 'function') ? adWeek(c, quiet) : 0;
+  if (adBoost) { rev *= (1 + adBoost); profit *= (1 + adBoost); }
   const tax = Math.max(0, profit) * country(c.a3).tax;
   profit -= tax;
   const _cs2 = country(c.a3); _cs2.taxRev = (_cs2.taxRev || 0) + tax;

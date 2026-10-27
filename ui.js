@@ -401,7 +401,7 @@ function renderHUD() {
   <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
-  <button class="hud-btn hud-br" data-a="drawer" aria-label="Menu">${ICONS.menu}</button>
+  <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel) $('panel').classList.add('open');
 }
@@ -586,7 +586,7 @@ function tickWatch() {
 // Only two editions are kept: this one and the last one. When a new
 // edition arrives, older ones rotate out on their own.
 let paperPage = 0, paperEdIdx = 0;
-const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS', 'YOUR YEAR'];
+const PAPER_PAGES = ['FRONT PAGE', 'BUSINESS', 'SPORT', 'THE NUMBERS', 'YOUR YEAR', 'ADVERTISEMENTS', 'ADVERTISEMENTS'];
 function ensurePapers() {
   if (!Array.isArray(S.papers)) S.papers = [];
   if (!S.papers.length) S.papers.push(makePaperEdition(yearOf(S.day)));
@@ -752,7 +752,7 @@ function paperStocksSection() {
 }
 
 function paperHTML() {
-  const ed = paperEdition(), total = 5, page = Math.min(paperPage, 4); paperPage = page;
+  const ed = paperEdition(), page = Math.min(paperPage, PAPER_PAGES.length - 1); paperPage = page;
   let body = '';
   if (page === 0) {
     body = `<div class="nfolio"><span>Vol. ${Math.max(1, ed.year - 2025)} · No. ${((ed.day % 365) + 1)}</span><span>WORLD EDITION</span><span>${ed.date.toUpperCase()}</span></div>
@@ -767,7 +767,7 @@ function paperHTML() {
     <figure class="ncut">${paperCutSVG(ed.front.kind || 'growth')}<figcaption><b>${esc(ed.front.caption)}</b> <span class="ncredit">Ticker Times illustration.</span></figcaption></figure>
     <div class="nlead"><p class="pdrop">${esc(ed.front.body)}</p><p class="pbody">The story above is the one every capital is talking about this year. What happens next will be written in trade, in politics, and in the markets — and it will be in this paper first.</p></div>
     <div class="ncols">${ed.front.stories.map(paperArticle).join('') || '<p>No world stories this year.</p>'}</div>
-    <div class="nindex"><b>IN TODAY'S PAPER</b><span>Business — Page 2</span><span>Sport — Page 3</span><span>The Numbers — Page 4</span><span>Your Year — Page 5</span><span>Last edition — use LAST EDITION below</span></div>`;
+    <div class="nindex"><b>IN TODAY'S PAPER</b><span>Business — Page 2</span><span>Sport — Page 3</span><span>The Numbers — Page 4</span><span>Your Year — Page 5</span><span>Advertisements — Pages 6–7</span><span>Last edition — use LAST EDITION below</span></div>`;
   } else if (page === 1) {
     body = `<div class="nsection"><span>BUSINESS</span><span>Page 2 · ${ed.date.toUpperCase()}</span></div>
     <div class="pfront">
@@ -794,6 +794,17 @@ function paperHTML() {
       <h3 class="psec">SLOWEST RISERS</h3><div class="ptable">${ed.numbers.slowest.map(g => `<div class="prow"><span>${esc(g.name)}</span><b>${fmtPct(g.g)}</b></div>`).join('')}</div>
       <p class="psmall">News archive: only this edition and last year's edition are kept. Older editions rotate out on their own.</p>
     </div>`;
+  } else if (page === 5 || page === 6) {
+    const all = (typeof newspaperAds === 'function') ? newspaperAds() : [];
+    const slice = all.slice((page - 5) * 4, (page - 5) * 4 + 4);
+    const cards = slice.map(a => { const c = S.co[a.ref]; const icon = (c && SECTORS[c.sector]) ? SECTORS[c.sector].icon : '🏢';
+      return `<div class="pad-card"><span class="ad-tag">AD</span><div class="pad-ic">${icon}</div><b>${esc(a.name)}${a.sym ? ` (${esc(a.sym)})` : ''}</b><p>${esc(adLineFor(a, 'paper'))}</p></div>`; }).join('');
+    const fillers = Array.from({ length: Math.max(0, 4 - slice.length) }, () => `<div class="pad-card pad-house"><span class="ad-tag">AD</span><b>YOUR AD HERE</b><p>Advertise your company in this paper.</p><button class="btn small" data-a="paperAdBuy">Buy a newspaper ad</button></div>`).join('');
+    body = `<div class="nsection"><span>ADVERTISEMENTS</span><span>Page ${page + 1} · ${ed.date.toUpperCase()}</span></div>
+    <div class="pfront">
+      <div class="pheadline"><div class="pkicker">ADVERTISEMENTS</div><h2>Paid for by the world's businesses</h2><p class="pdrop">These pages rotate every week to the businesses paying for them.</p></div>
+      <div class="pad-grid">${cards}${fillers}</div>
+    </div>`;
   } else {
     const pl = ed.player;
     body = `<div class="nsection"><span>YOUR YEAR</span><span>Page 5 · ${ed.date.toUpperCase()}</span></div>` + (pl ? `<div class="pfront">
@@ -816,15 +827,15 @@ function paperHTML() {
   }
   const edLabel = paperEdIdx === 0 ? `THIS YEAR · ${ed.year}` : `LAST YEAR · ${ed.year}`;
   return `<div class="paper-closebar"><button class="paper-closebtn" data-a="closePaper" aria-label="Close newspaper">✕ CLOSE</button></div>
-  <div class="psheet">${body}<div class="nfoliofoot"><span>The Ticker Times</span><span>Page ${page + 1} of 5 · ${PAPER_PAGES[page]}</span><span>${ed.date.toUpperCase()}</span></div></div>
+  <div class="psheet">${body}<div class="nfoliofoot"><span>The Ticker Times</span><span>Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><span>${ed.date.toUpperCase()}</span></div></div>
   <div class="pedition"><button class="btn" data-a="paperEdPrev" ${paperEdIdx >= S.papers.length - 1 ? 'disabled' : ''}>← LAST EDITION</button><span class="ppage">${edLabel}</span><button class="btn" data-a="paperEdNext" ${paperEdIdx === 0 ? 'disabled' : ''}>THIS EDITION →</button></div>
-  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of 5 · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= 4 ? 'disabled' : ''}>NEXT →</button></div>
+  <div class="paper-flip"><button class="btn" data-a="paperPrev" ${page === 0 ? 'disabled' : ''}>← PREVIOUS</button><span class="ppage">Page ${page + 1} of ${PAPER_PAGES.length} · ${PAPER_PAGES[page]}</span><button class="btn" data-a="paperNext" ${page >= PAPER_PAGES.length - 1 ? 'disabled' : ''}>NEXT →</button></div>
   <button class="btn wide paper-return" data-a="closePaper">✕ CLOSE — RETURN TO MAP</button>`;
 }
 
 function openPaper(edIdx) { closeModal(); closePanel(); if (watchKey) closeWatch(); paperEdIdx = edIdx == null ? 0 : edIdx; paperPage = 0; $('paper').innerHTML = paperHTML(); $('paper').classList.add('open'); }
 function closePaper() { $('paper').innerHTML = ''; $('paper').classList.remove('open'); }
-function flipPaper(d) { paperPage = Math.max(0, Math.min(4, paperPage + d)); $('paper').innerHTML = paperHTML(); }
+function flipPaper(d) { paperPage = Math.max(0, Math.min(PAPER_PAGES.length - 1, paperPage + d)); $('paper').innerHTML = paperHTML(); }
 function flipEdition(d) { paperEdIdx = Math.max(0, Math.min(S.papers.length - 1, paperEdIdx + d)); paperPage = 0; $('paper').innerHTML = paperHTML(); }
 
 // ---------- boot / onboarding ----------
@@ -1558,6 +1569,9 @@ function webHomeHTML() {
     </div>
     <p class="webhome-note">Your web hub. Search, news, mail and your company sites — all in-game, no real browser.</p></div>`;
 }
+PANELS.tawk = () => tawkPanelHTML();
+PANELS.radio = () => radioPanelHTML();
+PANELS.ads = () => adsPanelHTML();
 PANELS.web = () => {
   const w = UI.web;
   if (w.view === 'home' || !w.view) return panelShell('Web', 'Your web hub', webHomeHTML());
@@ -1579,11 +1593,12 @@ PANELS.web = () => {
       ${sponsored ? `<div class="card in sponsored"><span class="tagp">SPONSORED</span><button class="srow" data-a="webSite" data-x="${sponsored.a3}"><span class="avatar" style="background:${sponsored.color}">${esc(sponsored.name[0])}</span><span class="sname"><b>${esc(sponsored.name)}</b><small>${sponsored.sym} · ${esc(cname(sponsored.a3))}</small></span></button></div>` : ''}
       <div class="list">${results.map(c => `<button class="srow" data-a="webSite" data-x="${c.a3}"><span class="avatar" style="background:${c.color}">${esc(c.name[0])}</span><span class="sname"><b>${esc(c.name)}</b><small>${c.sym} · ${esc(cname(c.a3))} · ${SECTORS[c.sector].icon} ${c.sector}</small></span><span class="sprice"><b>${c.listed ? fmtMoney(c.price) : 'Private'}</b></span></button>`).join('') || '<p class="muted small">No matches. Try a company name or a country.</p>'}</div>`;
   }
+  if (typeof webAdStart === 'function') setTimeout(webAdStart, 0);
   return panelShell('Web', 'Fake browser — your company website lives here, not News',
-    `<div class="browser"><div class="urlbar"><button data-a="webBack">←</button><button data-a="webHome">⌂</button><span class="url">${esc(url)}</span></div>
+    `<div class="webwrap"><div id="webrailL" class="webrail"></div><div class="webbody"><div class="browser"><div class="urlbar"><button data-a="webBack">←</button><button data-a="webHome">⌂</button><span class="url">${esc(url)}</span></div>
     <div class="row wrap"><button class="chip" data-a="webView" data-x="search">Search</button><button class="chip" data-a="webView" data-x="news">World Times</button><button class="chip" data-a="webView" data-x="mail">Mail (${S.mail.filter(m => !m.read).length})</button><button class="chip" data-a="webView" data-x="mine">My site</button></div>
     ${w.view === 'search' ? `<input id="wsearch" class="search" placeholder="Search companies, countries, products" value="${esc(w.q)}" autocomplete="off">` : ''}
-    ${body}</div>`);
+    ${body}</div></div><div id="webrailR" class="webrail"></div></div>`);
 };
 // ---------- Your Country: the condensed top-left panel ----------
 // Like the reference layout (original content only): a hero card with
@@ -2321,30 +2336,24 @@ const MENU_ITEMS = [
   ['progress', '🏆', 'Progress'],
   ['cabinet', '👥', 'Cabinet'], ['elections', '🗳️', 'Elections'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
+  ['tawk', '💬', 'Tawk'], ['radio', '📻', 'Robot Radio'], ['ads', '📣', 'Advertising'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
   openModal(`<h2>More</h2><div class="more-grid">${MENU_ITEMS.map(([x, ic, t]) => `<button class="more-item" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="mi">${ic}</span><span>${t}</span></button>`).join('')}</div>`, 'sheet');
 }
-// The menu is a centred popup, not a side bar. Sections and rows
-// follow the screenshot layout: a header with ••• + More + X, then
-// grouped white cards with an icon tile, a title, a subtitle and a
-// chevron. Every menu item is still here, just grouped.
+// The phone replaces the More menu: a phone frame with every menu
+// item as an app icon on a home screen. Tapping an app opens the
+// same panel (or paper) the old menu opened.
 function openMenuPopup() {
-  const TINTS = ['#ffe9e0', '#dbeafe', '#e0f0ff', '#e2f5e9', '#f3e8ff', '#ffe4ec'];
-  const row = (x, ic, t, d, i) => `<button class="menu-row" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="menu-ic" style="background:${TINTS[i % TINTS.length]}">${ic}</span><span class="menu-txt"><b>${t}</b><span>${d}</span></span><span class="menu-chev">›</span></button>`;
-  const group = (title, items) => `<div class="menu-sec">${title}</div><div class="menu-card">${items.map(([x, ic, t, d], i) => row(x, ic, t, d, i)).join('')}</div>`;
-  const find = x => { const m = MENU_ITEMS.find(m => m[0] === x); return [m[0], m[1], m[2]]; };
-  const g = (title, defs) => group(title, defs.map(([x, d]) => [...find(x), d]));
+  // The phone: every menu item is an app on a home screen. Tapping
+  // an app opens the same panel (or paper) the old More menu opened.
+  const apps = MENU_ITEMS.map(([x, ic, t]) => `<button class="phone-app" data-a="${x === 'news' ? 'paper' : 'panel'}" data-x="${x}"><span class="phone-app-ic">${ic}</span><span class="phone-app-label">${t}</span></button>`).join('');
   const unread = (S.mail || []).filter(m => !m.read).length;
-  openModal(`<div class="menu-pop-head"><span class="menu-dots">•••</span><h2>More</h2><button class="menu-bell" data-a="panel" data-x="inbox" aria-label="Messages">${unread ? `<span class="menu-bell-badge">${unread}</span>` : ''}${ICONS.bell}</button><button class="xbtn" data-a="closeModal" aria-label="Close menu">${IC.close}</button></div>
-  <div class="menu-pop-body">
-  ${g('You', [['cabinet', 'Your 10 advisors'], ['elections', 'Run for office']])}
-  ${g('Progress', [['leader', 'Your country and company'], ['goals', "Today's goals"], ['progress', 'Levels 1-100 and what each unlocks'], ['leaderboard', 'Global leaderboards']])}
-  ${g('Your business', [['hq', 'HQ and business management'], ['markets', 'Stocks, equity and takeovers'], ['company', 'Companies you run'], ['portfolio', 'Stocks and assets you own'], ['web', 'Your business websites']])}
-  ${g('World', [['news', "What's happening in the world"], ['nation', 'Relations, taxes and trade'], ['military', 'Armies, navies and wars'], ['airport', 'Fly to any city'], ['mars', 'Mars']])}
-  ${g('Play', [['sports', 'Teams and leagues'], ['crypto', 'Fake coins — bet up or down'], ['bank', 'Loans and banking'], ['settings', 'Game settings'], ['help', 'How to play']])}
-  </div>`, 'menu');
+  openModal(`<div class="phone-notch"></div>
+  <div class="phone-status"><span>${fmtDate(S.day)}</span><span>${fmtMoney(S.cash)}</span>${unread ? `<span>✉️ ${unread}</span>` : ''}</div>
+  <div class="phone-grid">${apps}</div>
+  <button class="phone-close" data-a="closeModal">✕ CLOSE</button>`, 'phone');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
 // ---------- date modal: Done this week? + calendar ----------
@@ -2534,6 +2543,24 @@ const A = {
   closePaper: () => { closePaper(); if (S && S.pendingVictory) { const v = S.pendingVictory; S.pendingVictory = null; save(); openModal(`<h2>🏆 Victory!</h2><p>${esc(v)}</p><p class="muted small">Keep playing, or restart for a new run.</p><button class="btn3d orange wide" data-a="closeModal">KEEP PLAYING</button>`, 'center'); return; } if (S && S.pendingSituation && typeof WORL_SITUATIONS !== 'undefined') { const s = WORL_SITUATIONS.find(x => x.id === S.pendingSituation); if (s) openModal(`<h2>🎲 ${esc(s.title)}</h2><p>${esc(s.text)}</p>${s.choices.map((c, i) => `<button class="btn3d orange wide" data-a="situationChoice" data-x="${i}">${esc(c.label)} — ${esc(c.desc)}</button>`).join('')}`, 'center'); } },
   paperPrev: () => flipPaper(-1),
   paperNext: () => flipPaper(1),
+  paperAdBuy: () => { closePaper(); openPanel('ads'); },
+  adCompany: x => { UI.adCompany = x; renderPanel(); },
+  adRoute: x => { UI.adRoute = x; renderPanel(); },
+  adWeeks: x => { UI.adWeeks = parseInt(x, 10) || 4; renderPanel(); },
+  adBuy: () => { const mine = (typeof mine === 'function') ? mine() : []; const a3 = (UI.adCompany && S.co[UI.adCompany]) ? UI.adCompany : (mine.length ? mine[0].a3 : null); if (!a3) { toast('Control a company first.', 'bad'); return; } const err = buyAd(a3, UI.adRoute || 'paper', UI.adWeeks || 4); if (err) toast(err, 'bad'); else { toast('Ad bought — it runs from this week.', 'good'); renderPanel(); } },
+  tawkPost: () => { const inp = document.getElementById('tawkText'); const text = (inp ? inp.value : (UI.tawkDraft || '')).trim().slice(0, 280); if (!text) return; const t = tawkState(); t.posts.unshift({ id: 'u' + Date.now(), text, likes: 0 }); UI.tawkDraft = ''; if (S.person) S.person.vis = clamp((S.person.vis || 5) + 1, 0, 100); toast('Posted on Tawk.', 'good'); renderPanel(); },
+  tawkLike: x => { const t = tawkState(); t.liked[x] = !t.liked[x]; save(); const b = document.querySelector(`[data-a="tawkLike"][data-x="${x}"]`); if (b) b.innerHTML = `${t.liked[x] ? '❤️' : '🤍'} ${tawkCompact(parseInt(b.dataset.likes || '0', 10) + (t.liked[x] ? 1 : 0))}`; },
+  tawkRepost: x => { const t = tawkState(); t.reposted[x] = !t.reposted[x]; save(); const b = document.querySelector(`[data-a="tawkRepost"][data-x="${x}"]`); if (b) b.innerHTML = `🔁 ${tawkCompact(parseInt(b.dataset.reposts || '0', 10) + (t.reposted[x] ? 1 : 0))}${t.reposted[x] ? ' ✓' : ''}`; },
+  tawkBookmark: x => { const t = tawkState(); t.bookmarked[x] = !t.bookmarked[x]; save(); const b = document.querySelector(`[data-a="tawkBookmark"][data-x="${x}"]`); if (b) b.innerHTML = t.bookmarked[x] ? '🔖 ✓' : '🔖'; },
+  tawkFollow: x => { const t = tawkState(); t.followed[x] = !t.followed[x]; save(); document.querySelectorAll(`[data-a="tawkFollow"][data-x="${x}"]`).forEach(b => { b.innerHTML = t.followed[x] ? 'Following ✓' : 'Follow'; }); },
+  tawkReply: x => { const feed = tawkFeed(UI.tawkTab || 'foryou'); const post = feed.find(p => p.id === x); UI.tawkDraft = (post ? post.acct.handle + ' ' : '') + (UI.tawkDraft || ''); UI.tawkView = 'feed'; renderPanel(); setTimeout(() => { const el = document.getElementById('tawkText'); if (el) el.focus(); }, 0); },
+  tawkTab: x => { const ci = document.getElementById('tawkText'); if (ci) UI.tawkDraft = ci.value; UI.tawkTab = x; UI.tawkView = 'feed'; renderPanel(); },
+  tawkView: x => { const ci = document.getElementById('tawkText'); if (ci) UI.tawkDraft = ci.value; UI.tawkView = x; renderPanel(); },
+  tawkSearch: () => { const inp = document.getElementById('tawkSearch'); UI.tawkQuery = inp ? inp.value.trim() : (UI.tawkQuery || ''); renderPanel(); },
+  tawkFocus: () => { UI.tawkView = 'feed'; renderPanel(); setTimeout(() => { const el = document.getElementById('tawkText'); if (el) el.focus(); }, 0); },
+  radioStation: x => { UI.radioStation = x; UI.radioT = 0; renderPanel(); },
+  radioNext: () => { UI.radioTrack = (UI.radioTrack || 0) + 1; UI.radioT = 0; renderPanel(); },
+  radioAdNext: () => { UI.radioAdIdx = (UI.radioAdIdx || 0) + 1; renderPanel(); },
   paperEdPrev: () => flipEdition(1),
   paperEdNext: () => flipEdition(-1),
   scrim: (x, el, e) => { if (e.target === el && (UI.modal === 'sheet' || UI.modal === 'menu')) closeModal(); },
@@ -2544,7 +2571,7 @@ const A = {
   zoom: x => MapView.zoom(+x),
   locate: () => { const cap = (W && W.byA3[S.home] && W.cities[W.byA3[S.home].capital]) ? W.cities[W.byA3[S.home].capital].name : S.home; MapView.home(); toast(`Going home to ${cap}`); },
   more: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
-  drawer: () => { if (UI.modal === 'menu') closeModal(); else openMenuPopup(); },
+  drawer: () => { if (UI.modal === 'phone') closeModal(); else openMenuPopup(); },
   createBusiness: () => {
     closeModal(); closePanel();
     if (CityView.isOpen()) leaveCity();
