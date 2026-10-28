@@ -1267,7 +1267,7 @@ function onDotTap(dot) {
       });
       if (worstGap > 0) html += `<p>⚠ Bottleneck: ${esc(worstName)} is level ${worstLv} but you are level ${lv}. Upgrade to unlock +${worstGap}/sec flow.</p>`;
       const cap = lv * 20000;
-      if ((owned.pop || 0) >= cap) html += `<p>⚠ Overcrowded: at capacity (${Math.floor(owned.pop).toLocaleString()} / ${cap.toLocaleString()}). Stability is dropping. Upgrade or move people out.</p>`;
+      if ((owned.pop || 0) >= cap) html += `<p>⚠ Overcrowded: (${Math.floor(owned.pop).toLocaleString()} / ${cap.toLocaleString()}). Stability is dropping. Upgrade or move people out.</p>`;
     }
     if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
     else {
@@ -2339,7 +2339,7 @@ PANELS.warplan = () => {
   return panelShell(`Invade ${cname(plan.target)}`, `${W.byA3[plan.target].flag} ${esc(cname(plan.target))} · Relations ${getRel(S.home, plan.target)} · Treasury ${fmtMoney((typeof govCash === 'function' ? govCash() : S.cash), true)}`,
     `${err ? `<div class="card in"><p class="muted">${esc(err)}</p></div>` : ''}
     <h4>1 · Position — where do you attack from?</h4><p class="muted small">Put your troops where you think they will work, then submit. The game decides from power and endurance, not just army size.</p>
-    ${approaches.map(a => a.ok ? `<button class="btn ${plan.approach === a.id ? 'btn3d orange' : ''} wide" data-a="warApproach" data-x="${plan.target}|${a.id}">${a.name} · +${Math.round(a.bonus * 100)}% power — ${a.why}</button>` : `<p class="muted small">${a.name} — not available: ${a.why}</p>`).join('')}
+    ${approaches.map(a => a.ok ? `<button class="${plan.approach === a.id ? 'btn3d orange' : 'btn'} wide" data-a="warApproach" data-x="${plan.target}|${a.id}">${a.name} · +${Math.round(a.bonus * 100)}% power — ${a.why}</button>` : `<p class="muted small">${a.name} — not available: ${a.why}</p>`).join('')}
     <h4>2 · Commit your forces</h4><p class="muted small">Committing less keeps forces home but cuts your attack power in proportion.</p>
     ${commitRow('army', '🪖 Army')}${commitRow('navy', '⚓ Navy')}${commitRow('air', '✈️ Air force')}
     <h4>3 · Upgrade, research, sell</h4>

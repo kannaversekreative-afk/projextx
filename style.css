@@ -244,6 +244,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .vprog-fill { height: 100%; background: #2f7cf6; border-radius: 7px; }
 .vprog-icon { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 22px; }
 .btn3d.blue { background: #2f7cf6; box-shadow: 0 4px 0 #1d5bbf; }
+.btn3d.orange { background: var(--orange); box-shadow: 0 4px 0 var(--orange-d); }
 /* Watch view: full-screen flight / voyage view */
 #watch { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; background: #eaf2ff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #watch.open { display: flex; }
