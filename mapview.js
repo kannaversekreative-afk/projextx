@@ -14,6 +14,36 @@ const MapView = (() => {
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
   const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
+  // New York as its own view (not a game mode): the state's shape,
+  // pinned by exact ring signature — never by bbox, so no wrong ring
+  // can slip in. NY_BOX frames it; NY_RINGS draw it.
+  const NY_BOX = [556.5, 354.0, 601.5, 385.5];
+  const NY_RINGS = [
+    [228, 556.9, 354.6, 600.8, 384.7],
+    [56, 590.4, 374.7, 601.2, 381.8],
+    [9, 587.4, 383.9, 588.6, 385.0],
+    [5, 599.8, 379.8, 600.4, 380.0],
+    [6, 599.2, 380.9, 599.5, 381.3],
+    [4, 598.8, 380.4, 599.1, 380.6],
+    [4, 575.7, 362.1, 576.0, 362.4],
+    [4, 575.3, 362.1, 575.7, 362.3],
+  ];
+  let nyView = false;
+  const nyRings = () => {
+    if (typeof US_STATE_BORDERS === 'undefined') return [];
+    const r = v => Math.round(v * 10) / 10;
+    return US_STATE_BORDERS.filter(ring => {
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      ring.forEach(p => { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+      return NY_RINGS.some(s => s[0] === ring.length && s[1] === r(x0) && s[2] === r(y0) && s[3] === r(x1) && s[4] === r(y1));
+    });
+  };
+  let nyPaths = null;
+  const pointInNY = (mx, my) => {
+    if (typeof US_STATE_BORDERS === 'undefined') return false;
+    if (!nyPaths) nyPaths = nyRings().map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
+    return nyPaths.some(p => hit.isPointInPath(p, mx, my));
+  };
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
   function resize() {
@@ -38,7 +68,13 @@ const MapView = (() => {
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
-
+    // New York view: only New York's shape, alone on the sea — the
+    // state as the whole world. Everything else is not drawn.
+    if (nyView) {
+      c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
+      nyRings().forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
+      return;
+    }
     const [x0, y0] = toMap(0, 0), [x1, y1] = toMap(vw, vh);
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
@@ -573,10 +609,22 @@ const MapView = (() => {
       // underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
+      // In the New York view, land taps stay in New York — they never
+      // open the USA business panel.
+      if (nyView) return;
+      // New York's capital dot: tapping it opens the Go button, not
+      // the USA business panel — New York has no businesses of its own.
+      if (typeof US_CAPITALS !== 'undefined') {
+        let best = null, bd = 1e9;
+        const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8)) + 12;
+        US_CAPITALS.forEach(cp => { const [x, y] = toScreen(cp.x, cp.y); const d = Math.hypot(x - sx, y - sy); if (d < rr && d < bd) { bd = d; best = cp; } });
+        if (best && best.s === 'New York') { handlers.newyork && handlers.newyork(); return; }
+      }
     }
     const [mx, my] = toMap(sx, sy);
     let k = W.playable.find(c => c.hasShape && mx >= c.box[0] && mx <= c.box[2] && my >= c.box[1] && my <= c.box[3] && hit.isPointInPath(c.path, mx, my));
     if (!k && pickMode) { let bd = 16; W.playable.forEach(c => { const ct = W.cities[c.capital]; const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; k = c; } }); }
+    if (!pickMode && k && k.a3 === 'USA' && pointInNY(mx, my)) { handlers.newyork && handlers.newyork(); return; }
     if (k) handlers.country && handlers.country(k.a3); else handlers.empty && handlers.empty();
   }
   function flyTo(x, y, s) {
@@ -610,8 +658,11 @@ const MapView = (() => {
     flyToCity(id, s) { const c = W.cities[id]; flyTo(c.x, c.y, s || Math.max(v.s, 2.4)); },
     flyToCountry(a3) { const k = W.byA3[a3]; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; flyTo(cx, cy, Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4))))); },
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
-    home() { const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
-    world() { flyTo(MAP_W / 2, MAP_H / 2, 0); },
+    home() { nyView = false; const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
+    world() { nyView = false; flyTo(MAP_W / 2, MAP_H / 2, 0); },
+    showNY() { nyView = true; const [x0, y0, x1, y1] = NY_BOX; const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0); anim = null; v.s = Math.max(vw / w, vh / h); v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s; clampView(); dirty = true; },
+    exitNY() { nyView = false; fit(); dirty = true; },
+    isNYView() { return nyView; },
 
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
     // Headless test hooks only: advance vehicles one step and read

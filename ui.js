@@ -494,6 +494,7 @@ function renderHUD() {
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
+  ${(typeof MapView !== 'undefined' && MapView.isNYView && MapView.isNYView()) ? `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitNY" aria-label="Back to world">← World</button>` : ''}
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
@@ -982,6 +983,7 @@ async function boot() {
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
+  MapView.on('newyork', openNewYorkPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
@@ -1194,6 +1196,12 @@ function onCountryTap(a3) {
   // than one business, so tapping it no longer opens one company's
   // stock. It opens the country itself, with its businesses listed.
   UI.popup = { type: 'country', a3 }; renderPopup(); tutCheck();
+}
+function openNewYorkPopup() {
+  if (!S) return;
+  // New York has no businesses of its own: tapping it never opens
+  // the USA business list — just the button that takes you there.
+  openModal(`<h2>New York</h2><button class="btn3d orange wide" data-a="goNewYork">GO TO NEW YORK</button>`, 'sheet');
 }
 // Place-a-business: the player taps anywhere on the map and a real
 // business circle appears there. Registered to the nearest country
@@ -3263,6 +3271,8 @@ const A = {
     S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
   },
 
+  goNewYork: () => { closeModal(); MapView.showNY(); renderHUD(); },
+  exitNY: () => { MapView.exitNY(); renderHUD(); },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
   panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; if (x === 'web') UI.web = { view: 'home', q: '', a3: null }; openPanel(x); },
