@@ -153,6 +153,25 @@ const MapView = (() => {
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
       US_STATE_RINGS.forEach(st => { if (st.name === 'Alaska' || st.name === 'Hawaii') return; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
       frameBox([x0, y0, x1, y1]);
+    } else if (typeof WORLD_REGIONS !== 'undefined' && WORLD_REGIONS.some(r => r.a3 === a3)) {
+      // Sectioned country: frame its regions. A world-spanning set
+      // (France's overseas regions, the Dutch Caribbean) would shrink
+      // the mainland to a speck, so frame the largest single ring
+      // (the mainland) instead; overseas stays reachable by panning.
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      let best = null, bestA = -1;
+      WORLD_REGIONS.forEach(r => {
+        if (r.a3 !== a3) return;
+        const b = r.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]);
+        r.rings.forEach(g => {
+          let gx0 = 1e9, gy0 = 1e9, gx1 = -1e9, gy1 = -1e9;
+          g.forEach(p => { gx0 = Math.min(gx0, p[0]); gy0 = Math.min(gy0, p[1]); gx1 = Math.max(gx1, p[0]); gy1 = Math.max(gy1, p[1]); });
+          const a = (gx1 - gx0) * (gy1 - gy0);
+          if (a > bestA) { bestA = a; best = [gx0, gy0, gx1, gy1]; }
+        });
+      });
+      if (Math.max(x1 - x0, y1 - y0) > 400 && best) frameBox(best);
+      else frameBox([x0, y0, x1, y1]);
     } else {
       const k = W.byA3[a3];
       if (k && k.hasShape) frameBox(k.box); else fit();

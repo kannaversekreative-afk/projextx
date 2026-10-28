@@ -1027,9 +1027,9 @@ async function boot() {
     if (phoneSwipeX == null) return;
     const dx = e.clientX - phoneSwipeX, dy = e.clientY - phoneSwipeY; phoneSwipeX = null; phoneSwipeY = null;
     if (Math.abs(dx) <= 60 || Math.abs(dx) <= Math.abs(dy)) return;
-    const pages = PHONE_PAGES.length;
+    const pages = phonePages().length;
     const next = Math.min(pages - 1, Math.max(0, (UI.phonePage || 0) + (dx < 0 ? 1 : -1)));
-    if (next !== (UI.phonePage || 0)) { UI.phonePage = next; openMenuPopup(); }
+    if (next !== (UI.phonePage || 0)) { UI.phonePage = next; UI.dlConfirm = null; openMenuPopup(); }
   });
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
@@ -2547,28 +2547,103 @@ function sportScoresHTML() {
     ${sportDayTabs()}${myTeams}${sections}</div>`);
 }
 // ---------- Mini Games: Hashmark football (pro + college) inside the phone ----------
-// The battle board below is the older Mini Games panel; it stays reachable
-// from this menu so nothing that was here is lost.
+// The App Store below is the phone's game store: every game listed
+// like a real store, with Download putting it on the Home Screen's
+// Games page. Deleting a game (long-press its tile, or its store
+// page) removes it, and it can be downloaded again any time. The
+// battle board stays reachable from the store so nothing that was
+// here is lost. Every game is free, so there is no In-App
+// Purchases line anywhere in this store.
+// ---------- App Store: games you download onto the phone ----------
+const STORE_GAMES = [
+  { id: 'baseball', name: 'Baseball', sub: 'Pennant GM', icon: '⚾', color: '#12a150', genre: 'Sports', rating: '4.9', ratings: '92K', chart: 1, desc: 'Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.', tag: 'Build a pennant winner.' },
+  { id: 'pro', name: 'Pro Football', sub: 'Hashmark GM', icon: '🏈', color: '#7c4dff', genre: 'Sports', rating: '4.8', ratings: '84K', chart: 2, desc: 'Franchise, MyGM and My Team. Real nicknames only: Ravens, Cowboys, Packers.', tag: 'Own a pro franchise.' },
+  { id: 'hockey', name: 'Hockey', sub: 'Blueline GM', icon: '🏒', color: '#0ea5b7', genre: 'Sports', rating: '4.8', ratings: '47K', chart: 3, desc: 'Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.', tag: 'Run a hockey franchise.' },
+  { id: 'college', name: 'College Football', sub: 'Hashmark College', icon: '🎓', color: '#e0812b', genre: 'Sports', rating: '4.7', ratings: '61K', chart: 4, desc: 'States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.', tag: 'Recruit. Win. Repeat.' },
+  { id: 'battle', name: 'Battle Board', sub: 'War mini-game', icon: '⚔️', color: '#e5484d', genre: 'Strategy', rating: '4.6', ratings: '23K', chart: 5, desc: 'The 6×6 war mini-game.', tag: 'Outthink the board.', builtin: true },
+  { id: 'tennis', name: 'Tennis', sub: 'Match', icon: '🎾', color: '#65a30d', genre: 'Sports', rating: '4.7', ratings: '38K', chart: 6, desc: 'A fast tennis match against the CPU — 15, 30, 40, deuce, first to 4 games.', tag: 'Serve. Rally. Win.' },
+];
+const storeGame = id => STORE_GAMES.find(g => g.id === id);
+const downloadedGames = () => { if (typeof S === 'undefined' || !S) return []; if (!Array.isArray(S.downloaded)) S.downloaded = []; return S.downloaded.map(storeGame).filter(Boolean); };
+const isDownloaded = id => (typeof S !== 'undefined' && S && S.downloaded || []).includes(id);
+function storeTabsHTML(tab) {
+  const tabs = [['today', '📰', 'Today'], ['games', '🚀', 'Games'], ['apps', '🗂️', 'Apps'], ['arcade', '🕹️', 'Arcade'], ['search', '🔍', 'Search']];
+  return `<div class="as-tabs">${tabs.map(([k, ic, t]) => `<button class="as-tab ${tab === k ? 'on' : ''}" data-a="storeTab" data-x="${k}"><span>${ic}</span><span>${t}</span></button>`).join('')}</div>`;
+}
+function storeDlBtn(g) {
+  if (g.builtin || isDownloaded(g.id)) return `<button class="store-dl" data-a="mgplayPhone" data-x="${g.id}">Open</button>`;
+  return `<button class="store-dl" data-a="storeDl" data-x="${g.id}">Download</button>`;
+}
+function storeRowHTML(g) {
+  return `<div class="store-row" data-a="storeGame" data-x="${g.id}"><span class="store-row-ic" style="background:${g.color}">${g.icon}</span><span class="store-row-mid"><b>${esc(g.name)}</b><span>${esc(g.sub)} · ${esc(g.genre)}</span></span>${storeDlBtn(g)}</div>`;
+}
+function storeDetailHTML(g) {
+  const dl = isDownloaded(g.id) || g.builtin;
+  const del = UI.storeDelConfirm === g.id
+    ? `<div class="store-del-confirm"><b>Delete ${esc(g.name)} from your phone?</b><p>You can download it again from the App Store any time.</p><div class="row gap"><button class="btn3d wide" data-a="storeDel" data-x="${g.id}">DELETE</button><button class="btn wide" data-a="storeDelCancel">KEEP IT</button></div></div>`
+    : (dl && !g.builtin ? `<button class="store-del" data-a="storeDelAsk" data-x="${g.id}">Delete from Phone</button>` : '');
+  return `<div class="store">
+    <button class="store-back" data-a="storeBack" aria-label="Back">←</button>
+    <div class="store-detail">
+      <span class="store-detail-ic" style="background:${g.color}">${g.icon}</span>
+      <h2>${esc(g.name)}</h2>
+      <div class="store-detail-sub">${esc(g.sub)}</div>
+      ${dl ? `<button class="store-get" data-a="mgplayPhone" data-x="${g.id}">Open</button>` : `<button class="store-get" data-a="storeDl" data-x="${g.id}">Download</button>`}
+      <div class="store-stats">
+        <div><span>${g.ratings} RATINGS</span><b>★ ${g.rating}</b></div>
+        <div><span>AGE</span><b>4+</b></div>
+        <div><span>CHART</span><b>#${g.chart} · ${esc(g.genre)}</b></div>
+      </div>
+      <div class="store-banner" style="background:linear-gradient(135deg, ${g.color}, #111827)"><span class="store-banner-ic">${g.icon}</span><span>${esc(g.tag)}</span></div>
+      <p class="store-desc">${esc(g.desc)}</p>
+      ${del}
+    </div>
+    ${storeTabsHTML(UI.storeTab || 'games')}
+  </div>`;
+}
+function storeHTML() {
+  const tab = UI.storeTab || 'games';
+  const g = UI.storeGame ? storeGame(UI.storeGame) : null;
+  if (g) return panelShell('App Store', '', storeDetailHTML(g));
+  const q = (UI.storeQuery || '').toLowerCase();
+  const filt = UI.storeFilter || 'all';
+  let list = STORE_GAMES;
+  if (tab === 'search' && q) list = list.filter(x => (x.name + ' ' + x.sub + ' ' + x.genre).toLowerCase().includes(q));
+  if (tab === 'games' && filt !== 'all') list = list.filter(x => x.genre.toLowerCase() === filt);
+  const rows = list.map(storeRowHTML).join('') || '<p class="store-note">No games match that.</p>';
+  let body = '';
+  if (tab === 'today') {
+    const feat = storeGame('hockey') || STORE_GAMES[0];
+    body = `<h1 class="store-title">Today</h1>
+      <div class="store-hero"><span class="store-hero-kicker">NOW AVAILABLE</span><b>Try the newest GM</b>
+        <div class="store-hero-card"><span class="store-row-ic" style="background:${feat.color}">${feat.icon}</span><span class="store-row-mid"><b>${esc(feat.name)}</b><span>${esc(feat.sub)}</span></span>${storeDlBtn(feat)}</div>
+      </div>
+      <h3 class="store-section">Great Games</h3>${STORE_GAMES.map(storeRowHTML).join('')}`;
+  } else if (tab === 'games') {
+    body = `<h1 class="store-title">Games</h1>
+      <div class="store-pills">${[['all', 'All'], ['sports', 'Sports'], ['strategy', 'Strategy']].map(([k, t]) => `<button class="store-pill ${filt === k ? 'on' : ''}" data-a="storeFilter" data-x="${k}">${t}</button>`).join('')}</div>
+      ${rows}`;
+  } else if (tab === 'search') {
+    body = `<h1 class="store-title">Search</h1>
+      <div class="store-search"><input id="storeQ" class="store-input" value="${esc(UI.storeQuery || '')}" placeholder="Games"><button class="store-search-btn" data-a="storeSearch">Search</button></div>
+      ${rows}`;
+  } else if (tab === 'apps') {
+    body = `<h1 class="store-title">Apps</h1><p class="store-note">This store carries games only.</p>`;
+  } else {
+    body = `<h1 class="store-title">Arcade</h1><p class="store-note">No Arcade titles in this store.</p>`;
+  }
+  return panelShell('App Store', '', `<div class="store">${body}${storeTabsHTML(tab)}</div>`);
+}
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
-  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed' }[UI.mgGame];
-    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey' }[UI.mgGame];
+  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis') {
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed', tennis: 'minigames/tennis.html?v=20261026fi' }[UI.mgGame];
+    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
   if (UI.mgGame === 'battle') return OLD_MINIGAMES_PANEL();
-  return panelShell('App Store', '', `<div class="card in"><h3>Pick a game</h3>
-    <button class="btn3d orange wide" data-a="mgplay" data-x="pro">🏈 PRO FOOTBALL · Hashmark GM</button>
-    <p class="muted small">Franchise, MyGM and My Team. Real nicknames only: Ravens, Cowboys, Packers.</p>
-    <button class="btn3d orange wide" data-a="mgplay" data-x="college">🎓 COLLEGE FOOTBALL · Hashmark College</button>
-    <p class="muted small">States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.</p>
-    <button class="btn3d orange wide" data-a="mgplay" data-x="baseball">⚾ BASEBALL · Pennant GM</button>
-    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
-    <button class="btn3d orange wide" data-a="mgplay" data-x="hockey">🏒 HOCKEY · Blueline GM</button>
-    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
-    <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
-    <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · football, baseball &amp; basketball leagues</button></div>`);
+  return storeHTML();
 };
 // Team shield badge: same logo as the Mini Games baseball teams (abbr on a
 // shield in the team's colours). Falls back to the old letter/color for
@@ -3065,6 +3140,15 @@ const PHONE_PAGES = [
   { name: 'Real stuff', wallets: ['private'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport', 'minigames'] },
   { name: 'More', wallets: [], apps: ['tawk', 'calendar', 'settings', 'help'] },
 ];
+// Home pages, plus a Games page that appears only once a game has
+// been downloaded from the App Store. Downloaded games live there,
+// never mixed into the real-stuff page.
+function phonePages() {
+  const pages = [...PHONE_PAGES];
+  const dl = downloadedGames();
+  if (dl.length) pages.push({ name: 'Games', wallets: [], apps: [], dl: dl.map(g => g.id) });
+  return pages;
+}
 function phoneHTML() {
   // The phone frame: home grid, or one app on its screen. No X button
   // anywhere - tapping outside the phone goes back (to the grid from
@@ -3093,14 +3177,16 @@ function phoneHTML() {
   const dock = MENU_ITEMS.filter(m => dockKeys.includes(m[0])).sort((a, b) => dockKeys.indexOf(a[0]) - dockKeys.indexOf(b[0]));
   const dockHTML = () => `<div class="phone-dock"><button class="phone-app" data-a="phoneHome"><span class="phone-app-ic" style="background:#334155">🏠</span><span class="phone-app-label">Home</span></button>${dock.map(appBtn).join('')}</div>`;
   if (!UI.phoneApp) {
-    const pages = PHONE_PAGES.length;
-    const page = Math.min(UI.phonePage || 0, pages - 1);
-    const pdef = PHONE_PAGES[page];
-    const apps = pdef.apps.map(k => MENU_ITEMS.find(m => m[0] === k)).filter(Boolean);
+    const pages = phonePages();
+    const page = Math.min(UI.phonePage || 0, pages.length - 1);
+    const pdef = pages[page];
+    const apps = (pdef.apps || []).map(k => MENU_ITEMS.find(m => m[0] === k)).filter(Boolean);
     const walletLabel = w => w === 'private' ? 'Personal $' : w === 'company' ? 'Business $' : 'Country $';
     const dollars = (pdef.wallets || []).map(w => `<button class="phone-app" data-a="bankWallet" data-x="${w}"><span class="phone-app-ic" style="background:#12a150">$</span><span class="phone-app-label">${walletLabel(w)}</span></button>`).join('');
-    const dots = `<div class="phone-dots">${PHONE_PAGES.map((p, i) => `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="${p.name}"></button>`).join('')}</div>`;
-    return `${toprow}<div class="phone-grid">${dollars}${apps.map(appBtn).join('')}</div>${dots}${dockHTML()}`;
+    const dlTiles = (pdef.dl || []).map(id => { const g = storeGame(id); if (!g) return ''; return `<button class="phone-app" data-a="mgplayPhone" data-x="${g.id}" data-dl="1"><span class="phone-app-ic" style="background:${g.color}">${g.icon}</span><span class="phone-app-label">${esc(g.name)}</span></button>`; }).join('');
+    const dlConfirm = UI.dlConfirm ? (() => { const g = storeGame(UI.dlConfirm); if (!g) return ''; return `<div class="dl-confirm"><b>Delete ${esc(g.name)}?</b><p>It will leave your Home Screen. You can download it again from the App Store any time.</p><div class="row gap"><button class="btn3d wide" data-a="dlDelete" data-x="${g.id}">DELETE</button><button class="btn wide" data-a="dlCancel">CANCEL</button></div></div>`; })() : '';
+    const dots = `<div class="phone-dots">${pages.map((p, i) => `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="${p.name}"></button>`).join('')}</div>`;
+    return `${toprow}<div class="phone-grid">${dlConfirm}${dollars}${apps.map(appBtn).join('')}${dlTiles}</div>${dots}${dockHTML()}`;
   }
   return `${toprow}<div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
 }
@@ -3324,7 +3410,7 @@ const A = {
     renderPanel();
   },
   phoneBack: () => { phoneToGrid(); },
-  phonePage: x => { UI.phonePage = parseInt(x, 10) || 0; openMenuPopup(); },
+  phonePage: x => { UI.phonePage = parseInt(x, 10) || 0; UI.dlConfirm = null; openMenuPopup(); },
   officeAd: x => { UI.adCompany = x; openPanel('ads'); },
   closePopup: () => closePopup(),
   vehicleCard: x => openVehicleCard(x),
@@ -3815,6 +3901,67 @@ const A = {
 };
 A.mgplay = (g) => { UI.mgGame = g; renderPhoneApp(); renderPanel(); };
 A.mgmenu = () => { UI.mgGame = null; renderPhoneApp(); renderPanel(); };
+// App Store actions: open a downloaded game from its tile or the
+// store, download it onto the Home Screen, delete it again.
+A.mgplayPhone = (g) => {
+  const sup = UI.dlSuppress === g; UI.dlSuppress = null;
+  if (sup) return;
+  UI.phoneApp = 'minigames'; UI.panel = 'minigames'; UI.mgGame = g; renderPhoneApp();
+};
+A.storeTab = (t) => { UI.storeTab = t; UI.storeGame = null; UI.storeDelConfirm = null; renderPhoneApp(); };
+A.storeFilter = (k) => { UI.storeFilter = k; renderPhoneApp(); };
+A.storeGame = (id) => { UI.storeGame = id; renderPhoneApp(); };
+A.storeBack = () => { UI.storeGame = null; UI.storeDelConfirm = null; renderPhoneApp(); };
+A.storeDl = (id) => {
+  if (!Array.isArray(S.downloaded)) S.downloaded = [];
+  if (!S.downloaded.includes(id)) S.downloaded.push(id);
+  save();
+  const g = storeGame(id);
+  toast(g ? g.name + ' added to your Home Screen · Games page' : 'Added to your Home Screen');
+  renderPhoneApp();
+};
+A.storeDelAsk = (id) => { UI.storeDelConfirm = id; renderPhoneApp(); };
+A.storeDelCancel = () => { UI.storeDelConfirm = null; renderPhoneApp(); };
+A.storeDel = (id) => {
+  S.downloaded = (S.downloaded || []).filter(x => x !== id);
+  save(); UI.storeDelConfirm = null; UI.dlSuppress = null;
+  toast('Deleted from your Home Screen'); renderPhoneApp();
+};
+A.storeSearch = () => { const el = document.getElementById('storeQ'); UI.storeQuery = el ? el.value : ''; renderPhoneApp(); };
+A.dlCancel = () => { UI.dlConfirm = null; UI.dlSuppress = null; openMenuPopup(); };
+A.dlDelete = (id) => {
+  S.downloaded = (S.downloaded || []).filter(x => x !== id);
+  save(); UI.dlConfirm = null; UI.dlSuppress = null;
+  toast('Deleted from your Home Screen'); openMenuPopup();
+};
+// Long-press a downloaded game tile to delete it, iOS-style. The
+// timer clears on any real movement, so scrolling the grid never
+// deletes anything. The press also arms a one-tap suppress flag so
+// the tap that ends the long-press does not also open the game.
+let dlPressTimer = null, dlPressX = 0, dlPressY = 0, dlPressId = null;
+function setupDlLongPress() {
+  if (setupDlLongPress.done) return; setupDlLongPress.done = true;
+  document.addEventListener('pointerdown', e => {
+    const t = e.target.closest && e.target.closest('.phone-app[data-dl]');
+    if (!t || UI.modal !== 'phone' || UI.phoneApp) return;
+    dlPressId = t.getAttribute('data-x'); dlPressX = e.clientX; dlPressY = e.clientY;
+    dlPressTimer = setTimeout(() => {
+      dlPressTimer = null; UI.dlSuppress = dlPressId;
+      if (dlPressId) { UI.dlConfirm = dlPressId; openMenuPopup(); }
+    }, 600);
+  }, true);
+  const clearDlPress = e => {
+    if (dlPressTimer && e && e.type === 'pointermove' && Math.hypot(e.clientX - dlPressX, e.clientY - dlPressY) <= 12) return;
+    if (dlPressTimer) { clearTimeout(dlPressTimer); dlPressTimer = null; }
+  };
+  document.addEventListener('pointermove', clearDlPress, true);
+  document.addEventListener('pointerup', clearDlPress, true);
+  document.addEventListener('pointercancel', clearDlPress, true);
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest && e.target.closest('.phone-app[data-dl]')) e.preventDefault();
+  });
+}
+setupDlLongPress();
 function onClick(e) {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const fn = A[el.dataset.a]; if (fn) fn(el.dataset.x, el, e);
