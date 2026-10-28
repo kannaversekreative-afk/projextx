@@ -2377,6 +2377,8 @@ function warProgressHTML(w) {
   } else {
     pts = `0,${80 - front / 100 * 80} 300,${80 - front / 100 * 80}`;
   }
+  const homeSide = w.a === S.home ? w.a : w.b;
+  const supply = (typeof warSupplyBonus === 'function' && homeSide) ? warSupplyBonus(homeSide) : { bonus: 0, count: 0 };
   return `<div class="card in"><h4>CONTROL OF TERRITORY</h4><p class="muted small">${status} · Front ${front}%</p>
     <div style="display:flex;height:28px;border-radius:8px;overflow:hidden;position:relative">
       <div style="width:${front}%;background:#e5484d"></div>
@@ -2386,7 +2388,7 @@ function warProgressHTML(w) {
     <div class="row between" style="margin-top:6px"><span class="muted small">■ ${atk} controls ${front}%</span><span class="muted small">■ ${def} holds ${100 - front}%</span></div>
     <h4 style="margin-top:14px">FRONT OVER TIME</h4>
     <svg viewBox="0 0 300 90" style="width:100%;background:#fff;border-radius:8px"><polyline points="${pts}" fill="none" stroke="#e5484d" stroke-width="2"/><line x1="0" y1="80" x2="300" y2="80" stroke="#cbd5e1" stroke-width="1"/><text x="2" y="12" font-size="9" fill="#64748b">100% attacker</text><text x="2" y="88" font-size="9" fill="#64748b">0% defender</text></svg>
-    <p class="muted small">${hist.length} weekly samples · Started ${fmtDate(w.start)} · ${Math.floor((S.day - w.start) / 365)} years, ${(S.day - w.start) % 365} days in</p></div>`;
+    <p class="muted small">${hist.length} weekly samples · Started ${fmtDate(w.start)} · ${Math.floor((S.day - w.start) / 365)} years, ${(S.day - w.start) % 365} days in</p>${supply.bonus > 0 ? `<p class="muted small">Supplied by your ${supply.count} controlled ${supply.count === 1 ? 'firm' : 'firms'}: +${Math.round(supply.bonus * 100)}% war supply.</p>` : ''}</div>`;
 }
 function warMiniBarHTML(w) {
   const front = Math.round(Math.max(0, Math.min(100, w.front || 50)));

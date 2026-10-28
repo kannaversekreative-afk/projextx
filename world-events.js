@@ -277,12 +277,30 @@ function ensureWarState(w) {
   if (!Array.isArray(w.hist)) w.hist = [{ day: w.start || S.day, front: 50 }, { day: S.day, front: w.front == null ? 50 : w.front }];
   return w;
 }
+// War supply from business: controlled companies keep troops and
+// weapons flowing. +0.05 supply per controlled company, capped at
+// +0.15. Player side only; CPU sides get no bonus. Any sector counts:
+// stock-market sectors are product-level labels with no parent field,
+// so a sector filter would miss most firms and vary by game.
+function warSupplyBonus(a3) {
+  if (a3 !== S.home) return { bonus: 0, count: 0 };
+  let count = 0;
+  try {
+    if (S.co) for (const k in S.co) {
+      if (typeof controlled === 'function' && controlled(k)) count++;
+    }
+  } catch (e) {}
+  return { bonus: Math.min(0.15, 0.05 * count), count };
+}
 // Supply factor for one side: troops and weapons on hand, plus whether
 // today's money was actually paid. 1 = fully supplied, 0.2 = spent.
 function warSupply(w, side) {
   const troops = side === 'a' ? w.troopsA : w.troopsB, weapons = side === 'a' ? w.weaponsA : w.weaponsB;
   const paid = side === 'a' ? !w.unpaidA : !w.unpaidB;
-  return clamp((troops / 100 * 0.5 + weapons / 100 * 0.5) * (paid ? 1 : 0.7), 0.2, 1);
+  const base = (troops / 100 * 0.5 + weapons / 100 * 0.5) * (paid ? 1 : 0.7);
+  const a3 = side === 'a' ? w.a : w.b;
+  const bonus = a3 === S.home ? warSupplyBonus(a3).bonus : 0;
+  return clamp(base + bonus, 0.2, 1);
 }
 function warSideTreasury(a3, amount) {
   if (a3 === S.home) { const paid = Math.min(govCash(), amount); govPay(paid); return paid; }
