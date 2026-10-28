@@ -2297,8 +2297,25 @@ const progressBody = () => {
     <div class="card in"><h4>Level ${sel}</h4><p>${selText ? esc(selText) : (sel < p.level ? 'No unlock at this level — it was a step toward the next one.' : sel === p.level ? 'Your current level.' : `Locked. ${next ? `Next unlock is Lv ${next.level}.` : ''}`)}</p></div>
     <p class="muted small">First pass — unlocks will be adjusted as the game grows.</p>`);
 };
+// ---------- Milestones: progression tree, 10 nodes at a time ----------
+const milestonesBody = () => {
+  const ci = UI.msCat || 0, cat = MS_CATS[ci];
+  const nodes = msNodes(ci);
+  const pages = Math.ceil(nodes.length / MS_PAGE_SIZE);
+  const pg = Math.min(UI.msPage || 0, pages - 1);
+  const page = nodes.slice(pg * MS_PAGE_SIZE, pg * MS_PAGE_SIZE + MS_PAGE_SIZE);
+  const sel = msNodeById(UI.msNode) || page[0];
+  const prev = sel.prev ? msNodeById(sel.prev) : null;
+  const chain = page.map((n, i) => `<div style="display:flex;align-items:center;gap:8px"><button class="btn" style="width:30px;height:30px;border-radius:50%;padding:0;background:#2f9e44;color:#fff;font-size:15px;line-height:30px;text-align:center;flex-shrink:0;${n.id === sel.id ? 'box-shadow:0 0 0 3px #2f7cf6;' : ''}" data-a="msNode" data-x="${n.id}">${n.icon}</button><span><b>${n.title}</b> <span class="muted small">— Reach ${msFmt(n)} ${n.unit}</span></span></div>${i < page.length - 1 ? '<div style="width:3px;height:12px;background:#2f9e44;border-radius:2px;margin-left:13px"></div>' : ''}`).join('');
+  return panelShell('Milestones', `${MS_TOTAL} milestones · ${cat.name} · showing ${pg * MS_PAGE_SIZE + 1}–${pg * MS_PAGE_SIZE + page.length} of ${nodes.length}`,
+    `<p class="muted small">Progression tree — this is how new stuff unlocks. Everything is unlocked for now; gating comes later.</p>
+    <div class="row wrap">${MS_CATS.map((c, i) => `<button class="btn ${i === ci ? 'on' : ''}" data-a="msCat" data-x="${i}">${c.icon} ${c.name}</button>`).join('')}</div>
+    <div class="row between"><button class="btn" data-a="msPage" data-x="-1">←</button><b>${page[0].ladder} chain</b><button class="btn" data-a="msPage" data-x="1">→</button></div>
+    <div style="display:flex;flex-direction:column;margin:8px 0">${chain}</div>
+    <div class="card in"><h4>${sel.icon} ${sel.title}</h4><p>Reach ${msFmt(sel)} ${sel.unit}.</p><p><b>Unlocks:</b> ${esc(sel.gate)}</p><p class="muted small">Requires: ${prev ? esc(prev.title) : 'Nothing — first in its chain.'} · Status: Unlocked ✓</p></div>`);
+};
 // Daily goals and Progress are one app now: Progress.
-PANELS.progress = () => goalsBody() + progressBody();
+PANELS.progress = () => goalsBody() + progressBody() + milestonesBody();
 PANELS.goals = goalsBody;
 // ---------- Calendar: month grid with the game's real events ----------
 const CAL_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -2496,7 +2513,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026eb' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ec' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
@@ -3510,6 +3527,9 @@ const A = {
   mgrSalary: x => { const [id, d] = x.split('|'); act(() => adjustManagerSalary(id, +d), 'Manager salary changed'); },
   fireMgr: x => act(() => fireStoreManager(x), 'New manager hired'),
   progressSel: x => { UI.progressSel = +x; renderPanel(); },
+  msCat: x => { UI.msCat = +x; UI.msPage = 0; UI.msNode = null; renderPhoneApp(); renderPanel(); },
+  msPage: x => { const ci = UI.msCat || 0; const pages = Math.ceil(msNodes(ci).length / MS_PAGE_SIZE); UI.msPage = Math.max(0, Math.min(pages - 1, (UI.msPage || 0) + (+x))); UI.msNode = null; renderPhoneApp(); renderPanel(); },
+  msNode: x => { UI.msNode = x; renderPhoneApp(); renderPanel(); },
   calShift: dm => { const now = dateOf(S.day), cur = UI.calYM || { y: now.getUTCFullYear(), m: now.getUTCMonth() }; const d = new Date(Date.UTC(cur.y, cur.m + dm, 1)); UI.calYM = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; renderPhoneApp(); },
   calPrev: () => A.calShift(-1),
   calNext: () => A.calShift(1),
