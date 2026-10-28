@@ -424,23 +424,28 @@ const MapView = (() => {
     const st = S_(); if (!st) return;
     // Airline citizens: bought airports grow 1/sec, hubs 2/sec,
     // forever, from the outside world. New sites start at 100.
-    // Moves in flight finish here: pop lands on arrival.
+    // Originator flow: each originator sends 1/sec along each of
+    // its routes, separate from its own growth (it does not lose
+    // the people it sends, and the destination keeps its own rate).
     if (typeof S !== 'undefined' && S && S.airports) {
       for (const k in S.airports) {
         const a = S.airports[k];
         if (a.pop === undefined) a.pop = 100;
         a.pop += (a.type === 'hub' ? 2 : 1) * dt;
       }
-      if (Array.isArray(S.moves)) {
-        for (let i = S.moves.length - 1; i >= 0; i--) {
-          const mp = S.moves[i];
-          mp.t += dt / mp.dur;
-          if (mp.t >= 1) {
-            const B = S.airports[mp.to];
-            if (B) { if (B.pop === undefined) B.pop = 100; B.pop += mp.amount; }
-            S.moves.splice(i, 1);
-            save();
-          }
+      // ga move migration: any in-flight manual moves land now
+      // (manual moves are replaced by originator flow).
+      if (Array.isArray(S.moves) && S.moves.length) {
+        for (const mp of S.moves) { const B = S.airports[mp.to]; if (B) { if (B.pop === undefined) B.pop = 100; B.pop += mp.amount; } }
+        S.moves = [];
+        save();
+      }
+      if (Array.isArray(S.routes)) {
+        for (const r of S.routes) {
+          const A = S.airports[r.from], B = S.airports[r.to];
+          if (!A || !B) continue;
+          if (A.originator) { if (B.pop === undefined) B.pop = 100; B.pop += 1 * dt; }
+          if (B.originator) { if (A.pop === undefined) A.pop = 100; A.pop += 1 * dt; }
         }
       }
       if (dt > 0) { const nowMs = Date.now(); if (!lastPopSave || nowMs - lastPopSave > 30000) { lastPopSave = nowMs; save(); } }
@@ -784,17 +789,24 @@ const MapView = (() => {
     // Drawn routes: dotted routes + planes on the routes the player
     // drew (see route mode). Kind follows the endpoints: hub-hub
     // carries people + cargo, airport-hub carries people only.
+    // A plane flies a route only when people flow on it, which is
+    // when one end is an originator. The plane starts at the
+    // originator when exactly one end is one, so the loaded leg
+    // runs originator to destination and the return leg comes back.
     if (viewKind === 'world' && S && S.airports && Array.isArray(S.routes)) {
       const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
       S.routes.forEach((r, idx) => {
-        const A = S.airports[r.from], B = S.airports[r.to];
-        if (!A || !B) return;
+        const A0 = S.airports[r.from], B0 = S.airports[r.to];
+        if (!A0 || !B0) return;
+        const A = (A0.originator && !B0.originator) ? A0 : (B0.originator && !A0.originator) ? B0 : A0;
+        const B = A === A0 ? B0 : A0;
         const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
         if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
         c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
         c.setLineDash([0.1, 10]);
         c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
         c.setLineDash([]);
+        if (!A0.originator && !B0.originator) return;
         const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
         const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
         const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
@@ -804,41 +816,24 @@ const MapView = (() => {
         c.restore();
       });
     }
-    // Draw and move mode: ring the source dot so the player sees
-    // which dot they are drawing or moving from.
-    const dsrc = drawSrc();
-    if ((viewKind === 'world' || viewKind === 'cluster') && dsrc && S && S.airports && S.airports[dsrc]) {
-      const src = S.airports[dsrc];
+    // Route mode: ring the source dot so the player sees which
+    // dot they are drawing from.
+    if ((viewKind === 'world' || viewKind === 'cluster') && typeof UI !== 'undefined' && UI.routing && S && S.airports && S.airports[UI.routing]) {
+      const src = S.airports[UI.routing];
       const [sx, sy] = toScreen(src.x, src.y);
       const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
       c.strokeStyle = '#2563eb'; c.lineWidth = 2;
       c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
     }
-    // Draw preview: a dotted line from the source dot to the
-    // finger while the player drags a route or a move.
-    if ((viewKind === 'world' || viewKind === 'cluster') && dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
-      const src = S.airports[dsrc];
+    // Route draw preview: a dotted line from the source dot to
+    // the finger while the player drags a route.
+    if ((viewKind === 'world' || viewKind === 'cluster') && typeof UI !== 'undefined' && UI.routing && drawPos && S && S.airports && S.airports[UI.routing]) {
+      const src = S.airports[UI.routing];
       const [sx, sy] = toScreen(src.x, src.y);
       c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
       c.setLineDash([0.1, 10]);
       c.beginPath(); c.moveTo(sx, sy); c.lineTo(drawPos[0], drawPos[1]); c.stroke();
       c.setLineDash([]);
-    }
-    // Move planes: one plane per move in flight, carrying people
-    // from source to destination. Pop lands on arrival (see step).
-    if ((viewKind === 'world' || viewKind === 'cluster') && S && S.airports && Array.isArray(S.moves)) {
-      S.moves.forEach(mp => {
-        const A = S.airports[mp.from], B = S.airports[mp.to];
-        if (!A || !B) return;
-        const f = Math.min(1, Math.max(0, mp.t));
-        const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
-        const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
-        const ang = Math.atan2(B.y - A.y, B.x - A.x);
-        c.save(); c.translate(sx, sy); c.rotate(ang);
-        c.fillStyle = '#16233f';
-        c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
-        c.restore();
-      });
     }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
@@ -870,21 +865,20 @@ const MapView = (() => {
 
   // ---------- input ----------
   const pts = new Map(); let downAt = null, moved = 0, pinch = null, drawPos = null;
-  const drawSrc = () => typeof UI !== 'undefined' ? (UI.routing || (UI.moving && UI.moving.from) || null) : null;
-  const drawing = () => !!drawSrc();
-  top.addEventListener('pointerdown', e => { top.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); downAt = [e.clientX, e.clientY]; moved = 0; anim = null; if (drawing()) { const rect = top.getBoundingClientRect(); drawPos = [e.clientX - rect.left, e.clientY - rect.top]; } if (pts.size === 2 && !drawing()) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: v.s }; } });
+  const routing = () => typeof UI !== 'undefined' && !!UI.routing;
+  top.addEventListener('pointerdown', e => { top.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); downAt = [e.clientX, e.clientY]; moved = 0; anim = null; if (routing()) { const rect = top.getBoundingClientRect(); drawPos = [e.clientX - rect.left, e.clientY - rect.top]; } if (pts.size === 2 && !routing()) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: v.s }; } });
   top.addEventListener('pointermove', e => {
     if (!pts.has(e.pointerId)) return;
     const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
     const rect = top.getBoundingClientRect();
     // Route drawing: panning and pinch are off, the finger draws
     // a preview line from the source dot instead.
-    if (drawing()) { drawPos = [e.clientX - rect.left, e.clientY - rect.top]; moved += Math.abs(e.clientX - prev[0]) + Math.abs(e.clientY - prev[1]); return; }
+    if (routing()) { drawPos = [e.clientX - rect.left, e.clientY - rect.top]; moved += Math.abs(e.clientX - prev[0]) + Math.abs(e.clientY - prev[1]); return; }
     if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; zoomAt(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d / v.s, (a[0] + b[0]) / 2 - rect.left, (a[1] + b[1]) / 2 - rect.top); moved = 99; return; }
     const dx = e.clientX - prev[0], dy = e.clientY - prev[1]; moved += Math.abs(dx) + Math.abs(dy);
     if (moved > 5) { v.x += dx; v.y += dy; clampView(); dirty = true; }
   });
-  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && drawing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : viewKind === 'world' ? dotAt(sx, sy) : null; if (best) { if (UI.routing) handlers.routeDot && handlers.routeDot(best); else if (UI.moving) handlers.moveDot && handlers.moveDot(best); } else { if (UI.routing) handlers.routeCancel && handlers.routeCancel(); else if (UI.moving) handlers.moveCancel && handlers.moveCancel(); } } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
+  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && routing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : viewKind === 'world' ? dotAt(sx, sy) : null; if (best) handlers.routeDot && handlers.routeDot(best); else handlers.routeCancel && handlers.routeCancel(); } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
   top.addEventListener('pointerup', up); top.addEventListener('pointercancel', e => { pts.delete(e.pointerId); pinch = null; drawPos = null; });
   top.addEventListener('wheel', e => { e.preventDefault(); const rect = top.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
@@ -971,15 +965,6 @@ const MapView = (() => {
         const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
         if (best) handlers.routeDot && handlers.routeDot(best);
         else handlers.routeCancel && handlers.routeCancel();
-        return;
-      }
-      // Move mode: the player picked a percent, then taps a dot
-      // on one of their routes to move people there. Any other
-      // tap cancels move mode.
-      if (typeof UI !== 'undefined' && UI.moving && (viewKind === 'world' || viewKind === 'cluster')) {
-        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
-        if (best) handlers.moveDot && handlers.moveDot(best);
-        else handlers.moveCancel && handlers.moveCancel();
         return;
       }
       // White dots are buyable: tapping one opens the airport/hub
