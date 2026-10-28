@@ -4153,7 +4153,14 @@ A.mgmenu = () => { UI.mgGame = null; renderPhoneApp(); renderPanel(); };
 A.mgplayPhone = (g) => {
   const sup = UI.dlSuppress === g; UI.dlSuppress = null;
   if (sup) return;
-  UI.phoneApp = 'minigames'; UI.panel = 'minigames'; UI.mgGame = g; renderPhoneApp();
+  UI.phoneApp = 'minigames'; UI.panel = 'minigames'; UI.mgGame = g;
+  // Grid tap: no #phoneCard exists yet, so renderPhoneApp() alone
+  // would no-op. Rebuild the modal first, exactly like openPanel does.
+  if (UI.modal === 'phone' && !document.querySelector('#phoneCard')) {
+    const mbox = document.querySelector('#modal .mbox.phone');
+    if (mbox) mbox.innerHTML = phoneHTML();
+  }
+  renderPhoneApp();
 };
 A.storeTab = (t) => { UI.storeTab = t; UI.storeGame = null; UI.storeDelConfirm = null; renderPhoneApp(); };
 A.storeFilter = (k) => { UI.storeFilter = k; renderPhoneApp(); };
