@@ -420,6 +420,12 @@ const MapView = (() => {
     return [p[0][0], p[0][1], 0];
   }
   let lastPopSave = 0;
+  let lastCashHud = 0;
+  // Passenger fare: every person who arrives by air pays this
+  // into business cash. Routes earn as people fly; a hub growing
+  // on its own earns nothing until it is connected. Trade still
+  // sells separately at $1 per unit into a hub.
+  const AIR_FARE = 50;
   function step(dt) {
     const st = S_(); if (!st) return;
     // Airline citizens: hubs are originators by nature, no toggle.
@@ -432,7 +438,7 @@ const MapView = (() => {
     // (and drags stability) until it is drained or upgraded.
     // Hub-hub routes move cargo only, no passengers, unless the
     // player moves them by hand (see S.moves below). New sites
-    // start at 100, level 1.
+    // start at 0, level 1.
     if (typeof S !== 'undefined' && S && S.airports) {
       for (const k in S.airports) {
         const a = S.airports[k];
@@ -446,8 +452,8 @@ const MapView = (() => {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
           const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
+          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * AIR_FARE; } }
+          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * AIR_FARE; } }
         }
       }
       // Percent flows: a route can carry a standing percent of
@@ -481,6 +487,7 @@ const MapView = (() => {
           if (B.pop === undefined) B.pop = 0;
           A.pop -= amt;
           B.pop += amt;
+          S.cash = (S.cash || 0) + amt * AIR_FARE;
         }
       }
       if (Array.isArray(S.moves)) {
@@ -490,7 +497,7 @@ const MapView = (() => {
           mp.t += dt / mp.dur;
           if (mp.t >= 1) {
             const B = S.airports[mp.to];
-            if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; }
+            if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; S.cash = (S.cash || 0) + mp.amount * AIR_FARE; }
             S.moves.splice(i, 1);
             save();
           }
@@ -528,6 +535,19 @@ const MapView = (() => {
         } else site.crowdedNotified = false;
       }
       if (dt > 0) { const nowMs = Date.now(); if (!lastPopSave || nowMs - lastPopSave > 30000) { lastPopSave = nowMs; save(); } }
+      // Keep the cash pill live: passive income (fares, trade)
+      // lands in step, but renderHUD only runs on actions, so
+      // refresh just the money figure once a second when it moved.
+      if (typeof S !== 'undefined' && S) {
+        const nowMs = Date.now();
+        if (!lastCashHud || nowMs - lastCashHud >= 1000) {
+          lastCashHud = nowMs;
+          try {
+            const pill = document.querySelector('.hud-money span');
+            if (pill && typeof fmtMoney === 'function') { const txt = '💰 ' + fmtMoney(S.cash); if (pill.textContent !== txt) pill.textContent = txt; }
+          } catch (e) {}
+        }
+      }
     }
     if (builtFor !== st.seed) buildUnits();
     pumpRoutes();

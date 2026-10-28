@@ -1309,7 +1309,7 @@ function onDotTap(dot) {
       html += `<p>Flow out: ${Math.round(outPct * 100)}% ${pctBtn(0, 'Off')} ${pctBtn(0.1, '10%')} ${pctBtn(0.25, '25%')} ${pctBtn(0.5, '50%')} ${pctBtn(0.75, '75%')} ${pctBtn(1, '100%')}${inPct ? ` | In from ${esc(other.name)}: ${Math.round(inPct * 100)}%` : ''}</p>`;
     });
   } else {
-    html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs.</p><p>Cash: ${fmt(S.cash)}</p>`;
+    html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs. Passengers pay $50 each when they arrive, so routes earn as people fly.</p><p>Cash: ${fmt(S.cash)}</p>`;
     const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
