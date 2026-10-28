@@ -54,7 +54,8 @@ const MapView = (() => {
     ['Michigan', 'Indiana', 'Illinois', 'Wisconsin', 'Minnesota'],
     ['Iowa', 'Kansas', 'Nebraska', 'South Dakota', 'North Dakota'],
     ['Oklahoma', 'Texas', 'New Mexico', 'Colorado', 'Wyoming'],
-    ['Montana', 'Idaho', 'Utah', 'Arizona', 'Nevada']
+    ['Montana', 'Idaho', 'Utah', 'Arizona', 'Nevada'],
+    ['California', 'Oregon', 'Washington', 'Alaska', 'Hawaii']
   ];
   let viewCluster = 0;
   const clusterStates = () => CLUSTER_MAPS[viewCluster] || CLUSTER_MAPS[0];
@@ -63,9 +64,26 @@ const MapView = (() => {
     clusterStates().forEach(name => regionRings(name).forEach(r => rings.push(r)));
     return rings;
   };
+  // A state that wraps the map edge (Alaska) has a full box spanning
+  // nearly the whole map; for framing, use its largest ring instead,
+  // the same way a single-state view does. Narrow states are unaffected.
+  const stateBox = name => {
+    const st = stateEntry(name);
+    if (!st) return null;
+    const b = st.box;
+    if (b[2] - b[0] <= 300) return b;
+    let best = null, bestA = -1;
+    st.rings.forEach(ring => {
+      let rx0 = 1e9, ry0 = 1e9, rx1 = -1e9, ry1 = -1e9;
+      ring.forEach(p => { rx0 = Math.min(rx0, p[0]); ry0 = Math.min(ry0, p[1]); rx1 = Math.max(rx1, p[0]); ry1 = Math.max(ry1, p[1]); });
+      const a = (rx1 - rx0) * (ry1 - ry0);
+      if (a > bestA) { bestA = a; best = [rx0, ry0, rx1, ry1]; }
+    });
+    return best || b;
+  };
   const clusterBox = () => {
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, found = false;
-    clusterStates().forEach(name => { const st = stateEntry(name); if (!st) return; found = true; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+    clusterStates().forEach(name => { const b = stateBox(name); if (!b) return; found = true; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
     return found ? [x0, y0, x1, y1] : null;
   };
   const clusterForState = name => CLUSTER_MAPS.findIndex(list => list.includes(name));
