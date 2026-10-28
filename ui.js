@@ -1316,6 +1316,11 @@ function onDotTap(dot) {
   else if (dot.key.startsWith('us:')) code = dot.key.slice(3).toUpperCase();
   else code = (dot.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
   let html = `<h2>${code ? `<span class="codechip">${code}</span>` : ''}${esc(title)}</h2>`;
+  if (S.flow && dot.key.startsWith('us:') && S.co && S.co[dot.a3]) {
+    if (S.co[dot.a3].office) html += `<div class="kv"><span>Office</span><b>Opened</b></div>`;
+    else if (typeof controlled === 'function' && controlled(dot.a3)) html += `<button class="btn3d orange wide" data-a="dotOfficeBuy" data-x="${dot.a3}"${S.cash < 50000 ? ' disabled' : ''}>BUY OFFICE ${fmt(50000)}</button>`;
+    else html += `<div class="muted small">Control the flagship company first to open an office here.</div>`;
+  }
   if (owned) {
     const lv = owned.level || 1;
     html += `<p>You own ${owned.type === 'airport' ? 'an Airport' : owned.type === 'hub' ? 'a Hub' : 'a Port'} here. Level ${lv}</p>`;
@@ -3911,6 +3916,13 @@ const A = {
     else toast(pt.name + ' bought.', 'good');
   },
   tradePickCancel: () => { UI.tradePick = null; closeModal(); },
+  dotOfficeBuy: a3 => {
+    const err = buyOffice(a3);
+    if (err) return toast(err, 'bad');
+    save(); renderHUD();
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+    toast('Office opened', 'good');
+  },
   airTab: tab => { UI.airTab = tab; openAirCard(); },
   airSite: key => {
     const a = S.airports && S.airports[key];
