@@ -728,10 +728,11 @@ const MapView = (() => {
     let n = 0;
     if (!layerOn('labels')) n = maxLabels + 1;
     // Zoomed in, there are no pills — only the land.
-    // Pills (the country Go buttons) show only when zoomed out
-    // (v.s <= 1.4, the same zoomed-in threshold the military display
-    // already uses). Hiding them also ends pills covering dots.
-    if (v.s <= 1.4) for (const [id, p] of order) {
+    // Pills (the country Go buttons) show only on the main map and
+    // only when zoomed out (v.s <= 1.4, the same zoomed-in threshold
+    // the military display already uses). Hiding them also ends
+    // pills covering dots.
+    if (viewKind === 'world' && v.s <= 1.4) for (const [id, p] of order) {
       if (n >= maxLabels && p < 1e11) break;
       const ct = W.cities[id], [sx, sy] = toScreen(ct.x, ct.y);
       if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
