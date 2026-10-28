@@ -15,12 +15,14 @@ const MapView = (() => {
   const handlers = {};
   const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
   // New York as its own view (not a game mode): the state's shape,
-  // pinned by exact ring signature — never by bbox, so no wrong ring
-  // can slip in. NY_BOX frames it; NY_RINGS draw it.
+  // pinned by exact ring signature — never by bbox. 7 rings only:
+  // mainland, Staten Island, harbor islands, Thousand Islands.
+  // Connecticut's 56-point ring is NOT in this list: it was
+  // previously mistaken for Long Island, and it drew Connecticut
+  // attached to New York. NY_BOX frames it; NY_RINGS draw it.
   const NY_BOX = [556.5, 354.0, 601.5, 385.5];
   const NY_RINGS = [
     [228, 556.9, 354.6, 600.8, 384.7],
-    [56, 590.4, 374.7, 601.2, 381.8],
     [9, 587.4, 383.9, 588.6, 385.0],
     [5, 599.8, 379.8, 600.4, 380.0],
     [6, 599.2, 380.9, 599.5, 381.3],
