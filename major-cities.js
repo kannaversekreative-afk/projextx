@@ -20,9 +20,6 @@ const MAJOR_CITIES = [
   {n:'Cape Town', c:'ZAF', code:'CPT', lat:-33.92, lon:18.42, pop:4900000, port:1},
   // United Arab Emirates (capital Abu Dhabi already in data)
   {n:'Dubai', c:'ARE', code:'DXB', lat:25.20, lon:55.27, pop:3600000, port:1},
-  // Cuba — no capital in data, so this becomes Cuba's capital and
-  // makes Cuba playable. Appended last so no existing city id shifts.
-  {n:'Havana', c:'CUB', code:'HAV', lat:23.11, lon:-82.36, pop:2130000, port:1},
 ];
 
 
