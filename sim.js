@@ -36,7 +36,7 @@ const regimeOf = type => ({ type, left: REGIMES[type].len[0] + Math.floor(rand()
 // ---------- new game ----------
 function newGame(opt) {
   const s = {
-    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', flow: !opt.leader && opt.mode !== 'worl' && opt.mode !== 'random', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
+    v: 2, seed: Math.floor(rand() * 1e9), mode: opt.mode, randomWorld: opt.mode === 'worl' || opt.mode === 'random', flow: !opt.leader && opt.mode !== 'worl' && opt.mode !== 'random' && opt.mode !== 'inc', home: opt.home, day: 0, speed: 1, leader: !!opt.leader, extra: {}, countryName: opt.countryName || null,
     you: { name: opt.name || 'Founder', color: opt.color || LOGO_COLORS[0], look: opt.look || (typeof randLook === 'function' ? randLook() : null) },
     cash: 750000, loan: 0, xp: 0, rating: 0,
     countries: {}, co: {}, idx: { v: 1000, h: { d: [], w: [], m: [], v: [] } }, idx0: 1000,
@@ -50,6 +50,11 @@ function newGame(opt) {
   };
   S = s;
   W.lotCache = {};
+  // Worl Inc.: one game mode. You start in the USA with the 5-state
+  // New York set unlocked, and the newspaper beat (10 real minutes)
+  // replaces manual week advance. incPaperAt is the wall-clock time
+  // of the last auto edition, so the beat survives reloads.
+  if (opt.mode === 'inc') { S.incStates = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts']; S.incPaperAt = Date.now(); }
   // Countries, with military levels from their real strength: the
   // 2025 Global Firepower ranking for the top 39, a GDP + population
   // formula for everyone else. Every country starts under 20.
@@ -68,7 +73,7 @@ function newGame(opt) {
   });
   for (const a in s.countries) for (const b in s.countries[a].rel) if (s.countries[b]) s.countries[b].rel[a] = s.countries[a].rel[b];
   const usedNames = new Set(), usedSyms = new Set();
-  if (opt.leader) {
+  if (opt.leader || opt.mode === 'inc') {
     // Leader game: 2–3 businesses per country. Flagship is a full company,
     // extras are economic businesses (see leader.js). Must-haves come
     // first (guaranteed), the rest come from the OPEN pool — any
@@ -108,8 +113,10 @@ function newGame(opt) {
   // You start with a fresh startup in your home country (tycoon only).
   // Leader games do NOT own the flagship: you inherit the country, you
   // tax its businesses, you do not own 100% of one of them.
+  // Worl Inc. is the same: you run the country as a business, you do
+  // not start owning its flagship company.
   const home = s.co[opt.home];
-  if (!opt.leader) {
+  if (!opt.leader && opt.mode !== 'inc') {
     if (opt.company) { home.name = opt.company; home.sym = tickerFor(opt.company, usedSyms); }
     home.color = s.you.color; home.locs.forEach(l => setLot(home.city, l.t, null)); home.locs = [];
     home.fleet = SECTORS[home.sector].fleet ? 1 : 0; home.web = { tier: 0, ads: {}, addons: {} }; home.ai = false;
@@ -131,7 +138,7 @@ function newGame(opt) {
   // level. The tycoon home flagship is yours, not CPU, so it is
   // skipped — you buy its office and hire its board yourself.
   if (typeof cpuOfficeAndBoard === 'function') for (const a3 in s.co) {
-    if (!opt.leader && a3 === opt.home) continue;
+    if (!opt.leader && opt.mode !== 'inc' && a3 === opt.home) continue;
     try { cpuOfficeAndBoard(s.co[a3]); } catch (e) {}
   }
   if (opt.leader) {
@@ -146,6 +153,10 @@ function newGame(opt) {
     s.holdings[opt.home] = { qty: home.shares, cost: 0 };
   }
   if (s.flow) s.cash = 0; // Flow games start with personal money only; invest it to fund the business.
+  // Worl Inc.: starting from nothing means no inherited company and a
+  // modest starter stake — enough for a first small business, not an
+  // airport. (The number is a starting point; Nicholas can change it.)
+  if (opt.mode === 'inc') { s.cash = 25000; s.holdings = {}; }
   if (typeof ensureSports === 'function') { try { ensureSports(); } catch (e) {} }
   if (typeof ensureStores === 'function') { try { ensureStores(); } catch (e) {} }
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
@@ -156,6 +167,9 @@ function newGame(opt) {
     const biz = businessesInCountry(opt.home);
     news('World', `You have inherited ${cname(opt.home)}. Treasury ${fmtMoney(s.countries[opt.home].treasury, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}.`, opt.home);
     mail('Welcome', `You have inherited ${cname(opt.home)}`, `You are now the leader of ${cname(opt.home)}, as it is today. Treasury ${fmtMoney(s.countries[opt.home].treasury, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}, population ${fmtPop(s.countries[opt.home].pop)}. Businesses: ${biz.map(b => b.name + ' (' + b.sector + ')').join(', ')}. Tax them, pay your people, trade, and grow — or invade a neighbour for the challenge. Your business money is separate: $750,000 to build your own businesses with.`);
+  } else if (opt.mode === 'inc') {
+    news('World', 'Welcome to Worl Inc. You run the United States as a business, starting from nothing. Your starting states: New York, Vermont, New Hampshire, Maine, Massachusetts.', opt.home);
+    mail('Welcome', 'Worl Inc.', 'You run the United States as a business, starting from nothing. Your starting states are New York, Vermont, New Hampshire, Maine, and Massachusetts — 5 dots on the map. Build on them, expand state by state, and take over the world. Business cash to start: $25,000. A new edition of The Ticker Times lands every 10 minutes.');
   } else {
     news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
     mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);

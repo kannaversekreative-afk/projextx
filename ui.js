@@ -473,17 +473,11 @@ function renderPanel() {
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
 function renderHUD() {
   if (!S || UI.pick) return;
-  // New HUD, from the reference design (layout only, original art):
-  // no Go home button, no bottom bar at all.
-  // Top-left: a white pill with blue text — the profile icon, the country
-  // name and your money. Top-right: a white pill with blue text, the game date — tap it and
-  // it asks if you are done this week, with a calendar underneath.
-  // Bottom-left: map layers — toggle what shows on the map.
-  // Bottom-middle: your current city — tap it for the airport
-  // departures board and fly somewhere. Bottom-right: a hamburger
-  // that opens every menu item, on the right, scrollable.
-  const hk = W.byA3[S.home];
-  const curCity = airportFromCity();
+  // New HUD (Worl Inc.): no bottom bar buttons except the phone.
+  // Top-left: profile. Top-middle: business money. Top-right: the
+  // game date — tap it to read The Ticker Times (a new edition lands
+  // every 10 real minutes; manual week advance is gone).
+  // Bottom-right: phone. No map-layers button, no city/flying pill.
   const youName = (S.you && S.you.name) || 'Founder';
   const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
   // View back buttons: country view gets ← World plus the country
@@ -516,9 +510,7 @@ function renderHUD() {
     <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)}</small></span>
   </button>
   <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
-  <button class="hud-pill hud-tr" data-a="dateModal" aria-label="Date">${fmtDate(S.day)}</button>
-  <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
-  <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+  <button class="hud-pill hud-tr" data-a="newsPaper" aria-label="Newspaper">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   <div class="airtabs" id="airtabs">${['routes', 'fleet', 'airline', 'more'].map(t => `<button data-a="airTab" data-x="${t}"${(UI.airTab || 'routes') === t ? ' class="sel"' : ''}>${t === 'routes' ? 'Routes' : t === 'fleet' ? 'Fleet' : t === 'airline' ? 'Airline' : 'More'}</button>`).join('')}</div>
   ${viewBtns}
@@ -554,15 +546,9 @@ function renderCityHUD() {
       const livePop = (cs && share) ? Math.round(cs.pop * share) : (c.popAlloc || c.pop);
       const liveGdp = (cs && share) ? cs.gdp * 1e6 * share : (c.gdpAlloc || 0);
       const growth = cs ? cs.growth : 0;
-      // Bottom row, exactly the row from the world map: filters on the
-      // left (same layers icon), the current city in the middle (tap it
-      // for the airport, to fly somewhere else or go back to the map),
-      // phone on the right. Same buttons and same placement as the map,
-      // so the row looks identical inside every city.
-      const layersIcon = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>`;
+      // Bottom row (Worl Inc.): phone on the right only. No filters,
+      // no city/flying pill — the row matches the map HUD.
       html = `<div class="citytopbar"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`
-        + `<button class="hud-btn hud-bl" data-a="cityFilter" aria-label="Filters">${layersIcon}</button>`
-        + `<button class="hud-city" data-a="departures" aria-label="Change city or leave"><span>${W.byA3[c.a3].flag}</span><span>${esc(c.name)}</span></button>`
         + `<button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">\u{1F4F1}</button>`;
     }
   }
@@ -1046,11 +1032,13 @@ async function boot() {
 }
 function showInherit() {
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); UI.introMode = null;
-  $('inherit').innerHTML = `<h1>WORL</h1>
-    <div class="intro-modes">
-      <button class="intro-mode" data-a="introMode" data-x="offline"><b>Offline</b><span>Play on your own. World — the real world as it is today — or Random World, a fully generated world with random land, countries, economies and companies.</span></button>
-      <button class="intro-mode" data-a="introMode" data-x="online"><b>Online</b><span>Same two worlds, but against real players. PvP comes later — it is not built yet.</span></button>
-    </div>
+  // Worl Inc.: one game mode. No Offline/Online/World/Random picker —
+  // every new game starts in the USA on the 5-state New York set.
+  $('inherit').innerHTML = `<h1>WORL INC.</h1>
+    <p style="color:#bbb;font-size:14px;font-weight:800">Run the country as a business. Start from nothing, take over the world.</p>
+    <div class="intro-step"><label class="muted small">YOUR NAME</label><input id="incName" placeholder="Founder" style="width:100%;padding:12px;border-radius:12px;border:1px solid #444;background:#1a1a1a;color:#fff;font-size:16px;margin:8px 0 12px"></div>
+    <button class="btn3d orange wide" data-a="incStart">START — NEW YORK</button>
+    <p class="muted small">You start with New York, Vermont, New Hampshire, Maine, and Massachusetts. $25,000 in business cash. A new newspaper lands every 10 minutes.</p>
     <button class="btn" data-a="introMode" data-x="minigames" style="margin-top:4px">🎮 App Store — no country needed</button>
     <div id="inheritStep" class="intro-step"></div>`;
   $('inherit').classList.add('open');
@@ -1156,16 +1144,20 @@ function nameCompany() {
 }
 function enterGame(returning) {
   UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit();
-  S.speed = 1; // Vehicle speed on the map, not game time. Game time does not advance on its own; it only moves on Age.
+  S.speed = 1; // Vehicle speed on the map, not game time. Worl Inc. game time advances on the newspaper beat (every 10 real minutes); old modes still move on Age.
   if (typeof ensurePerson === 'function') { try { ensurePerson(); } catch (e) {} }
   // Daily free cash grants are legacy tycoon only. Flow (employee)
   // games earn from jobs and business — no free $250k shop grant.
-  const da = (S.leader || S.flow) ? 0 : autoCreditDaily(), ca = (S.leader || S.flow) ? 0 : autoCreditShopCash();
+  // Worl Inc. starts from nothing too — no free grants either.
+  const da = (S.leader || S.flow || S.mode === 'inc') ? 0 : autoCreditDaily(), ca = (S.leader || S.flow || S.mode === 'inc') ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
   renderHUD();
   MapView.home();
-  if (returning) welcomeBack(); else S.tutorial = 0;
+  // Worl Inc. new games open on the 5-state New York cluster map,
+  // so the player sees their starting states and dots immediately.
+  if (S.mode === 'inc' && !returning) { MapView.showCluster('USA', 'New York'); renderHUD(); }
+  if (returning) welcomeBack(); else S.tutorial = (S.mode === 'inc' ? -1 : 0);
   renderTutorial();
 }
 const TUT = [
@@ -1746,7 +1738,8 @@ function loop(now) {
   // is not a daily-grant wallet — without this guard the first frame
   // paid a leader 2% of net worth, ~$21B on a $1T treasury).
   // Flow games get none either: employee games earn from jobs, not grants.
-  const _da = (S.leader || S.flow) ? 0 : autoCreditDaily(), _ca = (S.leader || S.flow) ? 0 : autoCreditShopCash();
+  // Worl Inc. gets none either: it starts from nothing, no free grants.
+  const _da = (S.leader || S.flow || S.mode === 'inc') ? 0 : autoCreditDaily(), _ca = (S.leader || S.flow || S.mode === 'inc') ? 0 : autoCreditShopCash();
   if (_da + _ca > 0) { toast(`+${fmtMoney(_da + _ca, true)} added to your cash`, 'good'); save(); renderHUD(); }
   lastT = now;
   const focused = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
@@ -3481,17 +3474,6 @@ function openMenuPopup() {
   openModal(phoneHTML(), 'phone');
 }
 PANELS.drawer = () => { closePanel(); openMenuPopup(); };
-// ---------- date modal: Done this week? + calendar ----------
-function openDateModal() {
-  const e = ensureEarnings();
-  const evs = calendarEvents();
-  const recent = e.history.slice(0, 8);
-  openModal(`<h2>DONE THIS WEEK?</h2><p>Are you done with your business this week?</p>
-  <div class="row gap"><button class="btn3d wide" data-a="dateYes">YES</button><button class="btn wide" data-a="dateNo">NO</button></div>
-  <h3 style="margin-top:18px">Calendar</h3>
-  <div class="menu-list">${evs.map(v => `<div class="srow" style="cursor:default"><span class="avatar">🗓️</span><span class="sname"><b>${esc(v.title)}</b><span class="muted">${fmtDate(v.day)}${v.day - S.day > 0 ? ` · in ${v.day - S.day} days` : ''}</span></span></div>`).join('')}</div>
-  ${recent.length ? `<h3 style="margin-top:18px">Last earnings reports</h3><div class="menu-list">${recent.map(r => `<div class="srow" style="cursor:default"><span class="avatar">📊</span><span class="sname"><b>${esc(r.name)}</b><span class="muted">${fmtDate(r.day)} · profit ${fmtMoney(r.profit, true)} · ${r.surprise >= 0 ? 'beat' : 'missed'} by ${Math.abs(Math.round(r.surprise * 100))}%${r.move ? ` · shares ${r.move >= 0 ? '+' : ''}${r.move}%` : ''}</span></span></div>`).join('')}</div>` : `<p class="muted small">No earnings reports yet — the first quarter lands 13 weeks in.</p>`}`, 'sheet');
-}
 // ---------- map layers sheet ----------
 function openLayersModal() {
   if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true };
@@ -3670,6 +3652,12 @@ const A = {
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
     S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
   },
+  // Worl Inc.: the only new-game path. USA, 5-state New York start.
+  incStart: () => {
+    const inp = document.getElementById('incName');
+    const name = (inp && inp.value.trim()) || 'Founder';
+    S = newGame({ mode: 'inc', home: 'USA', name }); save(); enterGame(false);
+  },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
   goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isWorldRegion && MapView.isWorldRegion(p[0], p[1])) MapView.showRegionMap(p[0], p[1]); else if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0], p[1]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
@@ -3787,9 +3775,6 @@ const A = {
   },
   advisorTax: x => { const cs = country(S.home); cs.tax = x === 'up' ? Math.min(0.5, cs.tax + 0.05) : Math.max(0.05, cs.tax - 0.05); save(); renderPanel(); toast(`Corporate tax now ${Math.round(cs.tax * 100)}%.`, 'good'); },
   cancelPlace: () => { UI.placing = false; renderHUD(); toast('Placement cancelled.'); },
-  dateModal: () => openDateModal(),
-  dateYes: () => { closeModal(); A.ageWeek(); },
-  dateNo: () => closeModal(),
   layers: () => openLayersModal(),
   layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),

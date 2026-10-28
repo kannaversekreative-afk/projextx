@@ -428,6 +428,16 @@ const MapView = (() => {
   const AIR_FARE = 50;
   function step(dt) {
     const st = S_(); if (!st) return;
+    // Worl Inc. newspaper beat: every 10 real minutes, a week passes
+    // and a new Ticker Times edition lands. No manual week advance,
+    // no modal popup — just a toast; tap the date pill to read it.
+    // One catch-up beat max, so a long absence does not spam weeks.
+    if (typeof S !== 'undefined' && S && S.mode === 'inc' && typeof stepWeek === 'function') {
+      if (Date.now() - (S.incPaperAt || 0) >= 600000) {
+        S.incPaperAt = Date.now();
+        try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
+      }
+    }
     // Airline citizens: hubs are originators by nature, no toggle.
     // A hub grows (level + 1)/sec constantly, up to capacity level x 20000. An airport grows
     // only when connected to a hub, receiving per hub route the
