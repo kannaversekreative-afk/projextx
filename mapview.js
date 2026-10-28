@@ -13,7 +13,7 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
+  const COL = { sea: '#0b1e3a', sea2: '#0a1930', land: '#3a4756', home: '#1e3a5f', border: 'rgba(148,163,184,0.4)', grid: 'rgba(148,163,184,0.12)' };
   // View hierarchy (not game modes): world -> country -> region.
   // The world shows countries only: no region borders, no gold dots.
   // Tapping a country goes to that country alone, sectioned by its
@@ -287,7 +287,7 @@ const MapView = (() => {
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
       if (!vis(k)) return;
-      let fill = k.playable ? COL.land : '#e6eefb';
+      let fill = k.playable ? COL.land : '#2a3648';
       if (st && k.a3 === st.home && k.a3 !== 'USA') fill = COL.home;
       if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#eaf2ff';
       c.fillStyle = fill; c.fill(k.path);
@@ -816,7 +816,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['c' + ct.id];
-          c.fillStyle = dotFill(bought, 'c' + ct.id); c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          const df = dotFill(bought, 'c' + ct.id); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -825,7 +825,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['us:' + st.s];
-          c.fillStyle = dotFill(bought, 'us:' + st.s); c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          const df = dotFill(bought, 'us:' + st.s); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -835,7 +835,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['c' + ct.id];
-          c.fillStyle = dotFill(bought, 'c' + ct.id); c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          const df = dotFill(bought, 'c' + ct.id); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -845,10 +845,30 @@ const MapView = (() => {
           const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports[d.key];
-          c.fillStyle = dotFill(bought, d.key); c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          const df = dotFill(bought, d.key); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
+    };
+    // Curved routes (reference look): a gentle arc, not a straight
+    // line. West to east always, so the same pair arcs the same way
+    // no matter which end was drawn first; east-west routes arc
+    // north, north-south routes arc east. Coordinate-agnostic, so
+    // it works in screen coords (routes, ambient planes) and map
+    // coords (move planes).
+    const routeCtrl = (ax, ay, bx, by) => {
+      let x1 = ax, y1 = ay, x2 = bx, y2 = by;
+      if (x1 > x2 || (x1 === x2 && y1 > y2)) { const tx = x1, ty = y1; x1 = x2; y1 = y2; x2 = tx; y2 = ty; }
+      const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1, off = d * 0.18;
+      return [(x1 + x2) / 2 + dy / d * off, (y1 + y2) / 2 - dx / d * off];
+    };
+    const routePt = (ax, ay, cx, cy, bx, by, t) => {
+      const u = 1 - t;
+      return [u * u * ax + 2 * u * t * cx + t * t * bx, u * u * ay + 2 * u * t * cy + t * t * by];
+    };
+    const routeAng = (ax, ay, cx, cy, bx, by, t) => {
+      const u = 1 - t;
+      return Math.atan2(2 * u * (cy - ay) + 2 * t * (by - cy), 2 * u * (cx - ax) + 2 * t * (bx - cx));
     };
     // Airline layer on every map: drawn routes + route planes,
     // source ring, drag preview, and move planes. Routes are
@@ -869,16 +889,15 @@ const MapView = (() => {
           const B = A === A0 ? B0 : A0;
           const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
           if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
-          c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
-          c.setLineDash([0.1, 10]);
-          c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
-          c.setLineDash([]);
+          c.strokeStyle = '#3b82f6'; c.lineWidth = 3; c.lineCap = 'round';
+          const [rcx, rcy] = routeCtrl(ax, ay, bx, by);
+          c.beginPath(); c.moveTo(ax, ay); c.quadraticCurveTo(rcx, rcy, bx, by); c.stroke();
           if (A0.type === B0.type) return;
           const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
-          const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
-          const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
+          const [px, py] = routePt(ax, ay, rcx, rcy, bx, by, f);
+          const ang = routeAng(ax, ay, rcx, rcy, bx, by, f) + (t < 1 ? 0 : Math.PI);
           c.save(); c.translate(px, py); c.rotate(ang);
-          c.fillStyle = '#16233f';
+          c.fillStyle = '#ffffff';
           c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
           c.restore();
         });
@@ -888,7 +907,7 @@ const MapView = (() => {
         const src = S.airports[dsrc];
         const [sx, sy] = toScreen(src.x, src.y);
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
-        c.strokeStyle = '#2563eb'; c.lineWidth = 2;
+        c.strokeStyle = '#ffffff'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
       }
       if (dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
@@ -901,10 +920,9 @@ const MapView = (() => {
         let ex = drawPos[0], ey = drawPos[1], locked = null;
         try { locked = viewKind === 'cluster' ? clusterDotAt(drawPos[0], drawPos[1], 34) : dotAt(drawPos[0], drawPos[1], 34); } catch (e) {}
         if (locked) { const lp = toScreen(locked.x, locked.y); ex = lp[0]; ey = lp[1]; }
-        c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
-        c.setLineDash([0.1, 10]);
-        c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.stroke();
-        c.setLineDash([]);
+        c.strokeStyle = '#3b82f6'; c.lineWidth = 3; c.lineCap = 'round';
+        const [pcx, pcy] = routeCtrl(sx, sy, ex, ey);
+        c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(pcx, pcy, ex, ey); c.stroke();
         if (locked) { c.strokeStyle = '#f5b301'; c.lineWidth = 3; c.beginPath(); c.arc(ex, ey, 14, 0, 7); c.stroke(); }
       }
       if (S && S.airports && Array.isArray(S.moves)) {
@@ -913,11 +931,12 @@ const MapView = (() => {
           if (!A || !B) return;
           if (mp.wait > 0) return;
           const f = Math.min(1, Math.max(0, mp.t));
-          const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
+          const [mcx, mcy] = routeCtrl(A.x, A.y, B.x, B.y);
+          const [px, py] = routePt(A.x, A.y, mcx, mcy, B.x, B.y, f);
           const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
-          const ang = Math.atan2(B.y - A.y, B.x - A.x);
+          const ang = routeAng(A.x, A.y, mcx, mcy, B.x, B.y, f);
           c.save(); c.translate(sx, sy); c.rotate(ang);
-          c.fillStyle = '#16233f';
+          c.fillStyle = '#ffffff';
           c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
           c.restore();
         });
@@ -940,6 +959,30 @@ const MapView = (() => {
           c.restore();
         });
       }
+      // Airport code pills above bought sites (reference look): a
+      // blue pill with the site's code, so an owned network reads
+      // at a glance. Unowned dots get no pill (no clutter).
+      if (S && S.airports) {
+        for (const key in S.airports) {
+          const a = S.airports[key]; if (!a) continue;
+          const [sx, sy] = toScreen(a.x, a.y); if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
+          let code = '';
+          if (key.startsWith('c')) { const ct = W.cities.find(x => x.id === +key.slice(1)); code = (ct && ct.code) || (a.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase(); }
+          else if (key.startsWith('us:')) code = key.slice(3).toUpperCase();
+          else code = (a.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+          if (!code) continue;
+          c.font = 'bold 11px system-ui, sans-serif';
+          const tw = c.measureText(code).width, pw = tw + 14, ph = 18, px0 = sx - pw / 2;
+          let py0 = sy - 26; if (py0 < 2) py0 = sy + 12;
+          c.fillStyle = '#2563eb';
+          c.beginPath();
+          const pr = ph / 2;
+          c.moveTo(px0 + pr, py0); c.lineTo(px0 + pw - pr, py0); c.arc(px0 + pw - pr, py0 + pr, pr, -Math.PI / 2, Math.PI / 2); c.lineTo(px0 + pr, py0 + ph); c.arc(px0 + pr, py0 + pr, pr, Math.PI / 2, Math.PI * 1.5); c.closePath(); c.fill();
+          c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillText(code, sx, py0 + ph / 2 + 0.5);
+          c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+        }
+      }
     };
     // Cluster map: one dot per state in this cluster, at the state
     // capital (same dot as the world map, same buy sheet on tap).
@@ -953,7 +996,7 @@ const MapView = (() => {
         const [sx, sy] = toScreen(cap.x, cap.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
         const bought = S && S.airports && S.airports['us:' + cap.s];
-        c.fillStyle = dotFill(bought, 'us:' + cap.s); c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        const df = dotFill(bought, 'us:' + cap.s); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
       drawAirline(now);
