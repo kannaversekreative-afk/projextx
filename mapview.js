@@ -736,30 +736,28 @@ const MapView = (() => {
         });
       }
     }
-    // Bought network: routes + planes between owned sites.
-    // Passengers: airport-hub and hub-hub. Cargo: hub-hub only
-    // (airports never send or receive cargo). Airport-airport
-    // pairs get no route (hub-and-spoke).
-    if (viewKind === 'world' && S && S.airports) {
-      const owned = Object.values(S.airports);
+    // Drawn routes: dotted routes + planes on the routes the player
+    // drew (see route mode). Kind follows the endpoints: hub-hub
+    // carries people + cargo, airport-hub carries people only.
+    if (viewKind === 'world' && S && S.airports && Array.isArray(S.routes)) {
       const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
-      for (let i = 0; i < owned.length; i++) for (let j = i + 1; j < owned.length; j++) {
-        const A = owned[i], B = owned[j];
-        if (A.type === 'airport' && B.type === 'airport') continue;
+      S.routes.forEach((r, idx) => {
+        const A = S.airports[r.from], B = S.airports[r.to];
+        if (!A || !B) return;
         const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
-        if (!onScreen2(ax, ay) && !onScreen2(bx, by)) continue;
+        if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
         c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
         c.setLineDash([0.1, 10]);
         c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
         c.setLineDash([]);
-        const t = (((now / 1000) * 0.12 + (i * owned.length + j) * 0.6) % 2), f = t < 1 ? t : 2 - t;
+        const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
         const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
         const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
         c.save(); c.translate(px, py); c.rotate(ang);
         c.fillStyle = '#16233f';
         c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
         c.restore();
-      }
+      });
     }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
@@ -815,6 +813,11 @@ const MapView = (() => {
     ['USA', 'CAN'].forEach(a3 => { const k = W.byA3 && W.byA3[a3]; if (k && W.cities[k.capital]) { const ct = W.cities[k.capital]; push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); } });
     return out;
   }
+  function dotAt(sx, sy) {
+    let best = null, bd = 16;
+    dotSites().forEach(d => { const [x, y] = toScreen(d.x, d.y); const dist = Math.hypot(x - sx, y - sy); if (dist < bd) { bd = dist; best = d; } });
+    return best;
+  }
   function tap(sx, sy) {
     if (!pickMode) {
       // Placing a business: any map tap places it, wherever it lands.
@@ -836,11 +839,18 @@ const MapView = (() => {
         S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
       }
+      // Route mode: the player tapped Draw route, then taps a dot
+      // to draw the route there. Any other tap cancels route mode.
+      if (viewKind === 'world' && typeof UI !== 'undefined' && UI.routing) {
+        const best = dotAt(sx, sy);
+        if (best) handlers.routeDot && handlers.routeDot(best);
+        else handlers.routeCancel && handlers.routeCancel();
+        return;
+      }
       // White dots are buyable: tapping one opens the airport/hub
       // buy sheet for that city, instead of the country underneath.
       if (viewKind === 'world') {
-        let best = null, bd = 16;
-        dotSites().forEach(d => { const [x, y] = toScreen(d.x, d.y); const dist = Math.hypot(x - sx, y - sy); if (dist < bd) { bd = dist; best = d; } });
+        const best = dotAt(sx, sy);
         if (best) { handlers.dot && handlers.dot(best); return; }
       }
       // Cities are not enterable: taps that miss a dot fall through

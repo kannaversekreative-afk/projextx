@@ -282,6 +282,7 @@ const chgVs = (c) => {
 
 // ---------- modals / panels ----------
 function openModal(html, kind) {
+  UI.routing = null;
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
@@ -296,6 +297,7 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opened from anywhere else (HUD pill, map, city) still use the
 // #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
+  UI.routing = null;
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
@@ -1001,7 +1003,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel);
   MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
@@ -1224,12 +1226,38 @@ function onDotTap(dot) {
   let html = `<h2>${esc(dot.name)}</h2>`;
   if (owned) {
     html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here.</p>`;
+    html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
+    (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
+      const otherKey = r.from === dot.key ? r.to : r.from;
+      const other = S.airports && S.airports[otherKey];
+      if (!other) return;
+      const kind = (owned.type === 'hub' && other.type === 'hub') ? 'People + Cargo' : 'Passengers';
+      html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+    });
   } else {
     html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${fmt(1250000)}</button>`;
   }
   openModal(html, 'sheet');
+}
+function onRouteDotTap(dot) {
+  const src = UI.routing;
+  if (!src || !S.airports || !S.airports[src]) { UI.routing = null; return toast('Route cancelled.', 'bad'); }
+  if (dot.key === src) return toast('Pick a different site for the destination.', 'bad');
+  const a = S.airports[src], b = S.airports[dot.key];
+  if (!b) return toast('Buy an airport or hub there first.', 'bad');
+  if (a.type === 'airport' && b.type === 'airport') return toast("Airports don't connect directly. Draw to a hub instead.", 'bad');
+  if (!S.routes) S.routes = [];
+  if (S.routes.some(r => (r.from === src && r.to === dot.key) || (r.from === dot.key && r.to === src))) return toast('That route already exists.', 'bad');
+  S.routes.push({ from: src, to: dot.key });
+  UI.routing = null;
+  save(); renderHUD();
+  toast('Route added.', 'good');
+}
+function onRouteCancel() {
+  UI.routing = null;
+  toast('Route cancelled.');
 }
 function openCountryPanel(a3) {
   if (!S) return;
@@ -3540,6 +3568,17 @@ const A = {
     UI.dotBuy = null;
     save(); closeModal(); renderHUD();
     toast(type === 'hub' ? 'Hub bought.' : 'Airport bought.', 'good');
+  },
+  routeStart: key => {
+    closeModal();
+    UI.routing = key;
+    toast('Tap a destination dot to draw the route.', 'good');
+  },
+  routeRemove: x => {
+    const [from, to] = (x || '').split('|');
+    S.routes = (S.routes || []).filter(r => !(r.from === from && r.to === to));
+    save(); closeModal(); renderHUD();
+    toast('Route removed.', 'good');
   },
   casinoTab: x => { UI.casinoTab = x; renderPanel(); },
   casinoBet: x => { const err = casinoSetBet(x); if (err) return toast(err, 'bad'); renderPanel(); },
