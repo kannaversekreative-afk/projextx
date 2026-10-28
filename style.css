@@ -969,7 +969,12 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
    light panel padding, no rounded white ring — the iframe fills the
    whole card edge to edge and paints its own background. */
 .phone-card.app-minigames { display: flex; flex-direction: column; background: #262626; color: #fff; overflow: hidden; }
-.phone-card.app-minigames .panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; background: #262626; overflow: hidden; }
+/* The App Store lives in this same panel-body and its list is taller
+   than the phone, so this must scroll: overflow hidden clipped the
+   bottom rows and the sticky tab bar with no way to reach them.
+   Games are safe: their iframe fills exactly (flex 1, min-height 0),
+   so it never overflows and never scrolls. */
+.phone-card.app-minigames .panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; background: #262626; overflow-y: auto; }
 .phone-card.app-minigames .mg-wrap { flex: 1; min-height: 0; gap: 0; }
 .phone-card.app-minigames .mg-frame { flex: 1; min-height: 0; border-radius: 0; }
 .phone-card.app-minigames { background: #000; color: #fff; }
