@@ -449,6 +449,7 @@ const MapView = (() => {
       if (Array.isArray(S.moves)) {
         for (let i = S.moves.length - 1; i >= 0; i--) {
           const mp = S.moves[i];
+          if (mp.wait > 0) { mp.wait -= dt; continue; }
           mp.t += dt / mp.dur;
           if (mp.t >= 1) {
             const B = S.airports[mp.to];
@@ -849,10 +850,13 @@ const MapView = (() => {
     }
     // Move planes: one plane per manual move in flight, carrying
     // people from source to destination. Pop lands on arrival.
+    // Trips still waiting their turn (sequential shuttling) are
+    // not drawn yet.
     if ((viewKind === 'world' || viewKind === 'cluster') && S && S.airports && Array.isArray(S.moves)) {
       S.moves.forEach(mp => {
         const A = S.airports[mp.from], B = S.airports[mp.to];
         if (!A || !B) return;
+        if (mp.wait > 0) return;
         const f = Math.min(1, Math.max(0, mp.t));
         const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
         const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
