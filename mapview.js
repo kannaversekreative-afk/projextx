@@ -300,6 +300,15 @@ const MapView = (() => {
     });
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
+    // Antarctica at the bottom, named United Council of the Worl
+    // (not a playable country — a labeled landmass, visual only).
+    // Points are [x, height above the map bottom]; the peninsula
+    // juts up toward South America around x 620-720.
+    c.fillStyle = '#e6eefb'; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
+    c.beginPath();
+    const ant = [[0, 60], [150, 90], [300, 70], [450, 95], [580, 80], [620, 150], [700, 140], [720, 90], [850, 75], [1000, 100], [1150, 70], [1300, 90], [1450, 65], [1600, 85], [1750, 70], [1900, 90], [2000, 60]];
+    ant.forEach((p, i) => { const y = MAP_H - p[1]; if (i === 0) c.moveTo(p[0], y); else c.lineTo(p[0], y); });
+    c.lineTo(MAP_W, MAP_H); c.lineTo(0, MAP_H); c.closePath(); c.fill(); c.stroke();
     if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
     if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
@@ -715,9 +724,8 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
-    // Airports: main map only. Hub at NYC (ringed circle, like the
-    // reference: the ringed one is the hub, the solid ones are
-    // airports). Spokes are the US + Canada capitals for now.
+    // Airports: main map only. NYC hub + US/Canada capital spokes,
+    // dotted routes, planes flying. Markers are regular blue dots.
     // Visual only: tapping still selects the country underneath.
     if (viewKind === 'world') {
       const hub = W.cities.find(c => c.code === 'NYC');
@@ -755,17 +763,22 @@ const MapView = (() => {
           }
           c.restore();
         });
-        spokes.forEach(sp => {
-          const [sx, sy] = toScreen(sp.x, sp.y); if (!onScreen(sx, sy)) return;
-          c.fillStyle = '#eab308'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-          c.beginPath(); c.arc(sx, sy, 10, 0, 7); c.fill(); c.stroke();
+        // Regular blue dots for hub + spokes (gold hub ring removed).
+        [hub, ...spokes].forEach(ct => {
+          const [sx, sy] = toScreen(ct.x, ct.y); if (!onScreen(sx, sy)) return;
+          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+          c.fillStyle = '#2563eb'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
-        if (onScreen(hx, hy)) {
-          c.fillStyle = '#eab308'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-          c.beginPath(); c.arc(hx, hy, 12, 0, 7); c.fill(); c.stroke();
-          c.strokeStyle = '#eab308'; c.lineWidth = 3.5;
-          c.beginPath(); c.arc(hx, hy, 19, 0, 7); c.stroke();
-        }
+      }
+    }
+    // United Council of the Worl: plain text label on Antarctica
+    // (pills are gone, so this is text, not a pill).
+    if (viewKind === 'world') {
+      const [ax, ay] = toScreen(1100, MAP_H - 45);
+      if (ax > -200 && ay > -20 && ax < vw + 200 && ay < vh + 20) {
+        c.fillStyle = '#16233f'; c.font = '800 15px Nunito, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('United Council of the Worl', ax, ay);
       }
     }
     // Placed businesses: a circle on the map, wherever the player
@@ -781,27 +794,9 @@ const MapView = (() => {
       });
     }
     labelRects = []; labelTargets = [];
-    // Country name pills ARE the map buttons: each pill sits centred
-    // on its capital and tapping it opens that country's panel.
-    // Full names are wider than the old a3 codes,
-    // so the label cap is raised — the pill overlap check still skips
-    // any name that would collide with one already drawn.
-    const order = W.cities.filter(ct => ct.isCapital).map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
-    const maxLabels = Math.round(14 + v.s * v.s * 80);
-    let n = 0;
-    if (!layerOn('labels')) n = maxLabels + 1;
-    // Zoomed in, there are no pills — only the land.
-    // Pills (the country Go buttons) show only on the main map and
-    // only when zoomed out (v.s <= 1.4, the same zoomed-in threshold
-    // the military display already uses). Hiding them also ends
-    // pills covering dots.
-    if (viewKind === 'world' && v.s <= 1.4) for (const [id, p] of order) {
-      if (n >= maxLabels && p < 1e11) break;
-      const ct = W.cities[id], [sx, sy] = toScreen(ct.x, ct.y);
-      if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
-      const isSel = id === sel, text = W.byA3[ct.a3].name;
-      if (pill(c, sx, sy - 13, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL, id)) n++;
-    }
+    // Pill names removed (2026-10-28): countries are identified by
+    // shape, and tapping a country shape opens it. The intro picker
+    // (drawPickLabels) still shows names, because you need them to pick.
   }
   function drawPickLabels(c) {
     labelRects = [];
