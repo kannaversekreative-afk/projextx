@@ -2496,7 +2496,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ea' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026eb' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
@@ -2510,7 +2510,7 @@ PANELS.minigames = () => {
     <button class="btn3d orange wide" data-a="mgplay" data-x="baseball">⚾ BASEBALL · Pennant GM</button>
     <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
     <button class="btn3d orange wide" data-a="mgplay" data-x="hockey">🏒 HOCKEY · Blueline GM</button>
-    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Premier Hockey Association.</p>
+    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
     <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
     <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · football, baseball &amp; basketball leagues</button></div>`);
 };

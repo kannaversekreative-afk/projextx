@@ -597,7 +597,7 @@ let NEXT_ID=1;
 let L=null;
 const CONF=['East','West'],DIVN=['Harbor','Capital','Prairie','Coastal'];
 const LEAGUE_NAME='Premier Hockey Association',LG_ABBR='PHA',CUP='Founders Cup';
-const ACTIVE=23,ORG_MAX=50,DRAFT_RDS=7,NT=32;
+const ACTIVE=23,ORG_MAX=50,DRAFT_RDS=7,NT=30;
 const P=id=>L.players[id];const T=tid=>L.teams[tid];const UT=()=>L.teams[L.userTid];
 let RC=null,RC_L=null,TR_C=null;
 function buildRC(){RC={};for(const p of Object.values(L.players)){if(p.tid>=0)(RC[p.tid]||(RC[p.tid]=[])).push(p)}RC_L=L}
@@ -635,13 +635,17 @@ const capMax=()=>L?Math.round(L.cap*.2*20)/20:20.8;
 const ROSTER_PLAN=[['C',3],['C',1],['C',-2],['C',-5],['LW',3],['LW',0],['LW',-3],['LW',-6],['RW',2],['RW',0],['RW',-3],['RW',-6],['C',-8],['LW',-8],
   ['D',3],['D',1],['D',0],['D',-2],['D',-4],['D',-5],['D',-8],['G',2],['G',-7]];
 const FARM_PLAN=[['C',-11],['C',-14],['LW',-12],['LW',-15],['RW',-12],['RW',-15],['D',-11],['D',-13],['D',-15],['D',-17],['G',-12],['G',-16],['C',-16],['RW',-17]];
+// Same 30 teams as baseball/football: fixed names, abbreviations and
+// colours. Divisions stay 8/7/8/7 (Harbor, Capital, Prairie, Coastal) so
+// seeds and the playoff bracket work exactly as they did with 32 teams.
+const SHARED_TEAMS=[["Admirals","ADM","#1d4f91","#f2c14e",4,"mild"],["Barons","BAR","#9b1c2e","#f4f1ea",3,"warm"],["Bluejays","BLJ","#0f6b4f","#e8b33a",5,"cold"],["Bombers","BOM","#2b2d42","#ef5b5b",2,"rain"],["Captains","CAP","#5b2a86","#f2a541",4,"dome"],["Clippers","CLI","#00627a","#ff8c42",3,"mild"],["Copperheads","COP","#7a1f1f","#c9a227",5,"warm"],["Dukes","DUK","#14213d","#fca311",2,"cold"],["Express","EXP","#2d6a4f","#d8f3dc",4,"rain"],["Foxhounds","FOX","#3a0ca3","#4cc9f0",3,"dome"],["Gulls","GUL","#b5179e","#f7f7f7",5,"mild"],["Herons","HER","#264653","#e9c46a",2,"warm"],["Ironmen","IRN","#c1121f","#003049",4,"cold"],["Jackalopes","JCK","#023e8a","#90e0ef",3,"rain"],["Knights","KNI","#6a040f","#ffba08",5,"dome"],["Larks","LAR","#1b4332","#95d5b2",2,"mild"],["Lumberjacks","LUM","#3d405b","#f2cc8f",4,"warm"],["Mallards","MAL","#0b6e4f","#f0a202",3,"cold"],["Mariners","MAR","#283618","#dda15e",5,"rain"],["Miners","MIN","#9d0208","#e5e5e5",2,"dome"],["Monarchs","MON","#073b4c","#06d6a0",4,"mild"],["Mudcats","MUD","#5f0f40","#fb8b24",3,"warm"],["Nighthawks","NHK","#22223b","#c9ada7",5,"cold"],["Owls","OWL","#1a759f","#d9ed92",2,"rain"],["Pelicans","PEL","#7b2cbf","#e0aaff",4,"dome"],["Pilots","PIL","#d62828","#fcbf49",3,"mild"],["Pioneers","PIO","#003566","#ffc300",5,"warm"],["Quakes","QUA","#8338ec","#ffbe0b",2,"cold"],["Rattlers","RAT","#0a9396","#ee9b00",4,"rain"],["Redbirds","RDB","#370617","#f48c06",3,"dome"]];
 function genLeague(mode){
-  NEXT_ID=1;const cities=shuffle([...CITIES]).slice(0,NT);const masc=shuffle([...MASCOTS]);const cols=shuffle([...COLORS]);const used=new Set();
+  NEXT_ID=1;
   const lg={v:1,mode,season:2026,phase:'preseason',day:0,userTid:-1,players:{},teams:[],sched:[],news:[],history:[],awards:[],hof:[],picks:[],mail:[],
     settings:setDefaults({}),draftSeason:2027,faDay:0,po:null,ach:{},scoutPts:30,cap:104,floor:76.9,minSal:.85};
   L=lg;
-  cities.forEach((c,i)=>{const[c1,c2]=cols[i%cols.length];const name=masc[i];const m=c.m;
-    const t={tid:i,city:c.n,name,abbr:abbrFor(c.n,name,used),c1,c2,conf:i<16?0:1,div:Math.floor(i/8),market:m,
+  SHARED_TEAMS.forEach((tm,i)=>{const name=tm[0];const m=tm[4];
+    const t={tid:i,city:'',name,abbr:tm[1],c1:tm[2],c2:tm[3],conf:i<15?0:1,div:i<8?0:i<15?1:i<23?2:3,market:m,
       pop:clamp(Math.round(gauss(35+m*9,12)),10,98),hype:ri(30,70),cash:Math.round(rnd(40,260)),
       arena:{name:pick(ARENA_A)+' '+pick(ARENA_B),cap:Math.round(rnd(15.2,19.8)*10)*100,qual:ri(40,95)},
       price:{tix:Math.round(55+m*12+ri(-8,8)),conc:1,park:Math.round(15+m*4),merch:1},
@@ -654,7 +658,7 @@ function genLeague(mode){
     lg.teams.push(t)});
   for(const t of lg.teams){for(const[pos,d]of ROSTER_PLAN){const p=newPlayer(pos,clamp(t.q+d+gauss(.3,3.6),48,95),ri(21,34),{tid:t.tid,lvl:'PRO'});seedCareer(p,t);lg.players[p.id]=p}
     for(const[pos,d]of FARM_PLAN){const age=ri(19,27);const p=newPlayer(pos,clamp(t.q+d+gauss(0,4),45,76),age,{tid:t.tid,lvl:'FARM'});p.yrsPro=Math.max(0,age-ri(19,21));if(age<=23)p.pot=clamp(Math.round(p.ovr+gauss(10,6)),p.ovr+2,95);seedCareer(p,t);lg.players[p.id]=p}
-    for(let k=0;k<ri(3,6);k++){const pos=pick(['C','LW','RW','D','D','G','C']);const age=ri(18,20);const p=newPlayer(pos,clamp(gauss(54,5),42,68),age,{tid:t.tid,lvl:'JR'});p.yrsPro=0;p.pot=clamp(Math.round(p.ovr+Math.max(10,gauss(22,6))),p.ovr+8,97);p.dr={season:2026-(age-18),rd:ri(1,5),pick:ri(1,32),tid:t.tid};p.since=p.dr.season;p.num=0;p.con=null;lg.players[p.id]=p}
+    for(let k=0;k<ri(3,6);k++){const pos=pick(['C','LW','RW','D','D','G','C']);const age=ri(18,20);const p=newPlayer(pos,clamp(gauss(54,5),42,68),age,{tid:t.tid,lvl:'JR'});p.yrsPro=0;p.pot=clamp(Math.round(p.ovr+Math.max(10,gauss(22,6))),p.ovr+8,97);p.dr={season:2026-(age-18),rd:ri(1,5),pick:ri(1,NT),tid:t.tid};p.since=p.dr.season;p.num=0;p.con=null;lg.players[p.id]=p}
     dirty();const ps=rosterOf(t.tid);const pay=sum(ps.map(p=>p.con.sal));const tgt=lg.cap*rnd(.84,.985);const f=tgt/pay;ps.forEach(p=>{if(!p.con.elc)p.con.sal=clamp(Math.round(p.con.sal*f*20)/20,lg.minSal,capMax())});
     const over=payroll(t.tid)-lg.cap;if(over>0){const big=ps.filter(p=>!p.con.elc).sort((a,b)=>b.con.sal-a.con.sal);for(const p of big.slice(0,6))p.con.sal=Math.max(lg.minSal,Math.round((p.con.sal-over/6-.2)*20)/20)}}
   for(let k=0;k<90;k++){const pos=pick(['C','LW','RW','C','LW','RW','D','D','D','G']);const p=newPlayer(pos,clamp(gauss(64,5),50,77),ri(24,35),{tid:-1});p.lvl='FA';p.ask=contractAsk(p,{max:6});lg.players[p.id]=p}
@@ -664,7 +668,7 @@ function genLeague(mode){
   return lg}
 function newRec(){return{w:0,l:0,otl:0,gf:0,ga:0,rw:0,row:0,sow:0,hw:0,hl:0,hotl:0,aw:0,al:0,aotl:0,strk:0,l10:[]}}
 function newFin(){return{tix:0,conc:0,merch:0,tv:0,spons:0,park:0,lux:0,pay:0,staff:0,ops:0,mkt:0,po:0}}
-function seedCareer(p,t){p.since=L.season-ri(0,Math.min(p.yrsPro,6));p.dr={season:L.season-p.yrsPro-(p.age>=22?ri(0,2):0),rd:ri(1,7),pick:ri(1,32),tid:t.tid};
+function seedCareer(p,t){p.since=L.season-ri(0,Math.min(p.yrsPro,6));p.dr={season:L.season-p.yrsPro-(p.age>=22?ri(0,2):0),rd:ri(1,7),pick:ri(1,NT),tid:t.tid};
   const mv=marketValue(p);const elc=p.yrsPro<3&&p.age<=23;const sal=elc?L.minSal+R()*.1:p.yrsPro<7&&p.age<27?Math.max(L.minSal,mv*rnd(.45,.8)):Math.max(L.minSal,mv*rnd(.75,1.2));
   p.con={sal:Math.round(sal*20)/20,yrs:elc?ri(1,3):p.age<27?ri(1,4):ri(1,6),elc};p.num=pickNum(t.tid)}
 function pickNum(tid){const used=new Set(Object.values(L.players).filter(p=>p.tid===tid).map(p=>p.num));let n=ri(2,98);let k=0;while(used.has(n)&&k++<200)n=ri(2,98);return n}
@@ -743,7 +747,7 @@ function goalStatus(t){const g=t.goal;if(!g)return{s:'pending'};const done=L.pha
   if(g.k==='champ'||g.k==='final'||g.k==='round2'){const need=g.k==='champ'?4:g.k==='final'?3:1;if(L.po){if((L.po.reach[t.tid]||0)>=need)return{s:'met'};if(L.po.elim[t.tid]!==undefined)return{s:'fail'}}if(done)return{s:'fail'};return{s:teamRanks()[t.tid].pw<=(g.k==='champ'?4:g.k==='final'?8:12)?'track':'risk'}}
   if(g.k==='playoffs'){if(L.po)return{s:L.po.seeds[t.conf].all.includes(t.tid)?'met':'fail'};if(!gp)return{s:'pending'};return{s:seeds(t.conf).all.includes(t.tid)?'track':'risk'}}
   if(g.k==='points'){if(pts(t)>=g.n)return{s:'met'};if(done||L.po)return{s:'fail'};if(!gp)return{s:'pending'};return{s:ptsPct(t)*2*84>=g.n?'track':'risk'}}return{s:'pending'}}
-/* ---- schedule: 84 games. 4 vs division rivals, 3 vs the rest of the conference, 2 vs the other conference ---- */
+/* ---- schedule: 4 vs division rivals, 3 vs the rest of the conference, 2 vs the other conference ---- */
 function makeSchedule(){const n=L.teams.length;const games=[];
   for(const a of L.teams)for(const b of L.teams){if(a.tid>=b.tid)continue;const k=a.conf===b.conf?(a.div===b.div?4:3):2;for(let i=0;i<k;i++)games.push({a:a.tid,b:b.tid,i,k})}
   const home=L.teams.map(()=>0);const list=shuffle(games).map(x=>{let h;if(x.k===3){h=x.i<2?(x.i===0?x.a:x.b):(home[x.a]<=home[x.b]?x.a:x.b)}else h=x.i%2?x.a:x.b;home[h]++;return{h,a:h===x.a?x.b:x.a}});
@@ -1570,7 +1574,7 @@ function mpPromoCheck(){const p=mpP();if(p.tid<0)return null;const sc=mpScore(p)
     mpMail('gm',"You're going to the show!",`Pack your bags. You've been called up to the ${teamName(T(p.tid))}. Welcome to the big leagues.`);L.mp.promo={to:'PRO',day:L.day};return'PRO'}
   if(p.lvl==='PRO'&&sc<30&&L.mp.rel<32&&p.ovr<bar-3&&R()<.5){p.lvl='FARM';dirty();ensureActive(p.tid);mpMail('coach','Sent to the farm',"We're sending you down to get your game back. Play big minutes and you'll be back soon.");L.mp.promo={to:'FARM',day:L.day,down:true};return'FARM'}return null}
 /* signing after the showcase and draft */
-function mpDraft(sc){const p=mpP();const rd=clamp(Math.round(5.6-sc/14+gauss(0,.8)),1,7);const slot=rd===1?clamp(Math.round(33-sc/3+gauss(0,3)),1,32):ri(1,32);const order=sortTeams(L.teams).reverse();const t=order[clamp(slot-1+ri(-2,2),0,NT-1)];
+function mpDraft(sc){const p=mpP();const rd=clamp(Math.round(5.6-sc/14+gauss(0,.8)),1,7);const slot=rd===1?clamp(Math.round(33-sc/3+gauss(0,3)),1,NT):ri(1,NT);const order=sortTeams(L.teams).reverse();const t=order[clamp(slot-1+ri(-2,2),0,NT-1)];
   p.tid=t.tid;p.dr={season:L.season+1,rd,pick:(rd-1)*NT+slot,tid:t.tid};p.since=L.season;p.num=pickNum(t.tid);L.userTid=t.tid;L.mp.stage='pro';
   const ros=rosterOf(t.tid).filter(x=>grpOf(x)===grpOf(p)).sort((a,b)=>b.ovr-a.ovr);const n={F:12,D:6,G:2}[grpOf(p)];const bar=ros[n-1]?ros[n-1].ovr:60;
   if(p.ovr>=bar-1){p.lvl='PRO';p.con={sal:elcFor((rd-1)*NT+slot-1),yrs:3,elc:true}}else if(p.ovr>=bar-9||p.age>=20){p.lvl='FARM';p.con={sal:elcFor((rd-1)*NT+slot-1),yrs:3,elc:true}}else{p.lvl='JR';p.con=null}
