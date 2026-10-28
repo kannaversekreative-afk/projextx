@@ -84,6 +84,20 @@ const MapView = (() => {
   }
   function fit() { v.s = Math.max(vw / MAP_W, vh / MAP_H); v.x = (vw - MAP_W * v.s) / 2; v.y = (vh - MAP_H * v.s) / 2; }
   function clampView() {
+    // Region view is its own map: zoom stops at the region filling the
+    // screen, and panning keeps the region on screen, so you can never
+    // zoom or pan out into the world behind it.
+    if (viewKind === 'region') {
+      const box = regionBox(viewRegion);
+      if (box) {
+        const [x0, y0, x1, y1] = box;
+        const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
+        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
+        v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
+        return;
+      }
+    }
     v.s = Math.max(Math.max(vw / MAP_W, vh / MAP_H) * 0.98, Math.min(60, v.s));
     // Allow half a screen of sea beyond the map edge, so a western capital
     // like Washington can actually be centred: the old 0 cap forced
