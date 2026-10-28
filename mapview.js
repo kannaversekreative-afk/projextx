@@ -705,6 +705,59 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
+    // Airports: main map only. Hub at NYC (ringed circle, like the
+    // reference: the ringed one is the hub, the solid ones are
+    // airports). Spokes are the US + Canada capitals for now.
+    // Visual only: tapping still selects the country underneath.
+    if (viewKind === 'world') {
+      const hub = W.cities.find(c => c.code === 'NYC');
+      const spokes = [];
+      if (W.byA3['USA'] && W.cities[W.byA3['USA'].capital]) spokes.push(W.cities[W.byA3['USA'].capital]);
+      if (W.byA3['CAN'] && W.cities[W.byA3['CAN'].capital]) spokes.push(W.cities[W.byA3['CAN'].capital]);
+      if (hub && spokes.length) {
+        const [hx, hy] = toScreen(hub.x, hub.y);
+        const onScreen = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
+        const routeStyle = 'dotted'; // dotted | dashed | solid
+        const planeModel = 'jet'; // jet | prop | jumbo
+        spokes.forEach((sp, i) => {
+          const [sx, sy] = toScreen(sp.x, sp.y);
+          if (!onScreen(hx, hy) && !onScreen(sx, sy)) return;
+          c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
+          c.setLineDash(routeStyle === 'dotted' ? [0.1, 10] : routeStyle === 'dashed' ? [10, 8] : []);
+          c.beginPath(); c.moveTo(hx, hy); c.lineTo(sx, sy); c.stroke();
+          c.setLineDash([]);
+          // Plane flying the route, ping-pong like the war fighters.
+          const t = (((now / 1000) * 0.12 + i * 0.6) % 2), f = t < 1 ? t : 2 - t;
+          const px = hx + (sx - hx) * f, py = hy + (sy - hy) * f;
+          const ang = Math.atan2(sy - hy, sx - hx) + (t < 1 ? 0 : Math.PI);
+          c.save(); c.translate(px, py); c.rotate(ang);
+          c.fillStyle = '#16233f';
+          if (planeModel === 'prop') {
+            c.beginPath(); c.ellipse(0, 0, 9, 3, 0, 0, 7); c.fill();
+            c.fillRect(-1, -9, 3, 18); c.fillRect(-8, -4, 2, 8);
+            c.strokeStyle = '#16233f'; c.lineWidth = 2;
+            c.beginPath(); c.moveTo(10, -4); c.lineTo(10, 4); c.stroke();
+          } else if (planeModel === 'jumbo') {
+            c.scale(1.5, 1.5);
+            c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
+          } else {
+            c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
+          }
+          c.restore();
+        });
+        spokes.forEach(sp => {
+          const [sx, sy] = toScreen(sp.x, sp.y); if (!onScreen(sx, sy)) return;
+          c.fillStyle = '#eab308'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, 10, 0, 7); c.fill(); c.stroke();
+        });
+        if (onScreen(hx, hy)) {
+          c.fillStyle = '#eab308'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(hx, hy, 12, 0, 7); c.fill(); c.stroke();
+          c.strokeStyle = '#eab308'; c.lineWidth = 3.5;
+          c.beginPath(); c.arc(hx, hy, 19, 0, 7); c.stroke();
+        }
+      }
+    }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
