@@ -370,7 +370,9 @@ const LEADER_SECTORS = [
   { n: 'Environmental Consulting', g: 'finance', icon: '🌿', c: '#12a150', growth: 0.04, vol: 0.018, beta: 0.95, div: 0.025 },
   { n: 'Design Services', g: 'finance', icon: '✏️', c: '#e5484d', growth: 0.03, vol: 0.018, beta: 0.9, div: 0.025 },
   { n: 'Securities & Commodity Exchanges', g: 'finance', icon: '📈', c: '#12a150', growth: 0.035, vol: 0.02, beta: 1, div: 0.03 },
-  { n: 'Debt Collection Agencies', g: 'finance', icon: '📞', c: '#374151', growth: 0.02, vol: 0.018, beta: 0.9, div: 0.035 },];
+  { n: 'Debt Collection Agencies', g: 'finance', icon: '📞', c: '#374151', growth: 0.02, vol: 0.018, beta: 0.9, div: 0.035 },
+  // Politics: political companies manage and upgrade elections.
+  { n: 'Political Consulting', g: 'finance', icon: '🏛️', c: '#312e81', growth: 0.03, vol: 0.024, beta: 1.0, div: 0.01 },];
 const LEADER_SECTOR_BY_NAME = {};
 LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
 
@@ -523,6 +525,87 @@ LEADER_SECTORS.forEach(s => { LEADER_SECTOR_BY_NAME[s.n] = s; });
     if (typeof SECTOR_LIST !== 'undefined' && !SECTOR_LIST.includes(s.n)) SECTOR_LIST.push(s.n);
   });
 })();
+
+// ---------- parent sectors: the 13 playable sectors ----------
+// The deck above is ~350 detailed sectors — that IS the sub-sector
+// layer. Players browse and filter by 13 parents instead: the 5 legacy
+// sectors plus Resources, Manufacturing, Finance, Health Care,
+// Utilities, Communication Services, Real Estate and Politics.
+// The Traditional 5 pillars (Primary, Secondary, Tertiary, Quaternary,
+// Quinary) stay a reporting layer only — news and state stats, not
+// something you run. Products inside a sector are the only deeper
+// layer; products never split further.
+// Chain: Resources → Manufacturing → Retail, with Airline moving
+// customers, Shipping moving goods, and the rest feeding, funding,
+// powering, housing or promoting it. Vehicles, aerospace and defence
+// sit in Manufacturing; robotics, drones and semiconductors stay in
+// Tech. Politics companies manage and upgrade elections (their
+// election view — past/future elections and stats — is a separate
+// build on top of elections.js).
+const PARENT_SECTORS = {
+  Airline: { icon: '✈️', color: '#2f7cf6', tag: 'Fly further for less.' },
+  Shipping: { icon: '🚢', color: '#0ea5b7', tag: 'Moving the world, one box at a time.' },
+  Energy: { icon: '⛽', color: '#e0812b', tag: 'Powering homes, cars and cities.' },
+  Tech: { icon: '💻', color: '#7c4dff', tag: 'Software that just works.' },
+  Retail: { icon: '🛍️', color: '#e5484d', tag: 'Everything you love, close to home.' },
+  Resources: { icon: '⛏️', color: '#16a34a', tag: 'From the earth, for the world.' },
+  Manufacturing: { icon: '🏭', color: '#64748b', tag: 'Built here, sold everywhere.' },
+  Finance: { icon: '🏦', color: '#b45309', tag: 'Money, working harder.' },
+  'Health Care': { icon: '🏥', color: '#db2777', tag: 'Longer, healthier lives.' },
+  Utilities: { icon: '⚡', color: '#eab308', tag: 'Keeping the lights on.' },
+  'Communication Services': { icon: '📡', color: '#84cc16', tag: 'Every screen, every ear.' },
+  'Real Estate': { icon: '🏘️', color: '#7c2d12', tag: 'Own the ground beneath it all.' },
+  Politics: { icon: '🏛️', color: '#312e81', tag: 'Win the room, win the state.' },
+};
+const PARENT_LIST = Object.keys(PARENT_SECTORS);
+// Exact-name overrides: sectors whose parent is not their deck group
+// (health and comms gear, storefront platforms, vehicles and defence,
+// professional services that serve campaigns or audiences).
+const PARENT_EXACT = {
+  'Political Consulting': 'Politics', 'Market Research & Polling': 'Politics',
+  'Airlines – Passenger': 'Airline', 'Airlines – Cargo': 'Airline', 'Charter & Private Aviation': 'Airline', 'Aircraft Maintenance & Repair': 'Airline',
+  'Shipping – Freight': 'Shipping', 'Shipping – Passenger': 'Shipping', 'Ports & Airports Services': 'Shipping', 'Ship Repair & Maintenance': 'Shipping', 'Inland Water Transport': 'Shipping', 'Freight Forwarding': 'Shipping', 'Cold Storage & Cold Chain': 'Shipping', 'Courier & Postal Services': 'Shipping', 'Moving & Storage Services': 'Shipping',
+  'Pipeline Transport': 'Energy', 'EV Charging Networks': 'Energy',
+  'Electricity Generation': 'Utilities', 'Electricity Distribution': 'Utilities', 'Electricity Transmission': 'Utilities', 'Water Supply': 'Utilities', 'Wastewater Treatment': 'Utilities', 'District Heating & Cooling': 'Utilities', 'Gas Distribution': 'Utilities', 'Hydroelectric Power': 'Utilities', 'Solar Power Generation': 'Utilities', 'Wind Power Generation': 'Utilities', 'Nuclear Power Generation': 'Utilities', 'Geothermal Power': 'Utilities', 'Tidal & Wave Power': 'Utilities', 'Biomass Power': 'Utilities', 'Waste-to-Energy Plants': 'Utilities', 'Waste & Recycling': 'Utilities', 'Hazardous Waste Management': 'Utilities',
+  'Pharmaceuticals': 'Health Care', 'Medical Devices': 'Health Care', 'Digital Health & Telemedicine': 'Health Care', 'Biotechnology Research': 'Health Care', 'Medical Equipment Rental': 'Health Care', 'Ambulance & Medical Transport': 'Health Care', 'Retail – Pharmacy': 'Health Care',
+  'Telecom – Mobile': 'Communication Services', 'Telecom – Internet': 'Communication Services', 'Marketing & Advertising': 'Communication Services', 'Public Relations': 'Communication Services', 'Publishing': 'Communication Services', 'Video Game Development': 'Communication Services', 'Internet Portals & Search': 'Communication Services', 'Social Media Platforms': 'Communication Services', 'Video Streaming Services': 'Communication Services', 'Digital Advertising Platforms': 'Communication Services',
+  'Communication Equipment': 'Tech', 'Computers & Office Equipment': 'Tech', 'Research & Development Services': 'Tech',
+  'Property Technology Platforms': 'Real Estate', 'Co-working Spaces': 'Real Estate', 'Self-Storage Facilities': 'Real Estate',
+  'Tax Preparation Services': 'Finance', 'Payroll Services': 'Finance',
+  'Online Travel Platforms': 'Retail', 'Food Delivery Platforms': 'Retail', 'Ride-Hailing Platforms': 'Retail', 'E-commerce Marketplaces': 'Retail',
+  'Demolition & Site Preparation': 'Manufacturing', 'Building Installation Services': 'Manufacturing', 'Building Finishing Trades': 'Manufacturing', 'Construction Equipment Rental': 'Manufacturing', 'Scaffolding & Access Services': 'Manufacturing', 'Dredging & Marine Construction': 'Manufacturing', 'Foundation & Piling Works': 'Manufacturing',
+  'Machinery – Industrial': 'Manufacturing', 'Machinery – Agricultural': 'Manufacturing', 'Vehicles – Cars & Trucks': 'Manufacturing', 'Vehicles – Parts': 'Manufacturing', 'Motorcycles & Bicycles': 'Manufacturing', 'Vehicle Bodies & Trailers': 'Manufacturing', 'Railway Locomotives & Stock': 'Manufacturing', 'Shipbuilding': 'Manufacturing', 'Aerospace': 'Manufacturing', 'Defence Equipment': 'Manufacturing', 'Furniture & Consumer Goods': 'Manufacturing',
+  'Vehicle Repair Services': 'Retail', 'Vehicle Rental & Leasing': 'Retail', 'Parking & Garage Services': 'Retail',
+  'Bauxite & Aluminium Ore': 'Resources',
+};
+const PARENT_FARM = ['Fishing & Aquaculture', 'Forestry & Timber', 'Floriculture & Nurseries', 'Seed & Seedling Production', 'Beekeeping & Honey', 'Cannabis Cultivation', 'Algae Cultivation', 'Vertical Farming', 'Cellular Agriculture', 'Agricultural Support Services'];
+const PARENT_HEALTH = ['Healthcare Services', 'Hospitals & Clinics', 'Dental Clinics', 'Veterinary Services', 'Home Care Services', 'Diagnostic Laboratories', 'Mental Health & Counselling', 'Fitness Centers & Gyms', 'Spas & Wellness Centers', 'Residential Care Facilities'];
+const PARENT_EDU = ['Education – Schools', 'Education – Higher', 'Vocational & Technical Training', 'Tutoring Services', 'Early Childhood Education', 'Online Learning Platforms'];
+const PARENT_ENT = ['Entertainment – Film & Music', 'Entertainment – Gaming & Sports', 'Movie Theatres', 'Theme Parks & Attractions', 'Museums & Cultural Sites', 'Zoos & Botanical Gardens', 'Performing Arts & Theatres', 'Gambling & Casinos', 'Golf Courses & Country Clubs', 'Bowling & Entertainment Centers'];
+function parentSectorOf(name) {
+  if (!name) return 'Retail';
+  if (PARENT_SECTORS[name]) return name;
+  if (PARENT_EXACT[name]) return PARENT_EXACT[name];
+  if (name.startsWith('Retail') || name.startsWith('Wholesale')) return 'Retail';
+  if (name.startsWith('Real Estate')) return 'Real Estate';
+  if (name.startsWith('Construction')) return 'Manufacturing';
+  if (name.startsWith('Mining') || name.endsWith('Mining') || name.startsWith('Quarrying')) return 'Resources';
+  if (name.startsWith('Electricity') || name.endsWith('Power') || name.endsWith('Power Generation')) return 'Utilities';
+  const g = (typeof LEADER_SECTOR_BY_NAME !== 'undefined' && LEADER_SECTOR_BY_NAME[name]) ? LEADER_SECTOR_BY_NAME[name].g : null;
+  if (g === 'food') return (name.includes('Farming') || PARENT_FARM.includes(name)) ? 'Resources' : 'Manufacturing';
+  if (g === 'service') {
+    if (PARENT_HEALTH.includes(name)) return 'Health Care';
+    if (PARENT_EDU.includes(name)) return 'Tech';
+    if (PARENT_ENT.includes(name)) return 'Communication Services';
+    return 'Retail';
+  }
+  if (g === 'energy') return 'Energy';
+  if (g === 'mfg') return 'Manufacturing';
+  if (g === 'tech') return 'Tech';
+  if (g === 'transport') return 'Shipping';
+  if (g === 'finance') return 'Finance';
+  return 'Retail';
+}
 
 // ---------- realism sector picking ----------
 // Candidate pool per country: domestic sectors first, then specialisations.

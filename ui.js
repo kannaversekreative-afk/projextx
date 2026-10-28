@@ -1460,8 +1460,8 @@ function marketRows() {
   if (UI.cat === 'Watchlist') list = list.filter(c => S.watch.includes(c.a3));
   else if (UI.cat === 'Owned') list = list.filter(c => holdQty(c.a3) !== 0);
   else if (UI.cat === 'IPOs') list = list.filter(c => !c.listed);
-  else if (UI.cat === 'Oil') list = list.filter(c => c.sector === 'Energy');
-  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') list = list.filter(c => c.sector === UI.cat);
+  else if (UI.cat === 'Oil') list = list.filter(c => c.sector === 'Energy' || (typeof parentSectorOf === 'function' && parentSectorOf(c.sector) === 'Energy'));
+  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') list = list.filter(c => c.sector === UI.cat || (typeof parentSectorOf === 'function' && parentSectorOf(c.sector) === UI.cat));
   if (UI.starOnly) list = list.filter(c => S.watch.includes(c.a3));
   if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || c.sym.toLowerCase().includes(q) || cname(c.a3).toLowerCase().includes(q));
   // Extra businesses as their own stocks. They carry stockKey/isExtra so
@@ -1472,7 +1472,7 @@ function marketRows() {
   if (UI.cat === 'Extras') list = [];
   else if (UI.cat === 'Watchlist' || UI.cat === 'IPOs') extras = [];
   else if (UI.cat === 'Owned') extras = extras.filter(b => (S.holdingsX || {})[b.id] && S.holdingsX[b.id].qty !== 0);
-  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') extras = extras.filter(b => b.sector === UI.cat);
+  else if (UI.cat !== 'All' && UI.cat !== 'Indices' && UI.cat !== 'Extras') extras = extras.filter(b => b.sector === UI.cat || (typeof parentSectorOf === 'function' && parentSectorOf(b.sector) === UI.cat));
   if (UI.starOnly) extras = [];
   if (q) extras = extras.filter(b => b.name.toLowerCase().includes(q) || b.sym.toLowerCase().includes(q) || cname(b.a3).toLowerCase().includes(q));
   list = list.concat(extras);
@@ -1481,13 +1481,14 @@ function marketRows() {
   return list;
 }
 PANELS.markets = () => {
-  const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...SECTOR_LIST, 'IPOs', 'Indices', 'Oil'];
+  const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...(typeof PARENT_LIST !== 'undefined' ? PARENT_LIST : SECTOR_LIST), 'IPOs', 'Indices', 'Oil'];
   if (UI.cat === 'Indices') {
-    const idxRows = SECTOR_LIST.map(sec => {
-      const cs = Object.values(S.co).filter(c => c.sector === sec && c.listed);
+    const idxRows = (typeof PARENT_LIST !== 'undefined' ? PARENT_LIST : SECTOR_LIST).map(sec => {
+      const cs = Object.values(S.co).filter(c => c.listed && (c.sector === sec || (typeof parentSectorOf === 'function' && parentSectorOf(c.sector) === sec)));
       const cap = cs.reduce((a, c) => a + companyValue(c), 0);
       const ch = cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0;
-      return `<div class="kv"><span>${SECTORS[sec].icon} ${sec} Index</span><b>${fmtMoney(cap, true)} · <em class="${upCls(ch)}">${fmtPct(ch)}</em></b></div>`;
+      const icon = (typeof PARENT_SECTORS !== 'undefined' && PARENT_SECTORS[sec]) ? PARENT_SECTORS[sec].icon : (SECTORS[sec] ? SECTORS[sec].icon : '🏢');
+      return `<div class="kv"><span>${icon} ${sec} Index</span><b>${fmtMoney(cap, true)} · <em class="${upCls(ch)}">${fmtPct(ch)}</em></b></div>`;
     }).join('');
     return panelShell('Markets', 'World Index ' + S.idx.v.toFixed(0) + ' · Vs Market is an equal-weighted algo: the same $ in every stock, so it is the average stock return, not the biggest companies', `<div class="row wrap">${cats.map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-a="cat" data-x="${c}">${c}</button>`).join('')}</div>
       <div class="card in">${idxRows}<div class="kv"><span>🌍 World Index</span><b>${S.idx.v.toFixed(0)} · <em class="${upCls(marketReturn())}">${fmtPct(marketReturn())}</em></b></div><div class="kv"><span>🛢️ Oil index</span><b>${S.oil.toFixed(2)}x</b></div></div>`);
@@ -2944,8 +2945,8 @@ PANELS.markets = () => {
     <p style="color:#8b949e">${watched.length} Instrument${watched.length === 1 ? '' : 's'}</p>`);
   }
   if (tab === 'markets') {
-    const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...SECTOR_LIST.slice(0, 12)];
-    const secAvg = SECTOR_LIST.map(sec => { const cs = Object.values(S.co).filter(c => c.sector === sec && c.listed); return { sec, ch: cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0, n: cs.length }; }).filter(x => x.n).sort((a, b) => b.ch - a.ch)[0];
+    const cats = ['All', 'Watchlist', 'Owned', 'Extras', ...(typeof PARENT_LIST !== 'undefined' ? PARENT_LIST : SECTOR_LIST.slice(0, 12))];
+    const secAvg = (typeof PARENT_LIST !== 'undefined' ? PARENT_LIST : SECTOR_LIST).map(sec => { const cs = Object.values(S.co).filter(c => c.listed && (c.sector === sec || (typeof parentSectorOf === 'function' && parentSectorOf(c.sector) === sec))); return { sec, ch: cs.length ? cs.reduce((a, c) => a + chgVs(c), 0) / cs.length : 0, n: cs.length }; }).filter(x => x.n).sort((a, b) => b.ch - a.ch)[0];
     const listedCount = Object.values(S.co).filter(c => c.listed).length;
     return wrap(`<div class="wtrade-idx"><div class="wtrade-idxcard"><b>World Index</b><span class="pct ${upCls(marketReturn())}">${fmtPct(marketReturn())}</span><span style="color:#8b949e">${S.idx.v.toFixed(0)}</span></div><div class="wtrade-idxcard" style="border-color:#f97316"><b>Oil Index</b><span class="pct">${(S.oil || 0).toFixed(2)}x</span><span style="color:#8b949e">Energy</span></div>${secAvg ? `<div class="wtrade-idxcard" style="border-color:#a855f7"><b>${esc(secAvg.sec)} Index</b><span class="pct ${upCls(secAvg.ch)}">${fmtPct(secAvg.ch)}</span><span style="color:#8b949e">Top sector today</span></div>` : ''}</div>
     ${tradeIdxChart()}
