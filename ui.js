@@ -1254,6 +1254,19 @@ function onDotTap(dot) {
       if (recv.length) html += `<p>Receives: ${recv.join(', ')}</p>`;
       else html += `<p>Connect to a hub to start receiving people.</p>`;
     }
+    if (owned.type !== 'port') {
+      let worstGap = 0, worstName = null, worstLv = 0;
+      (S.routes || []).forEach(r => {
+        const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null);
+        if (!otherKey) return;
+        const other = S.airports && S.airports[otherKey];
+        if (!other) return;
+        if (!((owned.type === 'hub' && other.type === 'airport') || (owned.type === 'airport' && other.type === 'hub'))) return;
+        const g = (other.level || 1) - lv;
+        if (g > worstGap) { worstGap = g; worstName = other.name; worstLv = other.level || 1; }
+      });
+      if (worstGap > 0) html += `<p>⚠ Bottleneck: ${esc(worstName)} is level ${worstLv} but you are level ${lv}. Upgrade to unlock +${worstGap}/sec flow.</p>`;
+    }
     if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
     else {
       const upCost = owned.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000][lv] : owned.type === 'port' ? [0, 250000, 500000, 1000000, 2000000][lv] : [0, 100000, 250000, 500000, 1000000][lv];
@@ -1281,7 +1294,8 @@ function onDotTap(dot) {
       const other = S.airports && S.airports[otherKey];
       if (!other) return;
       const kind = (owned.type === 'port' || other.type === 'port') ? 'Trade' : (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
-      html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+      const bottlenecked = owned.type !== 'port' && other.type !== 'port' && ((owned.type === 'hub' && other.type === 'airport') || (owned.type === 'airport' && other.type === 'hub')) && (other.level || 1) > lv;
+      html += `<p>→ ${esc(other.name)} (${kind})${bottlenecked ? ' ⚠' : ''} <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
       if (owned.type === 'port' || other.type === 'port') return;
       const outPct = (S.flowPct && S.flowPct[dot.key + '|' + otherKey]) || 0;
       const inPct = (S.flowPct && S.flowPct[otherKey + '|' + dot.key]) || 0;

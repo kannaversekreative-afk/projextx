@@ -738,6 +738,36 @@ const MapView = (() => {
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
+    // Bottleneck gap for a site: on hub-airport routes, flow is
+    // min(hub level, airport level), so the lower end caps the
+    // flow and loses opportunity (the higher end could move more).
+    // Returns the worst gap (0 = not bottlenecked). Ports never
+    // bottleneck (trade moves are manual, not level-capped).
+    const bottleneckGap = (key) => {
+      const site = S && S.airports && S.airports[key];
+      if (!site || site.type === 'port') return 0;
+      let gap = 0;
+      (S.routes || []).forEach(r => {
+        const otherKey = r.from === key ? r.to : (r.to === key ? r.from : null);
+        if (!otherKey) return;
+        const other = S.airports[otherKey];
+        if (!other) return;
+        if (!((site.type === 'hub' && other.type === 'airport') || (site.type === 'airport' && other.type === 'hub'))) return;
+        const g = (other.level || 1) - (site.level || 1);
+        if (g > gap) gap = g;
+      });
+      return gap;
+    };
+    // Dot fill: white unowned, teal port, dark blue airport/hub,
+    // yellow for a 1-level bottleneck, red for a gap of 2 or more
+    // (losing 2+/sec of flow until upgraded).
+    const dotFill = (bought, key) => {
+      if (!bought) return '#ffffff';
+      const gap = bottleneckGap(key);
+      if (gap >= 2) return '#e5484d';
+      if (gap === 1) return '#f5b301';
+      return bought.type === 'port' ? '#0e7490' : '#2563eb';
+    };
     // Airline dots on every map, in the same place: major cities,
     // US state capitals, country capitals, and region dots, all in
     // world coordinates, so a site bought on one map shows at the
@@ -750,7 +780,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['c' + ct.id];
-          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.fillStyle = dotFill(bought, 'c' + ct.id); c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -759,7 +789,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['us:' + st.s];
-          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.fillStyle = dotFill(bought, 'us:' + st.s); c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -769,7 +799,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports['c' + ct.id];
-          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.fillStyle = dotFill(bought, 'c' + ct.id); c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -779,7 +809,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
           const bought = S && S.airports && S.airports[d.key];
-          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.fillStyle = dotFill(bought, d.key); c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
@@ -879,7 +909,7 @@ const MapView = (() => {
         const [sx, sy] = toScreen(cap.x, cap.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
         const bought = S && S.airports && S.airports['us:' + cap.s];
-        c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.fillStyle = dotFill(bought, 'us:' + cap.s); c.strokeStyle = '#16233f'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
       drawAirline(now);
