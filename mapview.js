@@ -42,21 +42,27 @@ const MapView = (() => {
     big.forEach(p => { bx0 = Math.min(bx0, p[0]); bx1 = Math.max(bx1, p[0]); by0 = Math.min(by0, p[1]); by1 = Math.max(by1, p[1]); });
     return [bx0, by0, bx1, by1];
   };
-  // Northern cluster map: a SEPARATE map with these 5 states only.
-  // It is not a view of the world map: it has its own shapes, its own
+  // Cluster maps: each is a SEPARATE map with its own states only.
+  // None is a view of the world map: each has its own shapes, its own
   // bounds, and its own screen. Nothing from the world leaks into it.
-  const CLUSTER_STATES = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'];
+  const CLUSTER_MAPS = [
+    ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'],
+    ['Pennsylvania', 'New Jersey', 'Connecticut', 'Rhode Island', 'Delaware']
+  ];
+  let viewCluster = 0;
+  const clusterStates = () => CLUSTER_MAPS[viewCluster] || CLUSTER_MAPS[0];
   const clusterRings = () => {
     const rings = [];
-    CLUSTER_STATES.forEach(name => regionRings(name).forEach(r => rings.push(r)));
+    clusterStates().forEach(name => regionRings(name).forEach(r => rings.push(r)));
     return rings;
   };
   const clusterBox = () => {
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, found = false;
-    CLUSTER_STATES.forEach(name => { const st = stateEntry(name); if (!st) return; found = true; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+    clusterStates().forEach(name => { const st = stateEntry(name); if (!st) return; found = true; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
     return found ? [x0, y0, x1, y1] : null;
   };
-  const isClusterState = name => CLUSTER_STATES.includes(name);
+  const clusterForState = name => CLUSTER_MAPS.findIndex(list => list.includes(name));
+  const isClusterState = name => clusterForState(name) >= 0;
   const regionPathsCache = {};
   const regionPaths = name => {
     if (!regionPathsCache[name]) regionPathsCache[name] = regionRings(name).map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
@@ -537,7 +543,7 @@ const MapView = (() => {
     // cities, no vehicles, no military — nothing from the world.
     if (viewKind === 'cluster') {
       if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
-        CLUSTER_STATES.forEach(name => {
+        clusterStates().forEach(name => {
           const cp = US_CAPITALS.find(c => c.s === name);
           if (!cp) return;
           const [sx, sy] = toScreen(cp.x, cp.y);
@@ -752,7 +758,7 @@ const MapView = (() => {
     world() { resetView(); flyTo(MAP_W / 2, MAP_H / 2, 0); },
     showCountry(a3) { enterCountry(a3); },
     showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; const box = regionBox(region); if (box) frameBox(box); },
-    showCluster(a3) { viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; const box = clusterBox(); if (box) frameBox(box); },
+    showCluster(a3, state) { viewCluster = Math.max(0, clusterForState(state)); viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; const box = clusterBox(); if (box) frameBox(box); },
     isClusterState(name) { return isClusterState(name); },
     exitToWorld() { resetView(); fit(); dirty = true; },
     exitToCountry() { if ((viewKind === 'region' || viewKind === 'cluster') && viewA3) enterCountry(viewA3); },

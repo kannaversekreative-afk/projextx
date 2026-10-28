@@ -3299,7 +3299,7 @@ const A = {
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
-  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
+  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0], p[1]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
   exitToWorld: () => { MapView.exitToWorld(); renderHUD(); },
   exitToCountry: () => { MapView.exitToCountry(); renderHUD(); },
   countryPanel: x => { openCountryPanel(x); },
