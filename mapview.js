@@ -459,6 +459,19 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
+    // US state capitals: black dots with a solid gold fill — no gold
+    // star. Zoomed in, the dot IS the state interaction (no state
+    // panel); tapping a dot currently falls through to the country
+    // underneath, and the capital-choose-business office flow is a
+    // separate build on top of this.
+    if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
+      US_CAPITALS.forEach(cp => {
+        const [sx, sy] = toScreen(cp.x, cp.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
+    }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
