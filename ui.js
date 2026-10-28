@@ -2350,6 +2350,7 @@ PANELS.warplan = () => {
     <div class="kv"><span>You can last</span><b>~${Math.round(att.weeks)} weeks · Treasury ${fmtMoney(att.treasury, true)} · Stability ${Math.round(att.stab)}</b></div>
     <div class="kv"><span>They can last</span><b>~${Math.round(def.weeks)} weeks · Treasury ${fmtMoney(def.treasury, true)} · Stability ${Math.round(def.stab)}</b></div>
     <div class="kv"><span>You — people</span><b>${fmtPop(country(S.home).pop)}</b></div><div class="kv"><span>Them — people</span><b>${fmtPop(country(plan.target).pop)}</b></div>
+    <div class="kv"><span>Mobilized citizens at home</span><b>${Math.floor(att.homePop || 0).toLocaleString()} · +${Math.round(((att.mob || 1) - 1) * 100)}% war power</b></div>${!(att.homePop > 0) ? '<p class="muted small">Move people to airports and hubs in your home country to mobilize them for war.</p>' : ''}
     <button class="btn3d orange wide" data-a="warSubmit" ${err ? 'disabled' : ''}>SUBMIT ATTACK</button>
     <p class="muted small">Attacking may win or lose right there, or start an ongoing war that runs for years. While it runs, money, troops and weapons drain every day, and it can end in treaty, annexation, sanctions, nuclear escalation, or stalemate. The outcome is 70% your real stats and 30% chaos. You can declare war only once every 10 years.</p>`);
 };

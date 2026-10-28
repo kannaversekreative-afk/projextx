@@ -106,8 +106,22 @@ function warScore(a3, commit, approachBonus, researchBonus, baseBonus) {
   const gdpPc = gdpDollars / Math.max(1, cs.pop);
   const supplies = clamp(Math.sqrt(gdpPc / 20000), 0.3, 2) * clamp(cs.stab / 50, 0.3, 1.5) * (1 - Math.min(0.5, (cs.debt || 0) / gdpDollars * 0.3));
   const popF = 0.8 + 0.2 * clamp(Math.log10(Math.max(1, cs.pop)) / 8, 0, 1.3);
-  const effective = power * endurance * supplies * popF;
-  return { power, power0, weeks, endurance, supplies, popF, effective, treasury, gdpDollars, gdpPc, stab: cs.stab, debtRatio: (cs.debt || 0) / gdpDollars, milLv: cs.milLv };
+  // Mobilized citizens: people the player moved to airports and hubs
+  // in the home country reinforce war power. Log scale, capped at
+  // +25%, so it rewards moving people home without breaking war
+  // balance. Only the player's home country mobilizes (the CPU does
+  // not play the airline game). Ports do not mobilize (trade, not
+  // people).
+  let mob = 1, homePop = 0;
+  if (a3 === S.home && typeof S !== 'undefined' && S && S.airports) {
+    for (const k in S.airports) {
+      const site = S.airports[k];
+      if (site && site.a3 === S.home && site.type !== 'port') homePop += site.pop || 0;
+    }
+    mob = 1 + Math.min(0.25, 0.05 * Math.log10(1 + homePop / 1000));
+  }
+  const effective = power * endurance * supplies * popF * mob;
+  return { power, power0, weeks, endurance, supplies, popF, mob, homePop, effective, treasury, gdpDollars, gdpPc, stab: cs.stab, debtRatio: (cs.debt || 0) / gdpDollars, milLv: cs.milLv };
 }
 function warPlanScore(plan) {
   const att = warScore(S.home, { army: plan.army, navy: plan.navy, air: plan.air }, 1 + (plan.approachBonus || 0), plan.research ? 1.15 : 1, 1 + 0.05 * purchasedBaseCount(S.home));
