@@ -427,6 +427,9 @@ const MapView = (() => {
     // only when connected to a hub, receiving per hub route the
     // slower of the hub's send and its own receive, both equal to
     // level, so flow is min(hub level, airport level)/sec.
+    // Capacity pauses growth, it never deletes people: a site
+    // pushed above capacity by a manual move keeps its people
+    // (and drags stability) until it is drained or upgraded.
     // Hub-hub routes move cargo only, no passengers, unless the
     // player moves them by hand (see S.moves below). New sites
     // start at 100, level 1.
@@ -435,7 +438,7 @@ const MapView = (() => {
         const a = S.airports[k];
         if (a.type !== 'port' && a.pop === undefined) a.pop = 100;
         if (a.level === undefined) a.level = 1;
-        if (a.type === 'hub') a.pop = Math.min(a.pop + (a.level + 1) * dt, a.level * 20000);
+        if (a.type === 'hub' && a.pop < a.level * 20000) a.pop = Math.min(a.pop + (a.level + 1) * dt, a.level * 20000);
         if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += (a.level + 1) * 100 * dt; }
       }
       if (Array.isArray(S.routes)) {
@@ -443,8 +446,8 @@ const MapView = (() => {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
           const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 100; B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
+          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 100; if (B.pop < bLv * 20000) B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
+          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; if (A.pop < aLv * 20000) A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
         }
       }
       // Percent flows: a route can carry a standing percent of

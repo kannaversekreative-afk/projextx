@@ -1238,7 +1238,7 @@ function onDotTap(dot) {
   let html = `<h2>${esc(title)}</h2>`;
   if (owned) {
     const lv = owned.level || 1;
-    html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : owned.type === 'port' ? 'Port' : 'Airport'} here. Level ${lv}</p>`;
+    html += `<p>You own ${owned.type === 'airport' ? 'an Airport' : owned.type === 'hub' ? 'a Hub' : 'a Port'} here. Level ${lv}</p>`;
     if (owned.type === 'port') {
       html += `<p>Trade: ${Math.floor(owned.trade || 0).toLocaleString()} (+${(lv + 1) * 100}/sec)</p>`;
       html += `<p>Ports haul trade by ship. Trade arriving at a hub sells for $1 per unit.</p>`;
