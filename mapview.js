@@ -459,19 +459,6 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
-    // US state capitals: black dots with a solid gold fill — no gold
-    // star. Zoomed in, the dot IS the state interaction (no state
-    // panel); tapping a dot currently falls through to the country
-    // underneath, and the capital-choose-business office flow is a
-    // separate build on top of this.
-    if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
-      US_CAPITALS.forEach(cp => {
-        const [sx, sy] = toScreen(cp.x, cp.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
-    }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
@@ -500,6 +487,24 @@ const MapView = (() => {
       if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
       const isSel = id === sel, text = W.byA3[ct.a3].name;
       if (pill(c, sx, sy - 13, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL, id)) n++;
+    }
+    // US state capitals, drawn LAST on purpose: country pills are
+    // nearly opaque and ~110px wide, and they sit on the capital
+    // point — so a pill drawn after the dots buries every capital
+    // dot near it (the whole Northeast cluster sits under the
+    // United States pill). Drawing the dots last keeps them visible
+    // at every zoom. Black dots with a solid gold fill, no gold star,
+    // smaller than the white city dots. Zoomed in, the dot IS the
+    // state interaction (no state panel); tapping a dot currently
+    // falls through to the country underneath, and the
+    // capital-choose-business office flow is a separate build.
+    if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
+      US_CAPITALS.forEach(cp => {
+        const [sx, sy] = toScreen(cp.x, cp.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
+        c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
     }
   }
   function drawPickLabels(c) {
