@@ -48,7 +48,8 @@ const MapView = (() => {
   const CLUSTER_MAPS = [
     ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'],
     ['Pennsylvania', 'New Jersey', 'Connecticut', 'Rhode Island', 'Delaware'],
-    ['Maryland', 'Virginia', 'West Virginia', 'Ohio', 'Kentucky']
+    ['Maryland', 'Virginia', 'West Virginia', 'Ohio', 'Kentucky'],
+    ['North Carolina', 'Tennessee', 'South Carolina', 'Georgia', 'Florida']
   ];
   let viewCluster = 0;
   const clusterStates = () => CLUSTER_MAPS[viewCluster] || CLUSTER_MAPS[0];
