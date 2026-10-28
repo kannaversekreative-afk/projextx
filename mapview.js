@@ -433,9 +433,10 @@ const MapView = (() => {
     if (typeof S !== 'undefined' && S && S.airports) {
       for (const k in S.airports) {
         const a = S.airports[k];
-        if (a.pop === undefined) a.pop = 100;
+        if (a.type !== 'port' && a.pop === undefined) a.pop = 100;
         if (a.level === undefined) a.level = 1;
         if (a.type === 'hub') a.pop += (a.level + 1) * dt;
+        if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += (a.level + 1) * 100 * dt; }
       }
       if (Array.isArray(S.routes)) {
         for (const r of S.routes) {
@@ -487,6 +488,25 @@ const MapView = (() => {
             const B = S.airports[mp.to];
             if (B) { if (B.pop === undefined) B.pop = 100; B.pop += mp.amount; }
             S.moves.splice(i, 1);
+            save();
+          }
+        }
+      }
+      // Trade moves: same shuttle pattern as people moves. Trade
+      // arriving at a hub sells for $1 per unit; trade arriving
+      // at a port stockpiles for onward hauling.
+      if (Array.isArray(S.tradeMoves)) {
+        for (let i = S.tradeMoves.length - 1; i >= 0; i--) {
+          const tm = S.tradeMoves[i];
+          if (tm.wait > 0) { tm.wait -= dt; continue; }
+          tm.t += dt / tm.dur;
+          if (tm.t >= 1) {
+            const B = S.airports[tm.to];
+            if (B) {
+              if (B.type === 'hub') S.cash = (S.cash || 0) + tm.amount;
+              else if (B.type === 'port') { if (B.trade === undefined) B.trade = 0; B.trade += tm.amount; }
+            }
+            S.tradeMoves.splice(i, 1);
             save();
           }
         }
@@ -718,10 +738,140 @@ const MapView = (() => {
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
+    // Airline dots on every map, in the same place: major cities,
+    // US state capitals, country capitals, and region dots, all in
+    // world coordinates, so a site bought on one map shows at the
+    // same spot on every other map that contains it. Only on-screen
+    // dots draw (the canvas clips the rest).
+    const drawDots = () => {
+      if (layerOn('cities')) {
+        W.cities.forEach(ct => {
+          if (ct.isCapital || !ct.isMajor) return;
+          const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+          const bought = S && S.airports && S.airports['c' + ct.id];
+          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        });
+      }
+      if (typeof US_CAPITALS !== 'undefined') {
+        US_CAPITALS.forEach(st => {
+          const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+          const bought = S && S.airports && S.airports['us:' + st.s];
+          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        });
+      }
+      if (layerOn('cities')) {
+        W.cities.forEach(ct => {
+          if (!ct.isCapital) return;
+          const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+          const bought = S && S.airports && S.airports['c' + ct.id];
+          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        });
+      }
+      if (layerOn('cities')) {
+        regionDots().forEach(d => {
+          if (!regionDotVisible(d, v.s)) return;
+          const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+          const bought = S && S.airports && S.airports[d.key];
+          c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        });
+      }
+    };
+    // Airline layer on every map: drawn routes + route planes,
+    // source ring, drag preview, and move planes. Routes are
+    // global state (S.routes), not per-map, so a route drawn on
+    // one map shows on every other map. Same world coordinates,
+    // so everything lands in the same place. A passenger plane
+    // flies a route only when people flow on it (hub to airport);
+    // hub-hub routes get no passenger plane (cargo only, people
+    // move by hand). The plane starts at the hub, so the loaded
+    // leg runs hub to airport and the return leg comes back.
+    const drawAirline = (now) => {
+      if (S && S.airports && Array.isArray(S.routes)) {
+        const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
+        S.routes.forEach((r, idx) => {
+          const A0 = S.airports[r.from], B0 = S.airports[r.to];
+          if (!A0 || !B0) return;
+          const A = (A0.type === 'hub' && B0.type !== 'hub') ? A0 : (B0.type === 'hub' && A0.type !== 'hub') ? B0 : A0;
+          const B = A === A0 ? B0 : A0;
+          const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
+          if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
+          c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
+          c.setLineDash([0.1, 10]);
+          c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
+          c.setLineDash([]);
+          if (A0.type === B0.type) return;
+          const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
+          const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
+          const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
+          c.save(); c.translate(px, py); c.rotate(ang);
+          c.fillStyle = '#16233f';
+          c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
+          c.restore();
+        });
+      }
+      const dsrc = drawSrc();
+      if (dsrc && S && S.airports && S.airports[dsrc]) {
+        const src = S.airports[dsrc];
+        const [sx, sy] = toScreen(src.x, src.y);
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
+        c.strokeStyle = '#2563eb'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
+      }
+      if (dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
+        const src = S.airports[dsrc];
+        const [sx, sy] = toScreen(src.x, src.y);
+        c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
+        c.setLineDash([0.1, 10]);
+        c.beginPath(); c.moveTo(sx, sy); c.lineTo(drawPos[0], drawPos[1]); c.stroke();
+        c.setLineDash([]);
+      }
+      if (S && S.airports && Array.isArray(S.moves)) {
+        S.moves.forEach(mp => {
+          const A = S.airports[mp.from], B = S.airports[mp.to];
+          if (!A || !B) return;
+          if (mp.wait > 0) return;
+          const f = Math.min(1, Math.max(0, mp.t));
+          const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
+          const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
+          const ang = Math.atan2(B.y - A.y, B.x - A.x);
+          c.save(); c.translate(sx, sy); c.rotate(ang);
+          c.fillStyle = '#16233f';
+          c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
+          c.restore();
+        });
+      }
+      // Trade moves in flight: teal ship hulls (not planes), so a
+      // slow haul reads differently from a fast people flight.
+      // Trips still waiting their turn are not drawn yet.
+      if (S && S.airports && Array.isArray(S.tradeMoves)) {
+        S.tradeMoves.forEach(tm => {
+          const A = S.airports[tm.from], B = S.airports[tm.to];
+          if (!A || !B) return;
+          if (tm.wait > 0) return;
+          const f = Math.min(1, Math.max(0, tm.t));
+          const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
+          const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
+          const ang = Math.atan2(B.y - A.y, B.x - A.x);
+          c.save(); c.translate(sx, sy); c.rotate(ang);
+          c.fillStyle = '#0e7490';
+          c.beginPath(); c.moveTo(12, 0); c.lineTo(4, 5); c.lineTo(-10, 5); c.lineTo(-12, 0); c.lineTo(-10, -5); c.lineTo(4, -5); c.closePath(); c.fill();
+          c.restore();
+        });
+      }
+    };
     // Cluster map: one dot per state in this cluster, at the state
     // capital (same dot as the world map, same buy sheet on tap).
     // No pills, no cities, no vehicles, no military — nothing else
-    // from the world.
+    // from the world, except the airline layer (dots, routes, moves),
+    // which is on every map.
     if (viewKind === 'cluster') {
       if (typeof US_CAPITALS !== 'undefined') clusterStates().forEach(name => {
         const cap = US_CAPITALS.find(u => u.s === name);
@@ -729,15 +879,16 @@ const MapView = (() => {
         const [sx, sy] = toScreen(cap.x, cap.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
         const bought = S && S.airports && S.airports['us:' + cap.s];
-        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.fillStyle = bought ? (bought.type === 'port' ? '#0e7490' : '#2563eb') : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
+      drawAirline(now);
       return;
     }
-    // RegionMap view: shapes only. No pills, no cities, no vehicles,
-    // no military — nothing from the world. No dots either: region
-    // capitals are not in the data yet.
-    if (viewKind === 'regionMap') return;
+    // RegionMap view: shapes plus the airline layer (dots, routes,
+    // moves) — same places as every other map. No pills, no cities,
+    // no vehicles, no military.
+    if (viewKind === 'regionMap') { drawDots(); drawAirline(now); return; }
     if (st && st.settings.motion && layerOn('vehicles')) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co) return;
@@ -775,130 +926,8 @@ const MapView = (() => {
       // below is the button. Nothing is drawn here at the capital
       // point except the selected-city halo above.
     });
-    // Major cities: white dots with a dark outline, like the
-    // screenshot — every major city, not just the capital. World map
-    // only: no dots on any other map. Cities are not enterable:
-    // tapping a dot selects the country underneath. Capitals keep
-    // their country name pill instead.
-    if (viewKind === 'world' && layerOn('cities')) {
-      W.cities.forEach(ct => {
-        if (ct.isCapital || !ct.isMajor) return;
-
-        const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        const bought = S && S.airports && S.airports['c' + ct.id];
-        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
-    }
-    // White dot on every US state (world map only), at the state
-    // capital — US_CAPITALS is the 50 state capitals in map coords.
-    if (viewKind === 'world' && typeof US_CAPITALS !== 'undefined') {
-      US_CAPITALS.forEach(st => {
-        const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        const bought = S && S.airports && S.airports['us:' + st.s];
-        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
-    }
-    // Capitals: every country gets a white dot at its capital, so
-    // airports and hubs can be bought anywhere in the world.
-    // Bought dots fill dark blue. Tapping a dot opens the buy
-    // sheet (see tap()).
-    if (viewKind === 'world' && layerOn('cities')) {
-      W.cities.forEach(ct => {
-        if (!ct.isCapital) return;
-        const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        const bought = S && S.airports && S.airports['c' + ct.id];
-        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
-    }
-    // Region dots: one per first-level region, like the US states.
-    // Only where they are readable (see regionDotVisible) — at
-    // world zoom 4,000+ dots would be a blob.
-    if (viewKind === 'world' && layerOn('cities')) {
-      regionDots().forEach(d => {
-        if (!regionDotVisible(d, v.s)) return;
-        const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        const bought = S && S.airports && S.airports[d.key];
-        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
-    }
-    // Drawn routes: dotted routes + planes on the routes the player
-    // drew (see route mode). Kind follows the endpoints: hub-hub
-    // carries cargo only, airport-hub carries people.
-    // A passenger plane flies a route only when people flow on
-    // it, which is hub to airport. Hub-hub routes get no
-    // passenger plane (cargo only, passengers move by hand).
-    // The plane starts at the hub, so the loaded leg runs hub to
-    // airport and the return leg comes back.
-    if (viewKind === 'world' && S && S.airports && Array.isArray(S.routes)) {
-      const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
-      S.routes.forEach((r, idx) => {
-        const A0 = S.airports[r.from], B0 = S.airports[r.to];
-        if (!A0 || !B0) return;
-        const A = (A0.type === 'hub' && B0.type !== 'hub') ? A0 : (B0.type === 'hub' && A0.type !== 'hub') ? B0 : A0;
-        const B = A === A0 ? B0 : A0;
-        const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
-        if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
-        c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
-        c.setLineDash([0.1, 10]);
-        c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
-        c.setLineDash([]);
-        if (A0.type === B0.type) return;
-        const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
-        const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
-        const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
-        c.save(); c.translate(px, py); c.rotate(ang);
-        c.fillStyle = '#16233f';
-        c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
-        c.restore();
-      });
-    }
-    // Draw and move mode: ring the source dot so the player sees
-    // which dot they are drawing or moving from.
-    const dsrc = drawSrc();
-    if ((viewKind === 'world' || viewKind === 'cluster') && dsrc && S && S.airports && S.airports[dsrc]) {
-      const src = S.airports[dsrc];
-      const [sx, sy] = toScreen(src.x, src.y);
-      const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
-      c.strokeStyle = '#2563eb'; c.lineWidth = 2;
-      c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
-    }
-    // Draw preview: a dotted line from the source dot to the
-    // finger while the player drags a route or a move.
-    if ((viewKind === 'world' || viewKind === 'cluster') && dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
-      const src = S.airports[dsrc];
-      const [sx, sy] = toScreen(src.x, src.y);
-      c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
-      c.setLineDash([0.1, 10]);
-      c.beginPath(); c.moveTo(sx, sy); c.lineTo(drawPos[0], drawPos[1]); c.stroke();
-      c.setLineDash([]);
-    }
-    // Move planes: one plane per manual move in flight, carrying
-    // people from source to destination. Pop lands on arrival.
-    // Trips still waiting their turn (sequential shuttling) are
-    // not drawn yet.
-    if ((viewKind === 'world' || viewKind === 'cluster') && S && S.airports && Array.isArray(S.moves)) {
-      S.moves.forEach(mp => {
-        const A = S.airports[mp.from], B = S.airports[mp.to];
-        if (!A || !B) return;
-        if (mp.wait > 0) return;
-        const f = Math.min(1, Math.max(0, mp.t));
-        const px = A.x + (B.x - A.x) * f, py = A.y + (B.y - A.y) * f;
-        const [sx, sy] = toScreen(px, py); if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
-        const ang = Math.atan2(B.y - A.y, B.x - A.x);
-        c.save(); c.translate(sx, sy); c.rotate(ang);
-        c.fillStyle = '#16233f';
-        c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
-        c.restore();
-      });
-    }
+    drawDots();
+    drawAirline(now);
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
@@ -929,7 +958,7 @@ const MapView = (() => {
 
   // ---------- input ----------
   const pts = new Map(); let downAt = null, moved = 0, pinch = null, drawPos = null;
-  const drawSrc = () => typeof UI !== 'undefined' ? (UI.routing || (UI.moving && UI.moving.from) || null) : null;
+  const drawSrc = () => typeof UI !== 'undefined' ? (UI.routing || (UI.moving && UI.moving.from) || (UI.trading && UI.trading.from) || null) : null;
   const drawing = () => !!drawSrc();
   top.addEventListener('pointerdown', e => { top.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); downAt = [e.clientX, e.clientY]; moved = 0; anim = null; if (drawing()) { const rect = top.getBoundingClientRect(); drawPos = [e.clientX - rect.left, e.clientY - rect.top]; } if (pts.size === 2 && !drawing()) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: v.s }; } });
   top.addEventListener('pointermove', e => {
@@ -943,7 +972,7 @@ const MapView = (() => {
     const dx = e.clientX - prev[0], dy = e.clientY - prev[1]; moved += Math.abs(dx) + Math.abs(dy);
     if (moved > 5) { v.x += dx; v.y += dy; clampView(); dirty = true; }
   });
-  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && drawing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : viewKind === 'world' ? dotAt(sx, sy) : null; if (best) { if (UI.routing) handlers.routeDot && handlers.routeDot(best); else if (UI.moving) handlers.moveDot && handlers.moveDot(best); } else { if (UI.routing) handlers.routeCancel && handlers.routeCancel(); else if (UI.moving) handlers.moveCancel && handlers.moveCancel(); } } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
+  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && drawing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy); if (best) { if (UI.routing) handlers.routeDot && handlers.routeDot(best); else if (UI.moving) handlers.moveDot && handlers.moveDot(best); else if (UI.trading) handlers.tradeDot && handlers.tradeDot(best); } else { if (UI.routing) handlers.routeCancel && handlers.routeCancel(); else if (UI.moving) handlers.moveCancel && handlers.moveCancel(); else if (UI.trading) handlers.tradeCancel && handlers.tradeCancel(); } } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
   top.addEventListener('pointerup', up); top.addEventListener('pointercancel', e => { pts.delete(e.pointerId); pinch = null; drawPos = null; });
   top.addEventListener('wheel', e => { e.preventDefault(); const rect = top.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
@@ -1025,8 +1054,8 @@ const MapView = (() => {
       }
       // Route mode: the player tapped Draw route, then taps a dot
       // to draw the route there. Any other tap cancels route mode.
-      // Works on the world map and in US cluster maps.
-      if (typeof UI !== 'undefined' && UI.routing && (viewKind === 'world' || viewKind === 'cluster')) {
+      // Works on every map.
+      if (typeof UI !== 'undefined' && UI.routing) {
         const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
         if (best) handlers.routeDot && handlers.routeDot(best);
         else handlers.routeCancel && handlers.routeCancel();
@@ -1034,16 +1063,27 @@ const MapView = (() => {
       }
       // Move mode: the player picked a percent, then taps a dot
       // on one of their routes to move people there. Any other
-      // tap cancels move mode.
-      if (typeof UI !== 'undefined' && UI.moving && (viewKind === 'world' || viewKind === 'cluster')) {
+      // tap cancels move mode. Works on every map.
+      if (typeof UI !== 'undefined' && UI.moving) {
         const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
         if (best) handlers.moveDot && handlers.moveDot(best);
         else handlers.moveCancel && handlers.moveCancel();
         return;
       }
-      // White dots are buyable: tapping one opens the airport/hub
-      // buy sheet for that city, instead of the country underneath.
-      if (viewKind === 'world') {
+      // Trade mode: the player picked a trade percent at a port,
+      // then taps a port or hub on one of their routes to haul
+      // trade there. Any other tap cancels trade mode. Works on
+      // every map.
+      if (typeof UI !== 'undefined' && UI.trading) {
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
+        if (best) handlers.tradeDot && handlers.tradeDot(best);
+        else handlers.tradeCancel && handlers.tradeCancel();
+        return;
+      }
+      // White dots are buyable on every map: tapping one opens the
+      // airport/hub buy sheet for that city, instead of the country
+      // underneath.
+      {
         const best = dotAt(sx, sy);
         if (best) { handlers.dot && handlers.dot(best); return; }
       }

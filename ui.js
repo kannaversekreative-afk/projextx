@@ -282,7 +282,7 @@ const chgVs = (c) => {
 
 // ---------- modals / panels ----------
 function openModal(html, kind) {
-  UI.routing = null; UI.routeChange = null; UI.moving = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null;
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
@@ -297,7 +297,7 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opened from anywhere else (HUD pill, map, city) still use the
 // #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
-  UI.routing = null; UI.routeChange = null; UI.moving = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null;
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
@@ -1003,7 +1003,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel); MapView.on('tradeDot', onTradeDotTap); MapView.on('tradeCancel', onTradeCancel);
   MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
@@ -1225,6 +1225,10 @@ const PLANE_TYPES = {
   jet: { name: 'Jet', cap: 150, fuel: 25, speed: 300, cost: 200000 },
   jumbo: { name: 'Jumbo', cap: 400, fuel: 50, speed: 450, cost: 1000000 },
 };
+// Ships haul trade, not people: 100x the biggest cargo plane's
+// capacity (40,000 vs Jumbo 400), but way slower and cheaper per
+// unit of distance. Trade moves start at ports.
+const SHIP = { name: 'Ship', cap: 40000, fuel: 5, speed: 30, cost: 5000000 };
 function onDotTap(dot) {
   if (!S || !dot) return;
   UI.dotBuy = dot;
@@ -1234,8 +1238,11 @@ function onDotTap(dot) {
   let html = `<h2>${esc(title)}</h2>`;
   if (owned) {
     const lv = owned.level || 1;
-    html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here. Level ${lv}</p>`;
-    if (owned.type === 'hub') {
+    html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : owned.type === 'port' ? 'Port' : 'Airport'} here. Level ${lv}</p>`;
+    if (owned.type === 'port') {
+      html += `<p>Trade: ${Math.floor(owned.trade || 0).toLocaleString()} (+${(lv + 1) * 100}/sec)</p>`;
+      html += `<p>Ports haul trade by ship. Trade arriving at a hub sells for $1 per unit.</p>`;
+    } else if (owned.type === 'hub') {
       html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()} (+${lv + 1}/sec)</p>`;
       const sends = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'airport') sends.push(esc(other.name) + ' ' + Math.min(lv, other.level || 1) + '/sec'); });
@@ -1249,33 +1256,44 @@ function onDotTap(dot) {
     }
     if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
     else {
-      const upCost = owned.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000][lv] : [0, 100000, 250000, 500000, 1000000][lv];
-      const nextRate = owned.type === 'hub' ? (lv + 2) + '/sec' : (lv + 1) + '/sec per hub';
+      const upCost = owned.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000][lv] : owned.type === 'port' ? [0, 250000, 500000, 1000000, 2000000][lv] : [0, 100000, 250000, 500000, 1000000][lv];
+      const nextRate = owned.type === 'hub' ? (lv + 2) + '/sec' : owned.type === 'port' ? ((lv + 2) * 100) + ' trade/sec' : (lv + 1) + '/sec per hub';
       html += `<button class="btn3d orange wide" data-a="upgradeSite" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE TO LEVEL ${lv + 1} (${nextRate}) ${fmt(upCost)}</button>`;
     }
     const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
-    html += `<p>Fleet: Prop ×${fl.prop || 0}, Jet ×${fl.jet || 0}, Jumbo ×${fl.jumbo || 0}</p>`;
-    html += `<p><button class="btn3d" data-a="fleetBuy" data-x="prop"${S.cash < 50000 ? ' disabled' : ''}>BUY PROP ${fmt(50000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jet"${S.cash < 200000 ? ' disabled' : ''}>BUY JET ${fmt(200000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jumbo"${S.cash < 1000000 ? ' disabled' : ''}>BUY JUMBO ${fmt(1000000)}</button></p>`;
+    if (owned.type === 'port') {
+      html += `<p>Fleet: Ship ×${fl.ship || 0}, Prop ×${fl.prop || 0}, Jet ×${fl.jet || 0}, Jumbo ×${fl.jumbo || 0}</p>`;
+      html += `<p><button class="btn3d" data-a="fleetBuy" data-x="ship"${S.cash < 5000000 ? ' disabled' : ''}>BUY SHIP ${fmt(5000000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="prop"${S.cash < 50000 ? ' disabled' : ''}>BUY PROP ${fmt(50000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jet"${S.cash < 200000 ? ' disabled' : ''}>BUY JET ${fmt(200000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jumbo"${S.cash < 1000000 ? ' disabled' : ''}>BUY JUMBO ${fmt(1000000)}</button></p>`;
+    } else {
+      html += `<p>Fleet: Prop ×${fl.prop || 0}, Jet ×${fl.jet || 0}, Jumbo ×${fl.jumbo || 0}</p>`;
+      html += `<p><button class="btn3d" data-a="fleetBuy" data-x="prop"${S.cash < 50000 ? ' disabled' : ''}>BUY PROP ${fmt(50000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jet"${S.cash < 200000 ? ' disabled' : ''}>BUY JET ${fmt(200000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jumbo"${S.cash < 1000000 ? ' disabled' : ''}>BUY JUMBO ${fmt(1000000)}</button></p>`;
+    }
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
-    html += `<p>Move people: <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|1">100%</button></p>`;
+    if (owned.type === 'port') {
+      html += `<p>Move trade: <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|1">100%</button></p>`;
+    } else {
+      html += `<p>Move people: <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|1">100%</button></p>`;
+    }
     const outSum = (() => { let s = 0; if (S.flowPct) for (const k in S.flowPct) if (k.startsWith(dot.key + '|')) s += S.flowPct[k]; return s; })();
     if (outSum > 0) html += `<p>Flows out: ${Math.round(outSum * 100)}%, keeps ${Math.round((1 - outSum) * 100)}%</p>`;
     (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
       const otherKey = r.from === dot.key ? r.to : r.from;
       const other = S.airports && S.airports[otherKey];
       if (!other) return;
-      const kind = (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
+      const kind = (owned.type === 'port' || other.type === 'port') ? 'Trade' : (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
       html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+      if (owned.type === 'port' || other.type === 'port') return;
       const outPct = (S.flowPct && S.flowPct[dot.key + '|' + otherKey]) || 0;
       const inPct = (S.flowPct && S.flowPct[otherKey + '|' + dot.key]) || 0;
       const pctBtn = (v, label) => `<button class="btn3d" data-a="flowPct" data-x="${dot.key}|${otherKey}|${v}">${label}</button>`;
       html += `<p>Flow out: ${Math.round(outPct * 100)}% ${pctBtn(0, 'Off')} ${pctBtn(0.1, '10%')} ${pctBtn(0.25, '25%')} ${pctBtn(0.5, '50%')} ${pctBtn(0.75, '75%')} ${pctBtn(1, '100%')}${inPct ? ` | In from ${esc(other.name)}: ${Math.round(inPct * 100)}%` : ''}</p>`;
     });
   } else {
-    html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
+    html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs.</p><p>Cash: ${fmt(S.cash)}</p>`;
     const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
+    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
   }
   openModal(html, 'sheet');
 }
@@ -1284,7 +1302,8 @@ function onRouteDotTap(dot) {
   if (!src || !S.airports || !S.airports[src]) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.', 'bad'); }
   if (dot.key === src) return toast('Pick a different site for the destination.', 'bad');
   const a = S.airports[src], b = S.airports[dot.key];
-  if (!b) return toast('Buy an airport or hub there first.', 'bad');
+  if (!b) return toast('Buy an airport, hub, or port there first.', 'bad');
+  if ((a.type === 'port' && b.type === 'airport') || (a.type === 'airport' && b.type === 'port')) return toast('Ports trade with ports and hubs, not airports.', 'bad');
   if (!S.routes) S.routes = [];
   if (UI.routeChange) {
     const old = UI.routeChange;
@@ -1313,6 +1332,7 @@ function onMoveDotTap(dot) {
   if (dot.key === mv.from) return toast('Pick a different site for the destination.', 'bad');
   const a = S.airports[mv.from], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport or hub there first.', 'bad');
+  if (a.type === 'port' || b.type === 'port') return toast('Ports haul trade, not people.', 'bad');
   if (!(S.routes || []).some(r => (r.from === mv.from && r.to === dot.key) || (r.from === dot.key && r.to === mv.from))) return toast('No route there yet. Draw one first.', 'bad');
   if (a.pop === undefined) a.pop = 100;
   const amount = Math.floor(a.pop * mv.pct);
@@ -1323,6 +1343,41 @@ function onMoveDotTap(dot) {
   openModal(movePickerHTML(UI.movePick), 'sheet');
 }
 function onMoveCancel() { UI.moving = null; }
+function onTradeDotTap(dot) {
+  const tr = UI.trading;
+  if (!tr || !S.airports || !S.airports[tr.from]) { UI.trading = null; return toast('Trade move cancelled.', 'bad'); }
+  if (dot.key === tr.from) return toast('Pick a different site for the destination.', 'bad');
+  const a = S.airports[tr.from], b = S.airports[dot.key];
+  if (!b) return toast('Buy an airport, hub, or port there first.', 'bad');
+  if (b.type !== 'port' && b.type !== 'hub') return toast('Trade goes to a port or a hub. Hubs buy it for cash.', 'bad');
+  if (!(S.routes || []).some(r => (r.from === tr.from && r.to === dot.key) || (r.from === dot.key && r.to === tr.from))) return toast('No route there yet. Draw one first.', 'bad');
+  if (a.trade === undefined) a.trade = 0;
+  const amount = Math.floor(a.trade * tr.pct);
+  if (amount < 1) return toast('Not enough trade to move.', 'bad');
+  const d = Math.max(30, Math.hypot(a.x - b.x, a.y - b.y));
+  UI.trading = null;
+  UI.tradePick = { from: tr.from, to: dot.key, amount, dist: d, destName: dot.name, destType: b.type };
+  openModal(tradePickerHTML(UI.tradePick), 'sheet');
+}
+function onTradeCancel() { UI.trading = null; }
+function tradePickerHTML(pick) {
+  const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
+  let html = `<h2>Move ${pick.amount.toLocaleString()} trade to ${esc(pick.destName)}</h2>`;
+  html += `<p>Ships haul 100x a cargo plane but are way slower. Trade arriving at a hub sells for $1 per unit. Trade arriving at a port stockpiles for onward hauling.</p>`;
+  const vehicles = [['ship', SHIP], ['prop', PLANE_TYPES.prop], ['jet', PLANE_TYPES.jet], ['jumbo', PLANE_TYPES.jumbo]];
+  for (const [key, pt] of vehicles) {
+    const owned = fl[key] || 0;
+    const trips = Math.ceil(pick.amount / pt.cap);
+    const dur = key === 'ship' ? Math.min(180, Math.max(30, pick.dist / pt.speed)) : Math.min(12, Math.max(2, pick.dist / pt.speed));
+    const fuel = Math.round(trips * pick.dist * pt.fuel);
+    const totalTime = trips * dur;
+    html += `<p>${pt.name} (holds ${pt.cap.toLocaleString()}, owned ×${owned}) — ${trips} trip${trips > 1 ? 's' : ''}, $${fuel.toLocaleString()} fuel, ~${Math.round(totalTime)}s total. `;
+    html += `<button class="btn3d" data-a="tradeUse" data-x="${key}"${owned < 1 || S.cash < fuel ? ' disabled' : ''}>USE</button> `;
+    html += `<button class="btn3d" data-a="tradeBuy" data-x="${key}"${S.cash < pt.cost ? ' disabled' : ''}>BUY $${pt.cost.toLocaleString()}</button></p>`;
+  }
+  html += `<button class="btn3d" data-a="tradePickCancel">Cancel</button>`;
+  return html;
+}
 function movePickerHTML(pick) {
   const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
   let html = `<h2>Move ${pick.amount.toLocaleString()} people to ${esc(pick.destName)}</h2>`;
@@ -3644,27 +3699,35 @@ const A = {
     if (!S.airports) S.airports = {};
     if (S.airports[key]) return toast('You already own a building here.', 'bad');
     const hubFree = type === 'hub' && (!S.airports || !Object.values(S.airports).some(a => a.type === 'hub'));
-    const price = type === 'hub' ? (hubFree ? 0 : 1250000) : 220000;
+    const price = type === 'hub' ? (hubFree ? 0 : 1250000) : type === 'port' ? 600000 : 220000;
     if (S.cash < price) return toast('Not enough cash.', 'bad');
     S.cash -= price;
-    S.airports[key] = { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 100 };
+    S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0 } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 100 };
     UI.dotBuy = null;
     save(); closeModal(); renderHUD();
-    if (Object.keys(S.airports).length >= 2) { UI.routing = key; toast((type === 'hub' ? 'Hub' : 'Airport') + ' bought. Tap a site to connect your route.', 'good'); }
-    else toast(type === 'hub' ? 'Hub bought.' : 'Airport bought.', 'good');
+    if (Object.keys(S.airports).length >= 2) { UI.routing = key; toast((type === 'hub' ? 'Hub' : type === 'port' ? 'Port' : 'Airport') + ' bought. Tap a site to connect your route.', 'good'); }
+    else toast(type === 'hub' ? 'Hub bought.' : type === 'port' ? 'Port bought.' : 'Airport bought.', 'good');
   },
   routeStart: key => {
     closeModal();
-    UI.routing = key; UI.routeChange = null; UI.moving = null;
+    UI.routing = key; UI.routeChange = null; UI.moving = null; UI.trading = null;
     toast('Tap a destination dot to draw the route.', 'good');
   },
   moveStart: x => {
     const [key, pct] = (x || '').split('|');
     if (!S.airports || !S.airports[key]) return toast('Buy an airport or hub there first.', 'bad');
     closeModal();
-    UI.routing = null; UI.routeChange = null;
+    UI.routing = null; UI.routeChange = null; UI.trading = null;
     UI.moving = { from: key, pct: parseFloat(pct) || 0 };
     toast('Tap a destination on one of your routes.', 'good');
+  },
+  tradeStart: x => {
+    const [key, pct] = (x || '').split('|');
+    if (!S.airports || !S.airports[key] || S.airports[key].type !== 'port') return toast('Trade moves start at a port.', 'bad');
+    closeModal();
+    UI.routing = null; UI.routeChange = null; UI.moving = null;
+    UI.trading = { from: key, pct: parseFloat(pct) || 0 };
+    toast('Tap a port or hub on one of your routes.', 'good');
   },
   moveUse: type => {
     const pick = UI.movePick;
@@ -3707,22 +3770,64 @@ const A = {
     else toast(pt.name + ' bought.', 'good');
   },
   movePickCancel: () => { UI.movePick = null; closeModal(); },
+  tradeUse: type => {
+    const pick = UI.tradePick;
+    if (!pick || !S.airports || !S.airports[pick.from] || !S.airports[pick.to]) { UI.tradePick = null; return toast('Trade move cancelled.', 'bad'); }
+    const pt = type === 'ship' ? SHIP : PLANE_TYPES[type];
+    if (!pt) return toast('Unknown vehicle.', 'bad');
+    const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
+    if ((fl[type] || 0) < 1) return toast('Buy a ' + pt.name + ' first.', 'bad');
+    const a = S.airports[pick.from], b = S.airports[pick.to];
+    if (b.type !== 'port' && b.type !== 'hub') return toast('Trade goes to a port or a hub.', 'bad');
+    if (a.trade === undefined) a.trade = 0;
+    const amount = Math.min(pick.amount, Math.floor(a.trade));
+    if (amount < 1) return toast('Not enough trade to move.', 'bad');
+    const trips = Math.ceil(amount / pt.cap);
+    const dur = type === 'ship' ? Math.min(180, Math.max(30, pick.dist / pt.speed)) : Math.min(12, Math.max(2, pick.dist / pt.speed));
+    const fuel = Math.round(trips * pick.dist * pt.fuel);
+    if (S.cash < fuel) return toast('Not enough cash for fuel.', 'bad');
+    S.cash -= fuel;
+    a.trade -= amount;
+    if (!S.tradeMoves) S.tradeMoves = [];
+    let remaining = amount;
+    for (let i = 0; i < trips && remaining > 0; i++) {
+      const tripAmount = Math.min(pt.cap, remaining);
+      S.tradeMoves.push({ from: pick.from, to: pick.to, amount: tripAmount, t: 0, dur, wait: i * dur, vehicle: type });
+      remaining -= tripAmount;
+    }
+    UI.tradePick = null;
+    closeModal(); save(); renderHUD();
+    toast(amount.toLocaleString() + ' trade on its way to ' + pick.destName + ' by ' + pt.name + ' (' + trips + ' trip' + (trips > 1 ? 's' : '') + ', $' + fuel.toLocaleString() + ' fuel)' + (b.type === 'hub' ? ', sells for $' + amount.toLocaleString() + ' on arrival.' : '.'), 'good');
+  },
+  tradeBuy: type => {
+    const pick = UI.tradePick;
+    const pt = type === 'ship' ? SHIP : PLANE_TYPES[type];
+    if (!pt) return toast('Unknown vehicle.', 'bad');
+    if (!S.fleet) S.fleet = { prop: 0, jet: 0, jumbo: 0 };
+    if (S.cash < pt.cost) return toast('Not enough cash.', 'bad');
+    S.cash -= pt.cost;
+    S.fleet[type] = (S.fleet[type] || 0) + 1;
+    save(); renderHUD();
+    if (pick) openModal(tradePickerHTML(pick), 'sheet');
+    else toast(pt.name + ' bought.', 'good');
+  },
+  tradePickCancel: () => { UI.tradePick = null; closeModal(); },
   upgradeSite: key => {
     if (!S.airports || !S.airports[key]) return toast('Buy an airport or hub there first.', 'bad');
     const a = S.airports[key];
     const lv = a.level || 1;
     if (lv >= 5) return toast('Already max level.', 'bad');
-    const cost = (a.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000] : [0, 100000, 250000, 500000, 1000000])[lv];
+    const cost = (a.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000] : a.type === 'port' ? [0, 250000, 500000, 1000000, 2000000] : [0, 100000, 250000, 500000, 1000000])[lv];
     if (S.cash < cost) return toast('Not enough cash.', 'bad');
     S.cash -= cost;
     a.level = lv + 1;
     save(); renderHUD();
     if (UI.dotBuy) onDotTap(UI.dotBuy);
-    toast((a.type === 'hub' ? 'Hub' : 'Airport') + ' upgraded to level ' + a.level + '.', 'good');
+    toast((a.type === 'hub' ? 'Hub' : a.type === 'port' ? 'Port' : 'Airport') + ' upgraded to level ' + a.level + '.', 'good');
   },
   fleetBuy: type => {
-    const pt = PLANE_TYPES[type];
-    if (!pt) return toast('Unknown plane.', 'bad');
+    const pt = type === 'ship' ? SHIP : PLANE_TYPES[type];
+    if (!pt) return toast('Unknown vehicle.', 'bad');
     if (!S.fleet) S.fleet = { prop: 0, jet: 0, jumbo: 0 };
     if (S.cash < pt.cost) return toast('Not enough cash.', 'bad');
     S.cash -= pt.cost;
@@ -3751,6 +3856,7 @@ const A = {
     const [from, to, pctStr] = (x || '').split('|');
     const pct = parseFloat(pctStr) || 0;
     if (!S.airports || !S.airports[from] || !S.airports[to]) return toast('Buy an airport or hub there first.', 'bad');
+    if (S.airports[from].type === 'port' || S.airports[to].type === 'port') return toast('Ports haul trade, not people.', 'bad');
     if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) return toast('No route there yet. Draw one first.', 'bad');
     if (!S.flowPct) S.flowPct = {};
     let sum = 0;
