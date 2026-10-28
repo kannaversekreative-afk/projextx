@@ -1258,12 +1258,18 @@ function onDotTap(dot) {
     html += `<p><button class="btn3d" data-a="fleetBuy" data-x="prop"${S.cash < 50000 ? ' disabled' : ''}>BUY PROP ${fmt(50000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jet"${S.cash < 200000 ? ' disabled' : ''}>BUY JET ${fmt(200000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jumbo"${S.cash < 1000000 ? ' disabled' : ''}>BUY JUMBO ${fmt(1000000)}</button></p>`;
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
     html += `<p>Move people: <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|1">100%</button></p>`;
+    const outSum = (() => { let s = 0; if (S.flowPct) for (const k in S.flowPct) if (k.startsWith(dot.key + '|')) s += S.flowPct[k]; return s; })();
+    if (outSum > 0) html += `<p>Flows out: ${Math.round(outSum * 100)}%, keeps ${Math.round((1 - outSum) * 100)}%</p>`;
     (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
       const otherKey = r.from === dot.key ? r.to : r.from;
       const other = S.airports && S.airports[otherKey];
       if (!other) return;
       const kind = (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
       html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+      const outPct = (S.flowPct && S.flowPct[dot.key + '|' + otherKey]) || 0;
+      const inPct = (S.flowPct && S.flowPct[otherKey + '|' + dot.key]) || 0;
+      const pctBtn = (v, label) => `<button class="btn3d" data-a="flowPct" data-x="${dot.key}|${otherKey}|${v}">${label}</button>`;
+      html += `<p>Flow out: ${Math.round(outPct * 100)}% ${pctBtn(0, 'Off')} ${pctBtn(0.1, '10%')} ${pctBtn(0.25, '25%')} ${pctBtn(0.5, '50%')} ${pctBtn(0.75, '75%')} ${pctBtn(1, '100%')}${inPct ? ` | In from ${esc(other.name)}: ${Math.round(inPct * 100)}%` : ''}</p>`;
     });
   } else {
     html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
@@ -1279,7 +1285,6 @@ function onRouteDotTap(dot) {
   if (dot.key === src) return toast('Pick a different site for the destination.', 'bad');
   const a = S.airports[src], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport or hub there first.', 'bad');
-  if (a.type === 'airport' && b.type === 'airport') return toast("Airports don't connect directly. Draw to a hub instead.", 'bad');
   if (!S.routes) S.routes = [];
   if (UI.routeChange) {
     const old = UI.routeChange;
@@ -3738,8 +3743,25 @@ const A = {
   routeRemove: x => {
     const [from, to] = (x || '').split('|');
     S.routes = (S.routes || []).filter(r => !(r.from === from && r.to === to));
+    if (S.flowPct) { delete S.flowPct[from + '|' + to]; delete S.flowPct[to + '|' + from]; }
     save(); closeModal(); renderHUD();
     toast('Route removed.', 'good');
+  },
+  flowPct: x => {
+    const [from, to, pctStr] = (x || '').split('|');
+    const pct = parseFloat(pctStr) || 0;
+    if (!S.airports || !S.airports[from] || !S.airports[to]) return toast('Buy an airport or hub there first.', 'bad');
+    if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) return toast('No route there yet. Draw one first.', 'bad');
+    if (!S.flowPct) S.flowPct = {};
+    let sum = 0;
+    for (const k in S.flowPct) if (k.startsWith(from + '|')) sum += S.flowPct[k];
+    const cur = S.flowPct[from + '|' + to] || 0;
+    if (sum - cur + pct > 1.000001) return toast('That would send more than ' + S.airports[from].name + ' gets.', 'bad');
+    if (pct <= 0) delete S.flowPct[from + '|' + to];
+    else S.flowPct[from + '|' + to] = pct;
+    save();
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+    toast(pct <= 0 ? 'Flow off.' : 'Flow set to ' + Math.round(pct * 100) + '%.', 'good');
   },
   casinoTab: x => { UI.casinoTab = x; renderPanel(); },
   casinoBet: x => { const err = casinoSetBet(x); if (err) return toast(err, 'bad'); renderPanel(); },

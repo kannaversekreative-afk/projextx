@@ -446,6 +446,38 @@ const MapView = (() => {
           if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; A.pop += Math.min(bLv, aLv) * dt; }
         }
       }
+      // Percent flows: a route can carry a standing percent of
+      // its source's inflow every second (set per route from the
+      // source's sheet). The source keeps the rest, so total pop
+      // is conserved (flows redirect, they do not duplicate).
+      // Stale entries (route gone) are cleaned up here.
+      if (S.flowPct) {
+        for (const k in S.flowPct) {
+          const pct = S.flowPct[k];
+          if (!pct) { delete S.flowPct[k]; continue; }
+          const sep = k.indexOf('|');
+          if (sep < 0) { delete S.flowPct[k]; continue; }
+          const from = k.slice(0, sep), to = k.slice(sep + 1);
+          const A = S.airports[from], B = S.airports[to];
+          if (!A || !B) { delete S.flowPct[k]; continue; }
+          if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) { delete S.flowPct[k]; continue; }
+          let rate = 0;
+          if (A.type === 'hub') rate = (A.level || 1) + 1;
+          else {
+            for (const r of (S.routes || [])) {
+              const otherKey = r.from === from ? r.to : (r.to === from ? r.from : null);
+              if (!otherKey) continue;
+              const other = S.airports[otherKey];
+              if (other && other.type === 'hub') rate += Math.min(other.level || 1, A.level || 1);
+            }
+          }
+          const amt = rate * pct * dt;
+          if (A.pop === undefined) A.pop = 100;
+          if (B.pop === undefined) B.pop = 100;
+          A.pop -= amt;
+          B.pop += amt;
+        }
+      }
       if (Array.isArray(S.moves)) {
         for (let i = S.moves.length - 1; i >= 0; i--) {
           const mp = S.moves[i];
