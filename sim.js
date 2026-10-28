@@ -543,7 +543,7 @@ function companyValue(c) { return companyFairTotal(c); }
 function holdingsValue() { let v = 0; for (const a3 in S.holdings) { const h = S.holdings[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const a3 in (S.holdingsP || {})) { const h = S.holdingsP[a3], c = S.co[a3]; if (!c) continue; v += c.listed ? h.qty * c.price : (h.qty / c.shares) * companyFairTotal(c); } for (const id in (S.holdingsX || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsX[id].qty * b.price; } for (const id in (S.holdingsXP || {})) { const b = S.extra && S.extra[id]; if (b && b.price) v += S.holdingsXP[id].qty * b.price; } return v; }
 function shortValue() { let v = 0; const add = (map) => { for (const a3 in (map || {})) { const h = map[a3]; if (h.qty < 0 && S.co[a3]) v -= h.qty * S.co[a3].price; } }; add(S.holdings); add(S.holdingsP); return v; }
 function propValue() { return S.props.reduce((a, p) => a + p.value, 0); }
-function netWorth() { return S.cash + ((typeof ensurePerson === 'function') ? ensurePerson().cash : 0) + holdingsValue() + propValue() - S.loan; }
+function netWorth() { return S.cash + ((typeof ensurePerson === 'function') ? ensurePerson().cash : 0) + holdingsValue() + propValue() - S.loan - ((S.creditLine && S.creditLine.drawn) || 0); }
 function nationPop() { let p = country(S.home).pop; for (const a3 in S.countries) if (S.countries[a3].occ === S.home) p += S.countries[a3].pop; return p; }
 function popGrowth() { return nationPop() / country(S.home).pop0 - 1; }
 function marketReturn() { return S.idx.v / S.idx0 - 1; }

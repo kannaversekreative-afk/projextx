@@ -4147,6 +4147,8 @@ const A = {
   storeRename: x => { const inp = document.getElementById('storeName'); act(() => renameStore(x, inp ? inp.value : ''), 'Store renamed'); },
   closeStore: x => { act(() => closeStore(x), 'Store closed'); closePanel(); openPanel('stores'); },
   takeLoan: () => { const amt = Math.floor(+($('loanAmt') ? $('loanAmt').value : 0)), mo = Math.floor(+($('loanMonths') ? $('loanMonths').value : 36)); act(() => takeLoan(amt, mo), 'Loan taken'); },
+  creditDraw: () => { const amt = Math.floor(+($('locAmt') ? $('locAmt').value : 0)); act(() => creditDraw(amt), 'Drew from your line'); },
+  creditRepay: () => { const amt = Math.floor(+($('locRepayAmt') ? $('locRepayAmt').value : 0)); act(() => creditRepay(amt), 'Repaid your line'); },
   buildStoreOpen: x => { const [cityId, lotT] = x.split('|'); if (typeof isGovCity === 'function' && isGovCity(W.cities[+cityId])) return toast('Capitals are government-only — build in another city.', 'bad'); UI.buildLot = { cityId: +cityId, lotT: +lotT };
     const lot = (cityLots(+cityId) || []).find(l => l.t === +lotT) || {};
     const city = W.cities[+cityId] || {};

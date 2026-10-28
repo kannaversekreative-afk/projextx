@@ -431,6 +431,7 @@ function takeLoan(amount, months) {
 function loansWeek() {
   ensureStores();
   if (typeof cityBanksWeek === 'function') { try { cityBanksWeek(); } catch (e) {} }
+  if (typeof creditLineWeek === 'function') { try { creditLineWeek(); } catch (e) {} }
   for (const ln of S.loans) {
     const pay = Math.min(ln.weekly, ln.amount - ln.paid + ln.amount * ln.rate / 52 * 0); // principal + interest handled in weekly figure
     S.cash -= ln.weekly; ln.paid += ln.weekly; ln.weeksLeft--;
@@ -438,4 +439,59 @@ function loansWeek() {
   const done = S.loans.filter(l => l.weeksLeft <= 0);
   S.loans = S.loans.filter(l => l.weeksLeft > 0);
   done.forEach(l => news('Bank', `Loan of ${fmtMoney(l.amount, true)} is fully repaid.`, S.home));
+}
+// ---------- line of credit ----------
+// Revolving, unlike a term loan: borrow and repay whenever you like
+// up to a limit, with no fixed weekly payment. Interest on what you
+// have drawn is added weekly (capitalized), so an unpaid line grows.
+// The limit is 100% of your companies' valuation — the same cap city
+// banks lend against — minus what you already owe on term loans and
+// on the line itself, so total debt never passes your valuation.
+// The rate is Worl Bank's 6.50%, the same as the old flat loan.
+const CREDIT_LINE_RATE = 0.065;
+function creditLine() {
+  if (!S.creditLine) S.creditLine = { drawn: 0, rate: CREDIT_LINE_RATE };
+  if (S.creditLine.drawn == null) S.creditLine.drawn = 0;
+  if (!S.creditLine.rate) S.creditLine.rate = CREDIT_LINE_RATE;
+  return S.creditLine;
+}
+function creditLineLimit() {
+  if (typeof controlledValuationTotal !== 'function') return 0;
+  try { return Math.max(0, controlledValuationTotal()); } catch (e) { return 0; }
+}
+function creditLineAvail() {
+  const cl = creditLine();
+  const lt = (typeof bankLoanTotals === 'function') ? bankLoanTotals() : { remaining: 0 };
+  return Math.max(0, creditLineLimit() - (lt.remaining || 0) - (cl.drawn || 0));
+}
+function creditDraw(amount) {
+  ensureStores();
+  const cl = creditLine();
+  amount = Math.floor(amount);
+  if (!amount || amount < 1000) return 'Enter an amount of at least $1,000.';
+  const avail = creditLineAvail();
+  if (avail <= 0) return 'No company you control to borrow against — borrow up to 100% of your companies\' valuation, and you control none yet.';
+  if (amount > avail) return `Your line has ${fmtMoney(avail, true)} available — not ${fmtMoney(amount, true)}.`;
+  S.cash += amount;
+  cl.drawn += amount;
+  if (!cl.opened) { cl.opened = true; news('Bank', `Line of credit opened: ${fmtMoney(creditLineLimit(), true)} limit at ${(cl.rate * 100).toFixed(2)}%.`, S.home); }
+  return null;
+}
+function creditRepay(amount) {
+  ensureStores();
+  const cl = creditLine();
+  amount = Math.floor(amount);
+  if (!amount || amount < 1) return 'Enter an amount to repay.';
+  const pay = Math.min(amount, cl.drawn);
+  if (pay <= 0) return 'Nothing drawn on your line.';
+  if (S.cash < pay) return 'Not enough cash to repay that much.';
+  S.cash -= pay;
+  cl.drawn -= pay;
+  if (cl.drawn <= 0) { cl.drawn = 0; news('Bank', 'Line of credit fully repaid.', S.home); }
+  return null;
+}
+function creditLineWeek() {
+  const cl = creditLine();
+  if (!cl.drawn || cl.drawn <= 0) return;
+  cl.drawn += cl.drawn * (cl.rate || CREDIT_LINE_RATE) / 52;
 }

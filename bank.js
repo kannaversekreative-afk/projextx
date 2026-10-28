@@ -5,8 +5,8 @@
 // country. Business and country are NOT bank accounts: they have no
 // balance you spend from, only profit and loss. Every week your
 // personal account shows + weekly profit; dividends land quarterly.
-// There is no interest mechanic in the game, so no APY is shown
-// anywhere.
+// Savings earns no interest, so no APY is shown; loans and the
+// credit line charge interest (see stores.js).
 // Bank feed: every payment into your personal money is recorded here
 // (weekly profit, dividends, IPO sales), newest first, capped.
 function bankFeedPush(e) {
@@ -89,7 +89,17 @@ function bankPanelHTML() {
   const head = `<div class="wbank-head"><b>🌍 Worl Bank</b><span><button class="wbank-bell" data-a="panel" data-x="web" aria-label="Mail">🔔</button><button class="wbank-borrow" data-a="bankView" data-x="citybanks">Borrow</button></span></div>`;
   let body = '';
   if (view === 'loan') {
+    const cl = creditLine(), clLimit = creditLineLimit(), clAvail = creditLineAvail();
     body = `<button class="wbank-back" data-a="bankView" data-x="home">← Bank</button>
+    <h3 class="wbank-h">Line of credit</h3><p class="wbank-note">Borrow and repay whenever you like, up to your limit. Interest ${(cl.rate * 100).toFixed(2)}% a year on what you have drawn, added weekly. No fixed payment — you choose when to pay it down.</p>
+    <div class="wbank-kv"><span>Limit</span><b>${fmtMoney(clLimit, true)}</b></div>
+    <div class="wbank-kv"><span>Drawn</span><b>${fmtMoney(cl.drawn, true)}</b></div>
+    <div class="wbank-kv"><span>Available</span><b>${fmtMoney(clAvail, true)}</b></div>
+    ${clLimit <= 0 ? '<p class="wbank-note">No company you control to borrow against yet — control a company to open your line.</p>' : ''}
+    <label class="wbank-label">DRAW AMOUNT</label><input id="locAmt" class="wbank-input" type="number" value="100000">
+    <button class="btn3d orange wide" data-a="creditDraw"${clAvail <= 0 ? ' disabled' : ''}>DRAW FROM LINE</button>
+    <label class="wbank-label">REPAY AMOUNT</label><input id="locRepayAmt" class="wbank-input" type="number" value="100000">
+    <button class="btn3d wide" data-a="creditRepay"${cl.drawn <= 0 ? ' disabled' : ''}>REPAY LINE</button>
     <h3 class="wbank-h">New loans</h3><p class="wbank-note">Loans now come only from city banks — Bank of every city, at that city's rate, on approval. The old flat 6.50% loan is closed for new borrowing; loans you already have still repay here.</p>
     <button class="btn3d orange wide" data-a="bankView" data-x="citybanks">OPEN CITY BANKS</button>
     <h3 class="wbank-h">Your loans</h3>
@@ -186,7 +196,7 @@ function bankPanelHTML() {
       <button data-a="bankView" data-x="account"><span class="wbank-act">🏦</span><small>Account</small></button>
     </div>
     <div class="wbank-cards">
-      <button class="wbank-tile" data-a="bankView" data-x="loan"><b>Loans</b><span>${lt.count === 0 ? 'No loans' : `${lt.count} loan${lt.count === 1 ? '' : 's'} · ${fmtMoney(lt.remaining, true)} left`}</span><small>${lt.weekly > 0 ? fmtMoney(lt.weekly) + '/week' : 'View loans →'}</small></button>
+      <button class="wbank-tile" data-a="bankView" data-x="loan"><b>Loans</b><span>${(() => { const cld = (S.creditLine && S.creditLine.drawn) || 0; const parts = []; if (lt.count > 0) parts.push(`${lt.count} loan${lt.count === 1 ? '' : 's'} · ${fmtMoney(lt.remaining, true)} left`); if (cld > 0) parts.push(`Line ${fmtMoney(cld, true)} drawn`); return parts.length ? parts.join(' · ') : 'No loans'; })()}</span><small>${lt.weekly > 0 ? fmtMoney(lt.weekly) + '/week' : 'View loans →'}</small></button>
       <button class="wbank-tile" data-a="bankView" data-x="citybanks"><b>City banks</b><span>Bank of every city</span><small>Loans on approval, profit and loss →</small></button>
       <button class="wbank-tile" data-a="bankView" data-x="bizpnl"><b>Business P&L</b><span>Profit and loss, not a balance</span><small>Your companies →</small></button>
       ${holdsOffice() ? `<button class="wbank-tile" data-a="bankView" data-x="countrypnl"><b>Country P&L</b><span>Budget and tax, not a balance</span><small>Your country →</small></button>` : ''}
