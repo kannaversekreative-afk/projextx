@@ -515,12 +515,8 @@ const MapView = (() => {
   function warship(c, lv) {
     const L = 6 + lv * 2.2, B = 1.8 + lv * 0.35;
     wake(c, L, B); shadow(c, L, B);
-    if (lv >= 5) { // carrier: flat deck with planes
-      c.fillStyle = '#5b6573'; c.beginPath(); c.moveTo(L + 1, -B * 0.4); c.lineTo(L - 2, -B * 1.3); c.lineTo(-L, -B * 1.3); c.lineTo(-L, B * 1.3); c.lineTo(L - 2, B * 1.3); c.lineTo(L + 1, B * 0.4); c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.7)'; c.setLineDash([2, 2]); c.lineWidth = 0.5; c.beginPath(); c.moveTo(-L + 1, 0); c.lineTo(L - 1, 0); c.stroke(); c.setLineDash([]);
-      c.fillStyle = '#d6dbe2'; c.fillRect(-2, B * 0.5, 3, B * 0.7);
-      return;
-    }
+    // Carriers removed for now: navy shows as warships until the real
+    // carriers land (the old flat-deck-with-planes drawing is gone).
     hull(c, L, B, '#6b7685');
     c.fillStyle = '#9aa4b2'; c.fillRect(-L * 0.4, -B * 0.6, L * 0.6, B * 1.2);
     c.fillStyle = '#cfd5dd'; c.fillRect(-L * 0.25, -B * 0.4, L * 0.25, B * 0.8);
@@ -589,10 +585,11 @@ const MapView = (() => {
       // than the sprites themselves, so military units spun in place over
       // their own capital. 26/28 map units is wider than any sprite, so
       // the orbit is actually visible as movement.
-      if (cs.milLv.air > 0) { const [x, y, ang] = orbit(cap.x, cap.y, 26, 0.6, i); out.push([x, y, ang, c => fighter(c, cs.milLv.air), false, { kind: 'fighter', a3, level: cs.milLv.air, key: `mil:${a3}:air` }]); }
+      // Peacetime fighters removed for now (they were generic orbiters);
+      // fighters during a war stay, they are the war-progress visual.
       if (cs.milLv.navy > 0) {
         const pos = navyPatrol(a3, cap, now);
-        if (pos) out.push([pos[0], pos[1], pos[2], c => warship(c, cs.milLv.navy), true, { kind: cs.milLv.navy >= 5 ? 'carrier' : 'warship', a3, level: cs.milLv.navy, key: `mil:${a3}:navy` }]);
+        if (pos) out.push([pos[0], pos[1], pos[2], c => warship(c, cs.milLv.navy), true, { kind: 'warship', a3, level: cs.milLv.navy, key: `mil:${a3}:navy` }]);
       }
     });
     return out;

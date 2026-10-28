@@ -576,7 +576,6 @@ function vNum(key, mod) { let h = 0; for (let i = 0; i < key.length; i++) h = (h
 function vTripId(vd) {
   if (vd.category === 'yacht') return 'YACHT-001';
   if (vd.category === 'fighter') return `${vd.a3}-FTR-${1 + vNum(vd.key, 9)}`;
-  if (vd.category === 'carrier') return `${vd.a3}-CVN-${1 + vNum(vd.key, 9)}`;
   if (vd.category === 'warship') return `${vd.a3}-DDG-${1 + vNum(vd.key, 9)}`;
   return `${vd.sym || vd.a3}-${100 + vNum(vd.key, 900)}`;
 }
@@ -594,7 +593,6 @@ function vLoad(vd) {
   }
   if (vd.category === 'yacht') return `${6 + vNum(vd.key, 7)}/12 guests`;
   if (vd.category === 'fighter') return '1 pilot';
-  if (vd.category === 'carrier') return '24 aircraft · 2,500 crew';
   const crew = [0, 40, 120, 250, 400, 600][vd.level] || 120; return `${crew} crew`;
 }
 function vIcon(vd) { return vd.category === 'plane' || vd.category === 'fighter' ? ICONS.airport : vd.category === 'yacht' ? '⛵' : '🚢'; }
@@ -642,7 +640,7 @@ function openVehicleInfo(key) {
     <div class="kv"><span>Load</span><b>${vLoad(vd)}</b></div>
     <div class="kv"><span>Status</span><b>${vStatus(vd)}</b></div>
     ${vd.category === 'yacht' ? '<p class="muted small">Your personal yacht. It sails for fun and earns nothing — it is just yours to watch.</p>' : ''}
-    ${vd.category === 'carrier' || vd.category === 'warship' || vd.category === 'fighter' ? `<p class="muted small">${esc(vd.owner)} military. Upgrade it from the Military screen for your home nation.</p>` : ''}
+    ${vd.category === 'warship' || vd.category === 'fighter' ? `<p class="muted small">${esc(vd.owner)} military. Upgrade it from the Military screen for your home nation.</p>` : ''}
     <div class="row wrap">${companyBtn}<button class="btn" data-a="vehicleCard" data-x="${vd.key}">BACK TO VEHICLE</button></div>
   </div>`, 'sheet');
 }
@@ -662,9 +660,6 @@ function watchSVG(vd) {
   }
   if (vd.category === 'yacht') {
     return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M190 20 L190 95 M190 30 L265 95 L190 95 Z" fill="#fff" stroke="#6b7685" stroke-width="2"/><rect x="150" y="80" width="90" height="24" rx="6" fill="#fff"/><path d="M90 104 L310 104 L280 138 L120 138 Z" fill="#fff"/><rect x="90" y="104" width="220" height="8" fill="${col}"/><rect x="170" y="86" width="50" height="12" rx="3" fill="#9fb0c8"/></svg>`;
-  }
-  if (vd.category === 'carrier') {
-    return `<svg viewBox="0 0 400 170" class="wsvg"><rect x="60" y="88" width="290" height="14" rx="4" fill="#5b6573"/><path d="M80 102 L320 102 L300 132 L100 132 Z" fill="#3b4250"/><rect x="250" y="60" width="36" height="30" rx="4" fill="#d6dbe2"/><rect x="255" y="52" width="26" height="10" rx="3" fill="#9aa4b2"/>${[100, 150, 200].map(x => `<path d="M${x} 82 L${x + 22} 82 L${x + 11} 74 Z" fill="#8e99a8"/>`).join('')}</svg>`;
   }
   if (vd.category === 'warship') {
     return `<svg viewBox="0 0 400 170" class="wsvg"><path d="M70 100 L330 100 L300 132 L100 132 Z" fill="#6b7685"/><rect x="150" y="72" width="80" height="28" rx="4" fill="#9aa4b2"/><rect x="180" y="58" width="20" height="16" rx="3" fill="#cfd5dd"/><rect x="190" y="40" width="4" height="20" fill="#4f5866"/><circle cx="285" cy="86" r="10" fill="#4f5866"/><rect x="95" y="88" width="40" height="8" rx="4" fill="#4f5866"/></svg>`;
