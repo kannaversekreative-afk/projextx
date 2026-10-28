@@ -532,7 +532,7 @@ function renderCityHUD() {
       // phone on the right. Same buttons and same placement as the map,
       // so the row looks identical inside every city.
       const layersIcon = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>`;
-      html = `<div class="citytopbar"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`
+      html = `<div class="citytopbar"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span> <button style="background:rgba(0,0,0,.35);border:0;color:#fff;padding:4px 10px;border-radius:20px" data-a="cbOpen" data-x="${c.id}">🏙️ Build district</button></div>`
         + `<button class="hud-btn hud-bl" data-a="cityFilter" aria-label="Filters">${layersIcon}</button>`
         + `<button class="hud-city" data-a="departures" aria-label="Change city or leave"><span>${W.byA3[c.a3].flag}</span><span>${esc(c.name)}</span></button>`
         + `<button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">\u{1F4F1}</button>`;
@@ -2513,7 +2513,7 @@ function sportScoresHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ec' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
@@ -3530,6 +3530,9 @@ const A = {
   msCat: x => { UI.msCat = +x; UI.msPage = 0; UI.msNode = null; renderPhoneApp(); renderPanel(); },
   msPage: x => { const ci = UI.msCat || 0; const pages = Math.ceil(msNodes(ci).length / MS_PAGE_SIZE); UI.msPage = Math.max(0, Math.min(pages - 1, (UI.msPage || 0) + (+x))); UI.msNode = null; renderPhoneApp(); renderPanel(); },
   msNode: x => { UI.msNode = x; renderPhoneApp(); renderPanel(); },
+  cbOpen: x => { UI.cbCity = +x; UI.cbTool = UI.cbTool || 'house'; openModal(`<div id="cbWrap">${cbSheetInner(+x)}</div>`, 'sheet'); },
+  cbTool: x => { UI.cbTool = x; const w = $('cbWrap'); if (w) w.innerHTML = cbSheetInner(UI.cbCity); },
+  cbPlace: x => { const [cid, key] = x.split('|'); const st = cbState(+cid); const tool = UI.cbTool || 'house'; if (tool === 'clear') delete st.tiles[key]; else st.tiles[key] = tool; save(); const w = $('cbWrap'); if (w) w.innerHTML = cbSheetInner(+cid); },
   calShift: dm => { const now = dateOf(S.day), cur = UI.calYM || { y: now.getUTCFullYear(), m: now.getUTCMonth() }; const d = new Date(Date.UTC(cur.y, cur.m + dm, 1)); UI.calYM = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; renderPhoneApp(); },
   calPrev: () => A.calShift(-1),
   calNext: () => A.calShift(1),
