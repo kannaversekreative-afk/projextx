@@ -963,10 +963,15 @@ function buildTradeLinks() {
   // (Without this, the filter below dropped every country, tradeLinks
   // came back empty, and every nation's trade tax was silently zero.)
   const playable = (W.playable || []).map(k => k.a3).filter(a => S.countries[a]);
+  const playableSet = new Set(playable);
   const byGdp = [...playable].sort((a, b) => (S.countries[b].gdp || 0) - (S.countries[a].gdp || 0));
   const partnersOf = (a3) => {
     const k = W.byA3[a3]; if (!k) return [];
-    const nbs = (k.nb || []).filter(n => S.countries[n] && W.byA3[n] && W.byA3[n].playable)
+    // Partners must be in the playable set: byA3[n].playable is a UN flag,
+    // but alloc rows are only built for W.playable countries (those with a
+    // capital). A capital-less neighbour used to become a partner without
+    // an alloc row, and the pair loop below then crashed on alloc[kb][ka].
+    const nbs = (k.nb || []).filter(n => S.countries[n] && playableSet.has(n))
       .sort((x, y) => (S.countries[y].gdp || 0) - (S.countries[x].gdp || 0)).slice(0, 5);
     const top = byGdp.filter(b => b !== a3 && !nbs.includes(b)).slice(0, 2);
     return nbs.map(p => ({ p, w: 1.0 })).concat(top.map(p => ({ p, w: 0.6 })));
@@ -992,7 +997,7 @@ function buildTradeLinks() {
       // equal its own trade total exactly. The displayed pair volume is
       // the average of the two sides' flows.
       const ka = key.split('|')[0], kb = key.split('|')[1];
-      let volA = alloc[ka][kb] || 0, volB = alloc[kb][ka] || 0;
+      let volA = (alloc[ka] || {})[kb] || 0, volB = (alloc[kb] || {})[ka] || 0;
       if (atWar(a3, p)) { volA = 0; volB = 0; }
       else if ((S.countries[a3].occ && S.countries[a3].occ !== a3) || (S.countries[p].occ && S.countries[p].occ !== p)) { volA *= 0.3; volB *= 0.3; }
       links[key] = { a: key.split('|')[0], b: key.split('|')[1], vol: Math.round((volA + volB) / 2), volA: Math.round(volA), volB: Math.round(volB) };
