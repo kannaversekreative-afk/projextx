@@ -95,7 +95,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .cityexit { position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 20px; pointer-events: none; }
 .cityexit button { pointer-events: auto; color: #1f5fd0; font-size: 15px; font-weight: 800; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,0.9); }
 .citybar b { font-size: 18px; }
-.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
+.hud-city { position: absolute; left: 50%; transform: translateX(-50%); bottom: 84px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; border-radius: 16px; padding: 14px 18px; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 170px); overflow: hidden; box-shadow: var(--shadow); }
 .hud-city span:last-child { overflow: hidden; text-overflow: ellipsis; }
 
 /* panel: side sheet desktop, bottom sheet phone */
@@ -371,9 +371,23 @@ body.in-city #hud { display: none; }
 .hud-tl-text small { font-size: 14px; color: rgba(255, 255, 255, 0.85); font-weight: 700; }
 .hud-tr { right: max(12px, env(safe-area-inset-right)); font-size: 16px; font-weight: 900; color: #ffffff; }
 /* Bell lives at the top of the More menu, not on the home HUD. */
-.hud-btn { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 16px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
+.hud-btn { position: absolute; bottom: 84px; width: 56px; height: 56px; border-radius: 16px; background: #ffffff; color: #1f5fd0; border: 1.5px solid #2f7cf6; display: grid; place-items: center; font-size: 26px; font-weight: 900; box-shadow: var(--shadow); }
 .hud-bl { left: max(12px, env(safe-area-inset-left)); }
 .hud-br { right: max(12px, env(safe-area-inset-right)); }
+/* Airline tab bar (reference look): white rounded bar, Routes /
+   Fleet / Airline / More. On the map it pins to the bottom; inside
+   the airline card it sits at the card's foot. The HUD's floating
+   bottom buttons sit above the map bar. */
+.airtabs { background: #ffffff; border-radius: 24px; box-shadow: var(--shadow); display: flex; gap: 4px; padding: 6px; }
+.airtabs button { flex: 1; border: 0; background: transparent; color: #334155; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 2px; border-radius: 18px; cursor: pointer; white-space: nowrap; }
+.airtabs button.sel { background: #2563eb; color: #ffffff; }
+#airtabs { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 24px)); z-index: 10; }
+.aircard-tabs { margin-top: 18px; border: 1.5px solid #dbeafe; box-shadow: none; }
+.codechip { display: inline-block; background: #2563eb; color: #ffffff; font-size: 12px; font-weight: 900; padding: 3px 8px; border-radius: 10px; vertical-align: middle; margin-right: 8px; letter-spacing: 0.5px; }
+.statgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.statgrid div { background: #f1f5f9; border-radius: 14px; padding: 10px 8px; text-align: center; }
+.statgrid b { display: block; font-size: 16px; color: #0f172a; }
+.statgrid span { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 /* Departures board: full-screen dark board, dot-matrix rows (reference
    design layout only, original implementation). */
 .scrim.dep { padding: 0; background: #0b161d; }
