@@ -1180,6 +1180,10 @@ const TUT_FLOW = [
   { t: () => `Welcome! You're 18 in ${esc((typeof homeStartCityId === 'function' ? W.cities[homeStartCityId()] : W.cities[W.byA3[S.home].capital]).name)} with $5,000. Get a job first — open your profile (the person icon, top left) and tap APPLY at a business in your city.`, done: () => { try { return ensurePerson().job && ensurePerson().job.track === 'company'; } catch (e) { return false; } } },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Your business runs week by week. When you are done, press DONE THIS WEEK to advance and collect profits. No age limit — you can play 100 years, or 1000.', btn: 'Got it' },
+  { t: () => `Now dominate ${esc(cname(S.home))}. First, control the flagship: in Markets, buy 50% or more of ${esc(S.co[S.home].name)} — that is the first half of dominating.`, done: () => { try { return typeof controlled === 'function' && controlled(S.home); } catch (e) { return false; } } },
+  { t: () => `Next, buy an office: open ${esc(S.co[S.home].name)} in Markets and tap BUY OFFICE ($50,000). Office plus flagship control means you dominate ${esc(cname(S.home))}.`, done: () => { try { return typeof flowHasOffice === 'function' && flowHasOffice(S.home); } catch (e) { return false; } } },
+  { t: () => `Now move people for war: on the map, tap a white dot in ${esc(cname(S.home))} and buy a hub (the first one is free). People you move home reinforce your war power.`, done: () => { try { return !!(S.airports && Object.values(S.airports).some(s => s && s.a3 === S.home)); } catch (e) { return false; } } },
+  { t: () => `You are ready to expand. Open Nation, pick a country, and plan your first attack — your mobilized citizens boost your win chance.`, btn: 'Got it' },
 ];
 function renderTutorial() {
   const T = S && S.flow ? TUT_FLOW : TUT;
