@@ -282,7 +282,7 @@ const chgVs = (c) => {
 
 // ---------- modals / panels ----------
 function openModal(html, kind) {
-  UI.routing = null; UI.routeChange = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null;
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
@@ -297,7 +297,7 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opened from anywhere else (HUD pill, map, city) still use the
 // #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
-  UI.routing = null; UI.routeChange = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null;
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
@@ -1003,7 +1003,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel);
   MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
@@ -1227,7 +1227,9 @@ function onDotTap(dot) {
   let html = `<h2>${esc(title)}</h2>`;
   if (owned) {
     html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here.</p>`;
+    html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()} (+${owned.type === 'hub' ? 2 : 1}/sec)</p>`;
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
+    html += `<p>Move people: <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="moveStart" data-x="${dot.key}|1">100%</button></p>`;
     (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
       const otherKey = r.from === dot.key ? r.to : r.from;
       const other = S.airports && S.airports[otherKey];
@@ -1237,8 +1239,9 @@ function onDotTap(dot) {
     });
   } else {
     html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
+    const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
-    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${fmt(1250000)}</button>`;
+    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
   }
   openModal(html, 'sheet');
 }
@@ -1271,6 +1274,26 @@ function onRouteCancel() {
   UI.routing = null; UI.routeChange = null;
   toast('Route cancelled.');
 }
+function onMoveDotTap(dot) {
+  const mv = UI.moving;
+  if (!mv || !S.airports || !S.airports[mv.from]) { UI.moving = null; return toast('Move cancelled.', 'bad'); }
+  if (dot.key === mv.from) return toast('Pick a different site for the destination.', 'bad');
+  const a = S.airports[mv.from], b = S.airports[dot.key];
+  if (!b) return toast('Buy an airport or hub there first.', 'bad');
+  if (!(S.routes || []).some(r => (r.from === mv.from && r.to === dot.key) || (r.from === dot.key && r.to === mv.from))) return toast('No route there yet. Draw one first.', 'bad');
+  if (a.pop === undefined) a.pop = 100;
+  const amount = Math.floor(a.pop * mv.pct);
+  if (amount < 1) return toast('Not enough people to move.', 'bad');
+  const d = Math.max(30, Math.hypot(a.x - b.x, a.y - b.y));
+  const dur = Math.min(12, Math.max(2, d / 300));
+  a.pop -= amount;
+  if (!S.moves) S.moves = [];
+  S.moves.push({ from: mv.from, to: dot.key, amount, t: 0, dur });
+  UI.moving = null;
+  save(); renderHUD();
+  return toast(amount.toLocaleString() + ' people on their way to ' + dot.name + '.', 'good');
+}
+function onMoveCancel() { UI.moving = null; }
 function openCountryPanel(a3) {
   if (!S) return;
   UI.popup = { type: 'country', a3 }; renderPopup(); tutCheck();
@@ -3573,18 +3596,27 @@ const A = {
     if (!dot) return toast('Pick a dot first.', 'bad');
     if (!S.airports) S.airports = {};
     if (S.airports[key]) return toast('You already own a building here.', 'bad');
-    const price = type === 'hub' ? 1250000 : 220000;
+    const hubFree = type === 'hub' && (!S.airports || !Object.values(S.airports).some(a => a.type === 'hub'));
+    const price = type === 'hub' ? (hubFree ? 0 : 1250000) : 220000;
     if (S.cash < price) return toast('Not enough cash.', 'bad');
     S.cash -= price;
-    S.airports[key] = { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y };
+    S.airports[key] = { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 100 };
     UI.dotBuy = null;
     save(); closeModal(); renderHUD();
     toast(type === 'hub' ? 'Hub bought.' : 'Airport bought.', 'good');
   },
   routeStart: key => {
     closeModal();
-    UI.routing = key; UI.routeChange = null;
+    UI.routing = key; UI.routeChange = null; UI.moving = null;
     toast('Tap a destination dot to draw the route.', 'good');
+  },
+  moveStart: x => {
+    const [key, pct] = (x || '').split('|');
+    if (!S.airports || !S.airports[key]) return toast('Buy an airport or hub there first.', 'bad');
+    closeModal();
+    UI.routing = null; UI.routeChange = null;
+    UI.moving = { from: key, pct: parseFloat(pct) || 0 };
+    toast('Tap a destination on one of your routes.', 'good');
   },
   routeChange: x => {
     const [from, to] = (x || '').split('|');
