@@ -1,8 +1,9 @@
 'use strict';
 // Airport — an airport in every country. Fly to any city by tapping
 // continent, then country, then city. The departures board shows the
-// distance in km from where you are now, and tapping a city flies you
-// there and opens it. Every country has an airport, so the picker is
+// distance in km from where you are now, and tapping a city flies the
+// map there. Cities are not enterable. Every country has an airport,
+// so the picker is
 // the whole world, not just your home country.
 function airportContinents() {
   const seen = {};
@@ -40,6 +41,5 @@ function airportFly(cityId) {
   closePanel();
   MapView.flyToCountry(c.a3);
   toast(`Flying to ${c.name} — ${km.toLocaleString()} km`, 'good');
-  enterCity(cityId);
   return null;
 }

@@ -1142,8 +1142,6 @@ function enterGame(returning) {
 const TUT = [
   { t: () => S.mode === 'infinite' ? 'Welcome! There is no goal in Infinite mode. Play as long as you like and press Age whenever you want.' : `Welcome! No time limit. Grow ${esc(cname(S.home))}'s population, grow your money, and beat the stock market. Press Age to move a year forward.`, btn: 'Next' },
   { t: () => `Every dot is a real city. Tap ${esc(W.cities[W.byA3[S.home].capital].name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
-  { t: () => 'Tap ENTER CAPITAL to see the streets.', done: () => CityView.isOpen() },
-  { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Time only moves when you press Age, one year at a time. Vehicles keep moving while you wait. No age limit — you can live 100 years, or 1000.', btn: 'Got it' },
 ];
@@ -1152,9 +1150,6 @@ const TUT = [
 // final step is reworded: the game runs week by week, not year by year.
 const TUT_FLOW = [
   { t: () => `Welcome! You're 18 in ${esc((typeof homeStartCityId === 'function' ? W.cities[homeStartCityId()] : W.cities[W.byA3[S.home].capital]).name)} with $5,000. Get a job first — open your profile (the person icon, top left) and tap APPLY at a business in your city.`, done: () => { try { return ensurePerson().job && ensurePerson().job.track === 'company'; } catch (e) { return false; } } },
-  { t: () => `Every dot is a real city. Tap ${esc((typeof homeStartCityId === 'function' ? W.cities[homeStartCityId()] : W.cities[W.byA3[S.home].capital]).name)} to open it.`, done: () => UI.popup && UI.popup.type === 'city' },
-  { t: () => 'Tap ENTER CITY to see the streets.', done: () => CityView.isOpen() },
-  { t: () => 'Red FOR LEASE signs are empty storefronts. Lease one for your company and open your first location.', done: () => locCount() >= 1 },
   { t: () => 'Nice! Now open Markets and buy your first stock. Every stock is a company based in a real country.', done: () => S.stats.trades > 0 },
   { t: () => 'Your business runs week by week. When you are done, press DONE THIS WEEK to advance and collect profits. No age limit — you can play 100 years, or 1000.', btn: 'Got it' },
 ];
@@ -1252,7 +1247,7 @@ function renderPopupInner() {
     const biz = (typeof businessesInCountry === 'function') ? businessesInCountry(p.a3) : [co];
     $('popup').innerHTML = `<div class="popup card">
       <div class="row between"><div><b>${k.flag} ${esc(cname(p.a3))}</b><div class="muted small">${esc(k.sub)} · ${esc(st.t)} · Stability ${Math.round(cs.stab)} / 100</div></div><button class="xbtn" data-a="closePopup">${IC.close}</button></div>
-      <div class="row">${cap ? `<button class="btn3d orange flex" data-a="enterCity" data-x="${cap.id}">ENTER CAPITAL</button>` : ''}<button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
+      <div class="row"><button class="btn flex" data-a="countryMarkets" data-x="${p.a3}">BUSINESSES IN MARKETS</button></div>
       <div class="stats3 box"><div><span>Population</span><b>${fmtPop(k.pop0)}</b></div><div><span>GDP</span><b>${fmtMoney(cs.gdp * 1000000, true)}</b></div><div><span>Businesses</span><b>${biz.length}</b></div></div>
       <h5>Businesses</h5>
       ${biz.map(bc => `<div class="kv"><span>${(SECTORS[bc.sector] && SECTORS[bc.sector].icon) || ICONS.company} ${esc(bc.name)} · ${esc(bc.sector)} · ★ ${bc.rating.toFixed(1)}${bc.locs ? ' · ' + bc.locs.length + ' locations' : ' · ' + (bc.employees || 0).toLocaleString() + ' employees'}${bc.locs && bc.office ? ` · Office Lv ${bc.office.level || 1} · Board ${(typeof ensureBoard === 'function' ? ensureBoard(bc).length : 0)}/5 · Staff ${bc.locs.reduce((a, l) => a + (l.staff || 0), 0)}` : ''}</span><b>${fmtMoney(bc.locs ? companyValue(bc) : bc.value, true)}</b></div>`).join('')}
@@ -1776,8 +1771,7 @@ function countryAdvisor() {
   if (losing && cs.tax > 0.05) return { title: `${losing.name} is losing money`, body: `It made ${fmtMoney(losing.week.profit, true)} last week. Lower corporate tax 5 points to help it.`, btn: 'LOWER TAX 5 PTS', a: 'advisorTax', x: 'down' };
   const mil = Object.entries(MILITARY).map(([b, d]) => [b, d, milCost(b)]).filter(([, , c]) => c != null).sort((a, b) => a[2] - b[2])[0];
   if (milRank(S.home) > 100 && mil && S.cash >= mil[2]) return { title: 'Military is weak', body: `You rank #${milRank(S.home)} in military power. Upgrade ${mil[1].name} to strengthen it.`, btn: 'UPGRADE MILITARY', a: 'milUp', x: mil[0] };
-  if (!S.stores || !S.stores.length) return { title: 'Build your first business', body: 'You have no store yet. Open a city, tap a FOR LEASE lot, and press BUILD STORE to pick a business.', btn: 'MY STORES', a: 'panel', x: 'stores' };
-  if (locCount() === 0) { const startCity = (typeof homeStartCityId === 'function' ? homeStartCityId() : W.byA3[S.home].capital); const startName = W.cities[startCity] ? W.cities[startCity].name : 'your city'; const isCap = startCity === W.byA3[S.home].capital; return { title: 'Open your first location', body: `Lease a storefront in ${startName} and your company starts earning there.`, btn: isCap ? 'ENTER CAPITAL' : 'ENTER CITY', a: 'enterCity', x: String(startCity) }; }
+  if (!S.stores || !S.stores.length) return { title: 'Build your first business', body: 'You have no store yet.', btn: 'MY STORES', a: 'panel', x: 'stores' };
   return { title: 'You are in good shape', body: 'No urgent move. Grow by building another store, developing its products, or buying a stock in Markets.', btn: 'MY STORES', a: 'panel', x: 'stores' };
 }
 // You — the person, not the country. Three wallets (personal, business,
@@ -3431,7 +3425,7 @@ const A = {
     else { UI.panel = 'stock'; UI.stack = [{ a3: x }]; }
     renderPanel(); renderHUD();
   },
-  flyCity: x => { closePanel(); MapView.flyToCity(+x); onCityTap(+x); },
+  flyCity: x => { closePanel(); MapView.flyToCity(+x); },
   flyCountry: x => { closePanel(); MapView.flyToCountry(x); },
   qty: x => { const q = $('qty'); if (q) q.value = Math.max(1, (+q.value || 0) + +x); },
   qtyMax: x => {

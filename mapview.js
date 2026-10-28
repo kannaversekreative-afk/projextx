@@ -524,14 +524,9 @@ const MapView = (() => {
         S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
       }
-      // Country name pills are the buttons: a tap inside a pill (with
-      // a generous 8px margin) opens that capital city.
-      for (const t of labelTargets) {
-        if (sx >= t[0] - 8 && sx <= t[2] + 8 && sy >= t[1] - 8 && sy <= t[3] + 8) { handlers.city && handlers.city(t[4]); return; }
-      }
-      let best = null, bd = 28;
-      W.cities.forEach(ct => { const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; best = ct.id; } });
-      if (best != null) { handlers.city && handlers.city(best); return; }
+      // City dots and names stay on the map, but cities are not
+      // enterable: taps on a dot or pill fall through to the country
+      // underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
     }
