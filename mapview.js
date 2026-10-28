@@ -14,37 +14,65 @@ const MapView = (() => {
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
   const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
-  // New York as its own view (not a game mode): the state's shape,
-  // pinned by exact ring signature — never by bbox. 7 rings only:
-  // mainland, Staten Island, harbor islands, Thousand Islands.
-  // Connecticut's 56-point ring is NOT in this list: it was
-  // previously mistaken for Long Island, and it drew Connecticut
-  // attached to New York. NY_BOX frames it; NY_RINGS draw it.
-  const NY_BOX = [556.5, 354.0, 601.5, 385.5];
-  const NY_RINGS = [
-    [228, 556.9, 354.6, 600.8, 384.7],
-    [9, 587.4, 383.9, 588.6, 385.0],
-    [5, 599.8, 379.8, 600.4, 380.0],
-    [6, 599.2, 380.9, 599.5, 381.3],
-    [4, 598.8, 380.4, 599.1, 380.6],
-    [4, 575.7, 362.1, 576.0, 362.4],
-    [4, 575.3, 362.1, 575.7, 362.3],
-  ];
-  let nyView = false;
-  const nyRings = () => {
-    if (typeof US_STATE_BORDERS === 'undefined') return [];
-    const r = v => Math.round(v * 10) / 10;
-    return US_STATE_BORDERS.filter(ring => {
-      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      ring.forEach(p => { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
-      return NY_RINGS.some(s => s[0] === ring.length && s[1] === r(x0) && s[2] === r(y0) && s[3] === r(x1) && s[4] === r(y1));
-    });
+  // View hierarchy (not game modes): world -> country -> region.
+  // The world shows countries only: no region borders, no gold dots.
+  // Tapping a country goes to that country alone, sectioned by its
+  // regions (US states for now — other countries' region shapes are
+  // a later data load, so they show unsectioned). Tapping a region
+  // goes to that region alone. Gold dots show only inside a region
+  // view, and only that region's own capital.
+  // Regions are NAMED shapes (US_STATE_RINGS, converted from us-atlas
+  // with state names) — never matched by bbox or signature, so no
+  // wrong state can slip in (Connecticut's ring once did, as
+  // "Long Island", because its box fits inside New York's).
+  let viewKind = 'world'; // 'world' | 'country' | 'region'
+  let viewA3 = null;      // country in country/region views
+  let viewRegion = null;  // state name in region views
+  const stateEntry = name => (typeof US_STATE_RINGS !== 'undefined' ? US_STATE_RINGS.find(s => s.name === name) : null);
+  const regionRings = name => { const st = stateEntry(name); return st ? st.rings : []; };
+  const regionBox = name => {
+    const st = stateEntry(name); if (!st) return null;
+    const [x0, y0, x1, y1] = st.box;
+    if (x1 - x0 <= 300) return st.box;
+    // Antimeridian wrap pieces (Alaska's far-west islands sit near
+    // x=2000): frame the largest ring instead of the whole world.
+    let big = st.rings[0];
+    st.rings.forEach(r => { if (r.length > big.length) big = r; });
+    let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+    big.forEach(p => { bx0 = Math.min(bx0, p[0]); bx1 = Math.max(bx1, p[0]); by0 = Math.min(by0, p[1]); by1 = Math.max(by1, p[1]); });
+    return [bx0, by0, bx1, by1];
   };
-  let nyPaths = null;
-  const pointInNY = (mx, my) => {
-    if (typeof US_STATE_BORDERS === 'undefined') return false;
-    if (!nyPaths) nyPaths = nyRings().map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
-    return nyPaths.some(p => hit.isPointInPath(p, mx, my));
+  const regionPathsCache = {};
+  const regionPaths = name => {
+    if (!regionPathsCache[name]) regionPathsCache[name] = regionRings(name).map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
+    return regionPathsCache[name];
+  };
+  const pointInRegion = (name, mx, my) => regionPaths(name).some(p => hit.isPointInPath(p, mx, my));
+  const regionAt = (mx, my) => {
+    // Only the USA has named regions so far.
+    if (viewA3 !== 'USA' || typeof US_STATE_RINGS === 'undefined') return null;
+    for (const st of US_STATE_RINGS) { if (pointInRegion(st.name, mx, my)) return st.name; }
+    return null;
+  };
+  const frameBox = box => {
+    const [x0, y0, x1, y1] = box;
+    const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
+    anim = null; v.s = Math.min(vw / w, vh / h);
+    v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s;
+    clampView(); dirty = true;
+  };
+  const resetView = () => { viewKind = 'world'; viewA3 = null; viewRegion = null; };
+  const enterCountry = a3 => {
+    viewKind = 'country'; viewA3 = a3; viewRegion = null;
+    if (a3 === 'USA' && typeof US_STATE_RINGS !== 'undefined') {
+      // Frame the 48 contiguous states (Alaska/Hawaii draw when panned to).
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      US_STATE_RINGS.forEach(st => { if (st.name === 'Alaska' || st.name === 'Hawaii') return; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+      frameBox([x0, y0, x1, y1]);
+    } else {
+      const k = W.byA3[a3];
+      if (k && k.hasShape) frameBox(k.box); else fit();
+    }
   };
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
@@ -70,11 +98,23 @@ const MapView = (() => {
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
-    // New York view: only New York's shape, alone on the sea — the
-    // state as the whole world. Everything else is not drawn.
-    if (nyView) {
+    // Region view: only that region's shape, alone on the sea.
+    if (viewKind === 'region') {
       c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
-      nyRings().forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
+      regionRings(viewRegion).forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
+      return;
+    }
+    // Country view: the country alone, sectioned by its regions.
+    // The USA is its 50 state rings; other countries are their own
+    // shape until their region data lands.
+    if (viewKind === 'country') {
+      c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
+      if (viewA3 === 'USA' && typeof US_STATE_RINGS !== 'undefined') {
+        US_STATE_RINGS.forEach(st => st.rings.forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); }));
+      } else {
+        const k = W.byA3[viewA3];
+        if (k && k.hasShape) { c.fill(k.path); c.stroke(k.path); }
+      }
       return;
     }
     const [x0, y0] = toMap(0, 0), [x1, y1] = toMap(vw, vh);
@@ -94,18 +134,6 @@ const MapView = (() => {
     });
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
-    // US state borders: the 48 contiguous states, drawn in the same
-    // colour as every other country border. Strokes only — no fill,
-    // no hit-testing, so taps still select the country underneath.
-    const usa = W.byA3.USA;
-    if (typeof US_STATE_BORDERS !== 'undefined' && usa && vis(usa)) {
-      c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s;
-      US_STATE_BORDERS.forEach(ring => {
-        c.beginPath();
-        ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); });
-        c.closePath(); c.stroke();
-      });
-    }
     if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
     if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
@@ -528,8 +556,8 @@ const MapView = (() => {
     const maxLabels = Math.round(14 + v.s * v.s * 80);
     let n = 0;
     if (!layerOn('labels')) n = maxLabels + 1;
-    // Zoomed in, there are no pills — only the state capital dots.
-    // Pills (the country-panel buttons) show only when zoomed out
+    // Zoomed in, there are no pills — only the land.
+    // Pills (the country Go buttons) show only when zoomed out
     // (v.s <= 1.4, the same zoomed-in threshold the military display
     // already uses). Hiding them also ends pills covering dots.
     if (v.s <= 1.4) for (const [id, p] of order) {
@@ -539,24 +567,20 @@ const MapView = (() => {
       const isSel = id === sel, text = W.byA3[ct.a3].name;
       if (pill(c, sx, sy - 13, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL, id)) n++;
     }
-    // US state capitals, drawn LAST on purpose: country pills are
-    // nearly opaque and ~110px wide, and they sit on the capital
-    // point — so a pill drawn after the dots buries every capital
-    // dot near it (the whole Northeast cluster sits under the
-    // United States pill). Drawing the dots last keeps them visible
-    // at every zoom. Black dots with a solid gold fill, no gold star,
-    // smaller than the white city dots. Zoomed in, the dot IS the
-    // state interaction (no state panel); tapping a dot currently
-    // falls through to the country underneath, and the
-    // capital-choose-business office flow is a separate build.
-    if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
-      US_CAPITALS.forEach(cp => {
-
-        const [sx, sy] = toScreen(cp.x, cp.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-        const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
-        c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
-        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-      });
+    // Gold capital dots: ONLY inside a region view, and only that
+    // region's own capital. No dots on the world, none in a country
+    // view — regions there are tapped by their land, not by a dot.
+    // Black dot with a solid gold fill, no gold star.
+    if (viewKind === 'region' && layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
+      const cp = US_CAPITALS.find(c => c.s === viewRegion);
+      if (cp) {
+        const [sx, sy] = toScreen(cp.x, cp.y);
+        if (sx >= -10 && sy >= -10 && sx <= vw + 10 && sy <= vh + 10) {
+          const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
+          c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        }
+      }
     }
   }
   function drawPickLabels(c) {
@@ -611,22 +635,20 @@ const MapView = (() => {
       // underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
-      // In the New York view, land taps stay in New York — they never
-      // open the USA business panel.
-      if (nyView) return;
-      // New York's capital dot: tapping it opens the Go button, not
-      // the USA business panel — New York has no businesses of its own.
-      if (typeof US_CAPITALS !== 'undefined') {
-        let best = null, bd = 1e9;
-        const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8)) + 12;
-        US_CAPITALS.forEach(cp => { const [x, y] = toScreen(cp.x, cp.y); const d = Math.hypot(x - sx, y - sy); if (d < rr && d < bd) { bd = d; best = cp; } });
-        if (best && best.s === 'New York') { handlers.newyork && handlers.newyork(); return; }
+      // In a region view, land taps stay in the region.
+      if (viewKind === 'region') return;
+      // In a country view, a tap on a region opens that region's
+      // Go popup; any other tap stays in the country view.
+      if (viewKind === 'country') {
+        const [mx0, my0] = toMap(sx, sy);
+        const region = regionAt(mx0, my0);
+        if (region) handlers.region && handlers.region(viewA3, region);
+        return;
       }
     }
     const [mx, my] = toMap(sx, sy);
     let k = W.playable.find(c => c.hasShape && mx >= c.box[0] && mx <= c.box[2] && my >= c.box[1] && my <= c.box[3] && hit.isPointInPath(c.path, mx, my));
     if (!k && pickMode) { let bd = 16; W.playable.forEach(c => { const ct = W.cities[c.capital]; const [x, y] = toScreen(ct.x, ct.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; k = c; } }); }
-    if (!pickMode && k && k.a3 === 'USA' && pointInNY(mx, my)) { handlers.newyork && handlers.newyork(); return; }
     if (k) handlers.country && handlers.country(k.a3); else handlers.empty && handlers.empty();
   }
   function flyTo(x, y, s) {
@@ -660,11 +682,13 @@ const MapView = (() => {
     flyToCity(id, s) { const c = W.cities[id]; flyTo(c.x, c.y, s || Math.max(v.s, 2.4)); },
     flyToCountry(a3) { const k = W.byA3[a3]; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; flyTo(cx, cy, Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4))))); },
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
-    home() { nyView = false; const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
-    world() { nyView = false; flyTo(MAP_W / 2, MAP_H / 2, 0); },
-    showNY() { nyView = true; const [x0, y0, x1, y1] = NY_BOX; const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0); anim = null; v.s = Math.max(vw / w, vh / h); v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s; clampView(); dirty = true; },
-    exitNY() { nyView = false; fit(); dirty = true; },
-    isNYView() { return nyView; },
+    home() { resetView(); const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
+    world() { resetView(); flyTo(MAP_W / 2, MAP_H / 2, 0); },
+    showCountry(a3) { enterCountry(a3); },
+    showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; const box = regionBox(region); if (box) frameBox(box); },
+    exitToWorld() { resetView(); fit(); dirty = true; },
+    exitToCountry() { if (viewKind === 'region' && viewA3) enterCountry(viewA3); },
+    viewInfo() { return { kind: viewKind, a3: viewA3, region: viewRegion }; },
 
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
     // Headless test hooks only: advance vehicles one step and read

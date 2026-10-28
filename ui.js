@@ -484,6 +484,22 @@ function renderHUD() {
   const curCity = airportFromCity();
   const youName = (S.you && S.you.name) || 'Founder';
   const youTitle = (typeof personTitle === 'function') ? personTitle() : 'Citizen';
+  // View back buttons: country view gets ← World plus the country
+  // panel button (panels no longer open from world taps, so this is
+  // how you still reach them); region view gets ← Country.
+  const viewBtns = (() => {
+    if (typeof MapView === 'undefined' || !MapView.viewInfo) return '';
+    const vi = MapView.viewInfo();
+    if (vi.kind === 'country') {
+      const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
+      return `<div style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10;display:flex;gap:8px"><button class="btn" data-a="exitToWorld" aria-label="Back to world">← World</button><button class="btn" data-a="countryPanel" data-x="${vi.a3}" aria-label="Open country panel">${esc(name)}</button></div>`;
+    }
+    if (vi.kind === 'region') {
+      const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
+      return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
+    }
+    return '';
+  })();
   $('hud').innerHTML = `
   <button class="hud-pill hud-tl" data-a="panel" data-x="profile" aria-label="User profile">
     <span class="hud-avatar">${(S.you && S.you.look && typeof portraitSVG === 'function') ? portraitSVG(S.you.look, 34) : esc(youName.charAt(0).toUpperCase())}</span>
@@ -494,7 +510,7 @@ function renderHUD() {
   <button class="hud-city" data-a="departures" aria-label="Airport departures"><span>${curCity ? W.byA3[curCity.a3].flag : hk.flag}</span><span>${curCity ? esc(curCity.name) : esc(cname(S.home))}</span></button>
   <button class="hud-btn hud-bl" data-a="layers" aria-label="Map layers"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
-  ${(typeof MapView !== 'undefined' && MapView.isNYView && MapView.isNYView()) ? `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitNY" aria-label="Back to world">← World</button>` : ''}
+  ${viewBtns}
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
@@ -983,7 +999,7 @@ async function boot() {
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
-  MapView.on('newyork', openNewYorkPopup);
+  MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
   MapView.on('frame', loop);
@@ -1192,16 +1208,23 @@ function onCityTap(id) {
 function onCountryTap(a3) {
   if (UI.pick) { UI.pick.a3 = a3; MapView.setPick(true, a3); MapView.flyToCountry(a3); renderPick(); return; }
   if (!S) return;
-  // A country tap is a country, not a stock: a country can have more
-  // than one business, so tapping it no longer opens one company's
-  // stock. It opens the country itself, with its businesses listed.
+  // World taps are Go-only: tapping a country opens just the button
+  // that takes you into it. Its business panel still opens from
+  // inside the country view, so no access is lost.
+  openCountryGoPopup(a3);
+}
+function openCountryPanel(a3) {
+  if (!S) return;
   UI.popup = { type: 'country', a3 }; renderPopup(); tutCheck();
 }
-function openNewYorkPopup() {
+function openCountryGoPopup(a3) {
   if (!S) return;
-  // New York has no businesses of its own: tapping it never opens
-  // the USA business list — just the button that takes you there.
-  openModal(`<h2>New York</h2><button class="btn3d orange wide" data-a="goNewYork">GO TO NEW YORK</button>`, 'sheet');
+  const k = W.byA3[a3]; if (!k) return;
+  openModal(`<h2>${esc(k.name)}</h2><button class="btn3d orange wide" data-a="goCountry" data-x="${a3}">GO TO ${esc(k.name.toUpperCase())}</button>`, 'sheet');
+}
+function openRegionGoPopup(a3, region) {
+  if (!S) return;
+  openModal(`<h2>${esc(region)}</h2><button class="btn3d orange wide" data-a="goRegion" data-x="${a3}|${region}">GO TO ${esc(region.toUpperCase())}</button>`, 'sheet');
 }
 // Place-a-business: the player taps anywhere on the map and a real
 // business circle appears there. Registered to the nearest country
@@ -3271,8 +3294,11 @@ const A = {
     S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
   },
 
-  goNewYork: () => { closeModal(); MapView.showNY(); renderHUD(); },
-  exitNY: () => { MapView.exitNY(); renderHUD(); },
+  goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
+  goRegion: x => { const p = (x || '').split('|'); closeModal(); MapView.showRegion(p[0], p[1]); renderHUD(); },
+  exitToWorld: () => { MapView.exitToWorld(); renderHUD(); },
+  exitToCountry: () => { MapView.exitToCountry(); renderHUD(); },
+  countryPanel: x => { openCountryPanel(x); },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
   panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; if (x === 'web') UI.web = { view: 'home', q: '', a3: null }; openPanel(x); },
