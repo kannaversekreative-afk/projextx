@@ -646,9 +646,22 @@ const MapView = (() => {
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
-    // Cluster map: shapes only. No dots, no pills, no cities, no
-    // vehicles, no military — nothing from the world.
-    if (viewKind === 'cluster') return;
+    // Cluster map: one dot per state in this cluster, at the state
+    // capital (same dot as the world map, same buy sheet on tap).
+    // No pills, no cities, no vehicles, no military — nothing else
+    // from the world.
+    if (viewKind === 'cluster') {
+      if (typeof US_CAPITALS !== 'undefined') clusterStates().forEach(name => {
+        const cap = US_CAPITALS.find(u => u.s === name);
+        if (!cap) return;
+        const [sx, sy] = toScreen(cap.x, cap.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        const bought = S && S.airports && S.airports['us:' + cap.s];
+        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
+      return;
+    }
     // RegionMap view: shapes only. No pills, no cities, no vehicles,
     // no military — nothing from the world. No dots either: region
     // capitals are not in the data yet.
@@ -863,6 +876,17 @@ const MapView = (() => {
     dotSites().forEach(d => { const [x, y] = toScreen(d.x, d.y); const dist = Math.hypot(x - sx, y - sy); if (dist < bd) { bd = dist; best = d; } });
     return best;
   }
+  function clusterDotAt(sx, sy) {
+    if (typeof US_CAPITALS === 'undefined') return null;
+    let best = null, bd = 16;
+    clusterStates().forEach(name => {
+      const cap = US_CAPITALS.find(u => u.s === name);
+      if (!cap) return;
+      const [x, y] = toScreen(cap.x, cap.y); const dist = Math.hypot(x - sx, y - sy);
+      if (dist < bd) { bd = dist; best = { key: 'us:' + cap.s, name: cap.c, a3: 'USA', x: cap.x, y: cap.y }; }
+    });
+    return best;
+  }
   function tap(sx, sy) {
     if (!pickMode) {
       // Placing a business: any map tap places it, wherever it lands.
@@ -886,8 +910,9 @@ const MapView = (() => {
       }
       // Route mode: the player tapped Draw route, then taps a dot
       // to draw the route there. Any other tap cancels route mode.
-      if (viewKind === 'world' && typeof UI !== 'undefined' && UI.routing) {
-        const best = dotAt(sx, sy);
+      // Works on the world map and in US cluster maps.
+      if (typeof UI !== 'undefined' && UI.routing && (viewKind === 'world' || viewKind === 'cluster')) {
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
         if (best) handlers.routeDot && handlers.routeDot(best);
         else handlers.routeCancel && handlers.routeCancel();
         return;
@@ -898,12 +923,19 @@ const MapView = (() => {
         const best = dotAt(sx, sy);
         if (best) { handlers.dot && handlers.dot(best); return; }
       }
+      // Cluster maps: one dot per state, same buy sheet as the
+      // world map. Any other tap stays in the cluster map.
+      if (viewKind === 'cluster') {
+        const best = clusterDotAt(sx, sy);
+        if (best) { handlers.dot && handlers.dot(best); }
+        return;
+      }
       // Cities are not enterable: taps that miss a dot fall through
       // to the country underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
-      // In a region, cluster, or regionMap view, land taps stay in that map.
-      if (viewKind === 'region' || viewKind === 'cluster' || viewKind === 'regionMap') return;
+      // In a region or regionMap view, land taps stay in that map.
+      if (viewKind === 'region' || viewKind === 'regionMap') return;
       // In a country view, a tap on a region opens that region's
       // Go popup; any other tap stays in the country view.
       if (viewKind === 'country') {
