@@ -705,6 +705,16 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
+    // White dot on every US state (world map only), at the state
+    // capital — US_CAPITALS is the 50 state capitals in map coords.
+    if (viewKind === 'world' && typeof US_CAPITALS !== 'undefined') {
+      US_CAPITALS.forEach(st => {
+        const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
+    }
     // Airports: main map only. Hub at NYC (ringed circle, like the
     // reference: the ringed one is the hub, the solid ones are
     // airports). Spokes are the US + Canada capitals for now.
