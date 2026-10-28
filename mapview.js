@@ -43,18 +43,30 @@ const MapView = (() => {
     W.countries.forEach(k => {
       if (!vis(k)) return;
       let fill = k.playable ? COL.land : '#e6eefb';
-      if (st && k.a3 === st.home) fill = COL.home;
+      if (st && k.a3 === st.home && k.a3 !== 'USA') fill = COL.home;
       if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#eaf2ff';
       c.fillStyle = fill; c.fill(k.path);
       const cs = st && st.countries[k.a3];
       if (cs && !pickMode) {
-        if (cs.occ === st.home) { c.fillStyle = 'rgba(47,124,246,0.35)'; c.fill(k.path); }
+        if (cs.occ === st.home && k.a3 !== 'USA') { c.fillStyle = 'rgba(47,124,246,0.35)'; c.fill(k.path); }
         else if (cs.war || cs.occ) { c.fillStyle = cs.occ ? 'rgba(229,72,77,0.28)' : 'rgba(229,72,77,0.18)'; c.fill(k.path); }
         else if (cs.boom > st.day) { c.fillStyle = 'rgba(18,161,80,0.14)'; c.fill(k.path); }
       }
     });
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
+    // US state borders: the 48 contiguous states, drawn in the same
+    // colour as every other country border. Strokes only — no fill,
+    // no hit-testing, so taps still select the country underneath.
+    const usa = W.byA3.USA;
+    if (typeof US_STATE_BORDERS !== 'undefined' && usa && vis(usa)) {
+      c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s;
+      US_STATE_BORDERS.forEach(ring => {
+        c.beginPath();
+        ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); });
+        c.closePath(); c.stroke();
+      });
+    }
     if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
     if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
@@ -435,9 +447,9 @@ const MapView = (() => {
       // point except the selected-city halo above.
     });
     // Major cities: white dots with a dark outline, like the
-    // screenshot — every major city, not just the capital. Tapping
-    // one opens that city (the tap loop below already finds the
-    // nearest city). Capitals keep their country name pill instead.
+    // screenshot — every major city, not just the capital. Cities are
+    // not enterable: tapping a dot selects the country underneath.
+    // Capitals keep their country name pill instead.
     if (layerOn('cities')) {
       W.cities.forEach(ct => {
         if (ct.isCapital || !ct.isMajor) return;
@@ -461,8 +473,8 @@ const MapView = (() => {
     }
     labelRects = []; labelTargets = [];
     // Country name pills ARE the map buttons: each pill sits centred
-    // on its capital and tapping it opens that capital city (the old
-    // flag-dot behaviour). Full names are wider than the old a3 codes,
+    // on its capital and tapping it opens that country's panel.
+    // Full names are wider than the old a3 codes,
     // so the label cap is raised — the pill overlap check still skips
     // any name that would collide with one already drawn.
     const order = W.cities.filter(ct => ct.isCapital).map(ct => [ct.id, (ct.id === sel ? 1e13 : 0) + (mineSet.has(ct.id) ? 1e12 : 0) + (st.holdings[ct.a3] ? 1e11 : 0) + W.byA3[ct.a3].gdp0]).sort((a, b) => b[1] - a[1]);
