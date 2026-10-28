@@ -1316,9 +1316,12 @@ function onDotTap(dot) {
   else if (dot.key.startsWith('us:')) code = dot.key.slice(3).toUpperCase();
   else code = (dot.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
   let html = `<h2>${code ? `<span class="codechip">${code}</span>` : ''}${esc(title)}</h2>`;
-  if (S.flow && dot.key.startsWith('us:') && S.co && S.co[dot.a3]) {
+  if (S.flow && S.co && S.co[dot.a3]) {
     if (S.co[dot.a3].office) html += `<div class="kv"><span>Office</span><b>Opened</b></div>`;
-    else if (typeof controlled === 'function' && controlled(dot.a3)) html += `<button class="btn3d orange wide" data-a="dotOfficeBuy" data-x="${dot.a3}"${S.cash < 50000 ? ' disabled' : ''}>BUY OFFICE ${fmt(50000)}</button>`;
+    else if (typeof controlled === 'function' && controlled(dot.a3)) {
+      html += `<button class="btn3d orange wide" data-a="dotOfficeBuy" data-x="${dot.a3}"${S.cash < 50000 ? ' disabled' : ''}>BUY OFFICE ${fmt(50000)}</button>`;
+      if (S.cash < 50000) html += `<div class="muted small">Business cash is ${fmt(S.cash)} — you need $50,000.</div>`;
+    }
     else html += `<div class="muted small">Control the flagship company first to open an office here.</div>`;
   }
   if (owned) {
