@@ -282,7 +282,7 @@ const chgVs = (c) => {
 
 // ---------- modals / panels ----------
 function openModal(html, kind) {
-  UI.routing = null;
+  UI.routing = null; UI.routeChange = null;
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
@@ -297,7 +297,7 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opened from anywhere else (HUD pill, map, city) still use the
 // #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
-  UI.routing = null;
+  UI.routing = null; UI.routeChange = null;
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
@@ -1232,7 +1232,7 @@ function onDotTap(dot) {
       const other = S.airports && S.airports[otherKey];
       if (!other) return;
       const kind = (owned.type === 'hub' && other.type === 'hub') ? 'People + Cargo' : 'Passengers';
-      html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+      html += `<p>→ ${esc(other.name)} (${kind}) <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
     });
   } else {
     html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
@@ -1243,12 +1243,23 @@ function onDotTap(dot) {
 }
 function onRouteDotTap(dot) {
   const src = UI.routing;
-  if (!src || !S.airports || !S.airports[src]) { UI.routing = null; return toast('Route cancelled.', 'bad'); }
+  if (!src || !S.airports || !S.airports[src]) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.', 'bad'); }
   if (dot.key === src) return toast('Pick a different site for the destination.', 'bad');
   const a = S.airports[src], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport or hub there first.', 'bad');
   if (a.type === 'airport' && b.type === 'airport') return toast("Airports don't connect directly. Draw to a hub instead.", 'bad');
   if (!S.routes) S.routes = [];
+  if (UI.routeChange) {
+    const old = UI.routeChange;
+    if ((old.from === src && old.to === dot.key) || (old.to === src && old.from === dot.key)) return toast("That's already the destination.", 'bad');
+    const idx = S.routes.findIndex(r => (r.from === old.from && r.to === old.to) || (r.from === old.to && r.to === old.from));
+    if (idx < 0) { UI.routing = null; UI.routeChange = null; return toast('That route is gone.', 'bad'); }
+    if (S.routes.some((r, i) => i !== idx && ((r.from === src && r.to === dot.key) || (r.from === dot.key && r.to === src)))) return toast('That route already exists.', 'bad');
+    S.routes[idx] = { from: src, to: dot.key };
+    UI.routing = null; UI.routeChange = null;
+    save(); renderHUD();
+    return toast('Route changed.', 'good');
+  }
   if (S.routes.some(r => (r.from === src && r.to === dot.key) || (r.from === dot.key && r.to === src))) return toast('That route already exists.', 'bad');
   S.routes.push({ from: src, to: dot.key });
   UI.routing = null;
@@ -1256,7 +1267,7 @@ function onRouteDotTap(dot) {
   toast('Route added.', 'good');
 }
 function onRouteCancel() {
-  UI.routing = null;
+  UI.routing = null; UI.routeChange = null;
   toast('Route cancelled.');
 }
 function openCountryPanel(a3) {
@@ -3571,8 +3582,17 @@ const A = {
   },
   routeStart: key => {
     closeModal();
-    UI.routing = key;
+    UI.routing = key; UI.routeChange = null;
     toast('Tap a destination dot to draw the route.', 'good');
+  },
+  routeChange: x => {
+    const [from, to] = (x || '').split('|');
+    const src = UI.dotBuy ? UI.dotBuy.key : null;
+    if (!src) return toast('Pick a site first.', 'bad');
+    closeModal();
+    UI.routing = src;
+    UI.routeChange = { from, to };
+    toast('Tap a new destination dot.', 'good');
   },
   routeRemove: x => {
     const [from, to] = (x || '').split('|');

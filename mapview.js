@@ -759,6 +759,15 @@ const MapView = (() => {
         c.restore();
       });
     }
+    // Route mode: ring the source dot so the player sees which
+    // dot they are drawing from.
+    if (viewKind === 'world' && typeof UI !== 'undefined' && UI.routing && S && S.airports && S.airports[UI.routing]) {
+      const src = S.airports[UI.routing];
+      const [sx, sy] = toScreen(src.x, src.y);
+      const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
+      c.strokeStyle = '#2563eb'; c.lineWidth = 2;
+      c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
+    }
     // Placed businesses: a circle on the map, wherever the player
     // put it. Tapping it opens that business.
     if (S && Array.isArray(S.placed) && !pickMode) {
