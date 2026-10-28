@@ -1098,12 +1098,22 @@ function chooseMode() {
     <div class="modes">
       <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>No time limit. Press Age to move a year forward, vehicles keep moving while you wait. At the end you get a final score for population, money and how far you beat the market.</span></button>
       <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Press Age to move a year forward whenever you want.</span></button>
+      <button class="mode" data-a="pickMode" data-x="state"><div class="mode-ic">🗺️</div><b>State</b><span>Start with one state as your whole world. Test start: New York.</span></button>
     </div>`, 'center');
 }
 function startPick() {
-  closeModal(); UI.pick = { a3: null }; MapView.setPick(true); MapView.world(); renderPick();
+  closeModal(); UI.pick = { a3: null };
+  // State start (test slice): New York is preselected, framed alone
+  // on screen. The full 48-state picker comes after this test.
+  if (UI.mode === 'state') { UI.pick.state = 'New York'; UI.pick.a3 = 'USA'; const b = MapView.stateBox('New York'); if (b) MapView.frameBox(b[0], b[1], b[2], b[3]); renderPick(); return; }
+  MapView.setPick(true); MapView.world(); renderPick();
 }
 function renderPick() {
+  if (UI.mode === 'state') {
+    $('hud').innerHTML = `<div class="pick-top card"><b>Start in New York</b><span class="muted">One state as your whole world. New York is the test start — more states next.</span>
+      <div style="margin-top:8px"><button class="btn" data-a="confirmState">Start in New York →</button></div></div>`;
+    return;
+  }
   const a3 = UI.pick.a3, k = a3 && W.byA3[a3];
   const q = (UI.pq || '').trim().toLowerCase();
   const list = q ? W.countries.filter(c => c.playable && c.capital != null && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
@@ -1135,8 +1145,12 @@ function enterGame(returning) {
   const da = (S.leader || S.flow) ? 0 : autoCreditDaily(), ca = (S.leader || S.flow) ? 0 : autoCreditShopCash();
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
-  renderHUD(); MapView.home();
-  if (returning) welcomeBack(); else S.tutorial = 0;
+  renderHUD();
+  // State world: frame the picked state alone, filling the screen —
+  // not the home country. No tutorial yet; it arrives with the
+  // capital-dot office flow.
+  if (S.mode === 'state') { const b = MapView.stateBox(S.state); if (b) MapView.frameBox(b[0], b[1], b[2], b[3]); else MapView.home(); } else MapView.home();
+  if (returning) welcomeBack(); else S.tutorial = S.mode === 'state' ? -1 : 0;
   renderTutorial();
 }
 const TUT = [
@@ -3215,10 +3229,12 @@ const A = {
   pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
   confirmCountry: () => nameCompany(),
+  confirmState: () => nameCompany(),
   swatch: (x, el) => { UI.color = x; document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === el)); },
   beginGame: () => {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
     const look = (UI.pickLooks || [])[UI.pickLookIdx || 0] || null;
+    if (UI.mode === 'state') { S = newGame({ mode: 'state', home: 'USA', state: UI.pick.state || 'New York', name, color: UI.color, look }); save(); enterGame(false); return; }
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color, look }); save(); enterGame(false);
   },
   introMode: x => {
