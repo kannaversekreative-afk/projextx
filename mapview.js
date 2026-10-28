@@ -732,10 +732,11 @@ const MapView = (() => {
       });
     }
     // Region dots: one per first-level region, like the US states.
-    // Only when zoomed in — at world zoom 4,000+ dots would be a
-    // blob (the UK alone has 231 counties).
-    if (viewKind === 'world' && v.s > 1.0 && layerOn('cities')) {
+    // Only where they are readable (see regionDotVisible) — at
+    // world zoom 4,000+ dots would be a blob.
+    if (viewKind === 'world' && layerOn('cities')) {
       regionDots().forEach(d => {
+        if (!regionDotVisible(d, v.s)) return;
         const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
         const bought = S && S.airports && S.airports[d.key];
@@ -826,12 +827,14 @@ const MapView = (() => {
     const push = (key, name, a3, x, y) => { if (seen.has(key)) return; seen.add(key); out.push({ key, name, a3, x, y }); };
     (W.cities || []).forEach(ct => { if (ct.isMajor || ct.isCapital) push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); });
     if (typeof US_CAPITALS !== 'undefined') US_CAPITALS.forEach(st => push('us:' + st.s, st.c, 'USA', st.x, st.y));
-    if (typeof v !== 'undefined' && v.s > 1.0) regionDots().forEach(d => push(d.key, d.name, d.a3, d.x, d.y));
+    if (typeof v !== 'undefined') regionDots().forEach(d => { if (regionDotVisible(d, v.s)) push(d.key, d.name, d.a3, d.x, d.y); });
     return out;
   }
   // Region dots: one per first-level region (except the USA, whose
   // states already have capital dots). Position is the region's
-  // box center (from WORLD_REGIONS). Cached — regions never change.
+  // box center (from WORLD_REGIONS). Regions too close to their
+  // own capital are skipped (the capital dot already covers that
+  // spot). Cached — regions never change.
   let regionDotsCache = null;
   function regionDots() {
     if (regionDotsCache) return regionDotsCache;
@@ -839,10 +842,21 @@ const MapView = (() => {
     if (typeof WORLD_REGIONS !== 'undefined') WORLD_REGIONS.forEach(r => {
       if (r.a3 === 'USA' || !r.box) return;
       const x = (r.box[0] + r.box[2]) / 2, y = (r.box[1] + r.box[3]) / 2;
-      out.push({ key: 'r:' + r.a3 + ':' + r.name, name: r.name, a3: r.a3, x, y });
+      const cap = W.byA3 && W.byA3[r.a3] && W.cities[W.byA3[r.a3].capital];
+      if (cap && Math.hypot(x - cap.x, y - cap.y) < 40) return;
+      out.push({ key: 'r:' + r.a3 + ':' + r.name, name: r.name, a3: r.a3, x, y, area: (r.box[2] - r.box[0]) * (r.box[3] - r.box[1]) });
     });
     regionDotsCache = out;
     return out;
+  }
+  // A region dot is only readable where its neighbors are far
+  // enough apart: large regions at moderate zoom, smaller ones
+  // only when zoomed deep. Tiny counties never get a dot (their
+  // country's capital dot is the buy point there).
+  function regionDotVisible(d, s) {
+    if (s > 2.5) return d.area >= 100;
+    if (s > 1.0) return d.area >= 400;
+    return false;
   }
   function dotAt(sx, sy) {
     let best = null, bd = 16;
