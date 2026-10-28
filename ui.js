@@ -1227,15 +1227,16 @@ function onDotTap(dot) {
   let html = `<h2>${esc(title)}</h2>`;
   if (owned) {
     html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here.</p>`;
-    html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()} (+${owned.type === 'hub' ? 2 : 1}/sec)</p>`;
-    const incoming = [];
-    (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.originator) incoming.push(other.name); });
-    if (incoming.length) html += `<p>+${incoming.length}/sec from ${incoming.map(esc).join(', ')}</p>`;
-    html += `<button class="btn3d orange wide" data-a="originatorToggle" data-x="${dot.key}">ORIGINATOR: ${owned.originator ? 'ON' : 'OFF'}</button>`;
-    if (owned.originator) {
+    html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()}${owned.type === 'hub' ? ' (+2/sec)' : ''}</p>`;
+    if (owned.type === 'hub') {
       const dests = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other) dests.push(other.name); });
       if (dests.length) html += `<p>Sends 1/sec to ${dests.map(esc).join(', ')}</p>`;
+    } else {
+      const hubs = [];
+      (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'hub') hubs.push(other.name); });
+      if (hubs.length) html += `<p>+${hubs.length}/sec from ${hubs.map(esc).join(', ')}</p>`;
+      else html += `<p>Connect to a hub to start receiving people.</p>`;
     }
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
     (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
@@ -3598,14 +3599,6 @@ const A = {
     closeModal();
     UI.routing = key; UI.routeChange = null;
     toast('Tap a destination dot to draw the route.', 'good');
-  },
-  originatorToggle: key => {
-    if (!S.airports || !S.airports[key]) return toast('Buy an airport or hub there first.', 'bad');
-    const a = S.airports[key];
-    a.originator = !a.originator;
-    save();
-    if (UI.dotBuy) onDotTap(UI.dotBuy);
-    toast(a.originator ? 'Originator on. People flow out along your routes.' : 'Originator off.', 'good');
   },
   routeChange: x => {
     const [from, to] = (x || '').split('|');

@@ -422,16 +422,16 @@ const MapView = (() => {
   let lastPopSave = 0;
   function step(dt) {
     const st = S_(); if (!st) return;
-    // Airline citizens: bought airports grow 1/sec, hubs 2/sec,
-    // forever, from the outside world. New sites start at 100.
-    // Originator flow: each originator sends 1/sec along each of
-    // its routes, separate from its own growth (it does not lose
-    // the people it sends, and the destination keeps its own rate).
+    // Airline citizens: hubs are originators by nature, no toggle.
+    // A hub grows 2/sec constantly. An airport grows only when
+    // connected to a hub, receiving 1/sec per hub route (1 plane
+    // a second). Hub-hub routes exchange 1/sec each way. New
+    // sites start at 100.
     if (typeof S !== 'undefined' && S && S.airports) {
       for (const k in S.airports) {
         const a = S.airports[k];
         if (a.pop === undefined) a.pop = 100;
-        a.pop += (a.type === 'hub' ? 2 : 1) * dt;
+        if (a.type === 'hub') a.pop += 2 * dt;
       }
       // ga move migration: any in-flight manual moves land now
       // (manual moves are replaced by originator flow).
@@ -444,8 +444,8 @@ const MapView = (() => {
         for (const r of S.routes) {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
-          if (A.originator) { if (B.pop === undefined) B.pop = 100; B.pop += 1 * dt; }
-          if (B.originator) { if (A.pop === undefined) A.pop = 100; A.pop += 1 * dt; }
+          if (A.type === 'hub') { if (B.pop === undefined) B.pop = 100; B.pop += 1 * dt; }
+          if (B.type === 'hub') { if (A.pop === undefined) A.pop = 100; A.pop += 1 * dt; }
         }
       }
       if (dt > 0) { const nowMs = Date.now(); if (!lastPopSave || nowMs - lastPopSave > 30000) { lastPopSave = nowMs; save(); } }
@@ -790,15 +790,16 @@ const MapView = (() => {
     // drew (see route mode). Kind follows the endpoints: hub-hub
     // carries people + cargo, airport-hub carries people only.
     // A plane flies a route only when people flow on it, which is
-    // when one end is an originator. The plane starts at the
-    // originator when exactly one end is one, so the loaded leg
-    // runs originator to destination and the return leg comes back.
+    // when a hub is on the route (hubs are originators by nature).
+    // The plane starts at the hub when exactly one end is one, so
+    // the loaded leg runs hub to destination and the return leg
+    // comes back.
     if (viewKind === 'world' && S && S.airports && Array.isArray(S.routes)) {
       const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
       S.routes.forEach((r, idx) => {
         const A0 = S.airports[r.from], B0 = S.airports[r.to];
         if (!A0 || !B0) return;
-        const A = (A0.originator && !B0.originator) ? A0 : (B0.originator && !A0.originator) ? B0 : A0;
+        const A = (A0.type === 'hub' && B0.type !== 'hub') ? A0 : (B0.type === 'hub' && A0.type !== 'hub') ? B0 : A0;
         const B = A === A0 ? B0 : A0;
         const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
         if (!onScreen2(ax, ay) && !onScreen2(bx, by)) return;
@@ -806,7 +807,7 @@ const MapView = (() => {
         c.setLineDash([0.1, 10]);
         c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
         c.setLineDash([]);
-        if (!A0.originator && !B0.originator) return;
+        if (A0.type !== 'hub' && B0.type !== 'hub') return;
         const t = (((now / 1000) * 0.12 + idx * 0.6) % 2), f = t < 1 ? t : 2 - t;
         const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
         const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
