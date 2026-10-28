@@ -42,6 +42,21 @@ const MapView = (() => {
     big.forEach(p => { bx0 = Math.min(bx0, p[0]); bx1 = Math.max(bx1, p[0]); by0 = Math.min(by0, p[1]); by1 = Math.max(by1, p[1]); });
     return [bx0, by0, bx1, by1];
   };
+  // Northern cluster map: a SEPARATE map with these 5 states only.
+  // It is not a view of the world map: it has its own shapes, its own
+  // bounds, and its own screen. Nothing from the world leaks into it.
+  const CLUSTER_STATES = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'];
+  const clusterRings = () => {
+    const rings = [];
+    CLUSTER_STATES.forEach(name => regionRings(name).forEach(r => rings.push(r)));
+    return rings;
+  };
+  const clusterBox = () => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, found = false;
+    CLUSTER_STATES.forEach(name => { const st = stateEntry(name); if (!st) return; found = true; const b = st.box; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+    return found ? [x0, y0, x1, y1] : null;
+  };
+  const isClusterState = name => CLUSTER_STATES.includes(name);
   const regionPathsCache = {};
   const regionPaths = name => {
     if (!regionPathsCache[name]) regionPathsCache[name] = regionRings(name).map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
@@ -84,6 +99,20 @@ const MapView = (() => {
   }
   function fit() { v.s = Math.max(vw / MAP_W, vh / MAP_H); v.x = (vw - MAP_W * v.s) / 2; v.y = (vh - MAP_H * v.s) / 2; }
   function clampView() {
+    // Cluster map is its own map: zoom stops at the 5 states filling
+    // the screen, and panning keeps them on screen. The world is not
+    // behind this map, so you can never zoom or pan out to it.
+    if (viewKind === 'cluster') {
+      const box = clusterBox();
+      if (box) {
+        const [x0, y0, x1, y1] = box;
+        const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
+        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
+        v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
+        return;
+      }
+    }
     // Region view is its own map: zoom stops at the region filling the
     // screen, and panning keeps the region on screen, so you can never
     // zoom or pan out into the world behind it.
@@ -112,6 +141,13 @@ const MapView = (() => {
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
+    // Cluster map: ONLY these 5 states, on their own map. Not the
+    // world map with things hidden — this screen draws nothing else.
+    if (viewKind === 'cluster') {
+      c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
+      clusterRings().forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
+      return;
+    }
     // Region view: only that region's shape, alone on the sea.
     if (viewKind === 'region') {
       c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
@@ -497,6 +533,22 @@ const MapView = (() => {
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
+    // Cluster map: only its 5 capitals' gold dots. No pills, no
+    // cities, no vehicles, no military — nothing from the world.
+    if (viewKind === 'cluster') {
+      if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
+        CLUSTER_STATES.forEach(name => {
+          const cp = US_CAPITALS.find(c => c.s === name);
+          if (!cp) return;
+          const [sx, sy] = toScreen(cp.x, cp.y);
+          if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+          const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
+          c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
+          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+        });
+      }
+      return;
+    }
     if (st && st.settings.motion && layerOn('vehicles')) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co) return;
@@ -649,8 +701,8 @@ const MapView = (() => {
       // underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
-      // In a region view, land taps stay in the region.
-      if (viewKind === 'region') return;
+      // In a region or cluster view, land taps stay in that map.
+      if (viewKind === 'region' || viewKind === 'cluster') return;
       // In a country view, a tap on a region opens that region's
       // Go popup; any other tap stays in the country view.
       if (viewKind === 'country') {
@@ -700,8 +752,10 @@ const MapView = (() => {
     world() { resetView(); flyTo(MAP_W / 2, MAP_H / 2, 0); },
     showCountry(a3) { enterCountry(a3); },
     showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; const box = regionBox(region); if (box) frameBox(box); },
+    showCluster(a3) { viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; const box = clusterBox(); if (box) frameBox(box); },
+    isClusterState(name) { return isClusterState(name); },
     exitToWorld() { resetView(); fit(); dirty = true; },
-    exitToCountry() { if (viewKind === 'region' && viewA3) enterCountry(viewA3); },
+    exitToCountry() { if ((viewKind === 'region' || viewKind === 'cluster') && viewA3) enterCountry(viewA3); },
     viewInfo() { return { kind: viewKind, a3: viewA3, region: viewRegion }; },
 
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
