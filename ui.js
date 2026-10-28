@@ -1038,7 +1038,8 @@ function renderInheritStep() {
     step.innerHTML = `<div class="inherit-line">Offline</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">Play on your own, no other players.</p>
       <button class="btn3d orange wide" data-a="introMode" data-x="world">🌍 WORLD — the real world as it is today</button>
-      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — generated land, countries, economies, companies</button>`;
+      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — generated land, countries, economies, companies</button>
+      <button class="btn3d wide" data-a="introMode" data-x="state">🗺️ STATE — one state as your whole world (test: New York)</button>`;
   } else if (UI.introMode === 'online') {
     step.innerHTML = `<div class="inherit-line">Online</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">The same two worlds, against real players. PvP is coming later — it is not built yet, and nothing here pretends otherwise: there are no AI rivals dressed up as online players.</p>
@@ -1082,6 +1083,14 @@ function renderInheritStep() {
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
     if (sel) sel.addEventListener('change', updateInheritInfo);
     updateInheritInfo();
+  } else if (UI.introMode === 'state') {
+    // State start (test slice): New York only. The full 48-state
+    // picker comes after this test — no broken options are offered.
+    step.innerHTML = `<div class="inherit-line">You start with one state</div>
+      <select id="inheritState" aria-label="Choose a state to start in"><option value="New York" selected>New York</option></select>
+      <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Albany · the whole world is this state, alone on screen</div>
+      <p>State start: one state as your whole world, in its real shape, filling the screen. New York is the test start — more states next.</p>
+      <button class="btn3d orange wide" data-a="stateContinue">START IN NEW YORK</button>`;
   }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
@@ -3243,7 +3252,7 @@ const A = {
     // lists generated countries; leaving it restores real Earth, so a
     // later World game can never inherit a generated map.
     if (x === 'random' && typeof switchWorldToRandom === 'function') { UI.randomSeed = Math.floor(Math.random() * 1e9); switchWorldToRandom(UI.randomSeed); }
-    else if ((x === 'world' || x === 'offline') && typeof switchWorldToReal === 'function') switchWorldToReal();
+    else if ((x === 'world' || x === 'offline' || x === 'state') && typeof switchWorldToReal === 'function') switchWorldToReal();
     renderInheritStep();
   },
   introRandom: () => { const sel = document.getElementById('inheritCountry'); if (!sel) return; const list = W.playable; sel.value = list[Math.floor(Math.random() * list.length)].a3; sel.dispatchEvent(new Event('change')); },
@@ -3270,6 +3279,10 @@ const A = {
     const sel = document.getElementById('inheritCountry'); const a3 = sel ? sel.value : 'USA';
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
     S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
+  },
+  stateContinue: () => {
+    const sel = document.getElementById('inheritState'); const state = sel ? sel.value : 'New York';
+    S = newGame({ mode: 'state', home: 'USA', state, leader: true, name: 'Leader' }); save(); enterGame(false);
   },
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
