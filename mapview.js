@@ -701,7 +701,8 @@ const MapView = (() => {
 
         const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        const bought = S && S.airports && S.airports['c' + ct.id];
+        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
@@ -711,14 +712,14 @@ const MapView = (() => {
       US_CAPITALS.forEach(st => {
         const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        const bought = S && S.airports && S.airports['us:' + st.s];
+        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
     // Airport sites: main map only. White dots at NYC + the US/Canada
-    // capitals (capitals otherwise have no dot). Routes and planes
-    // removed — the network is player-built via buy. Tapping still
-    // selects the country underneath for now.
+    // capitals (capitals otherwise have no dot). Bought dots fill
+    // dark blue. Tapping a dot opens the buy sheet (see tap()).
     if (viewKind === 'world') {
       const hub = W.cities.find(c => c.code === 'NYC');
       const spokes = [];
@@ -729,9 +730,35 @@ const MapView = (() => {
         [hub, ...spokes].forEach(ct => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (!onScreen(sx, sy)) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          const bought = S && S.airports && S.airports['c' + ct.id];
+          c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
+      }
+    }
+    // Bought network: routes + planes between owned sites.
+    // Passengers: airport-hub and hub-hub. Cargo: hub-hub only
+    // (airports never send or receive cargo). Airport-airport
+    // pairs get no route (hub-and-spoke).
+    if (viewKind === 'world' && S && S.airports) {
+      const owned = Object.values(S.airports);
+      const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
+      for (let i = 0; i < owned.length; i++) for (let j = i + 1; j < owned.length; j++) {
+        const A = owned[i], B = owned[j];
+        if (A.type === 'airport' && B.type === 'airport') continue;
+        const [ax, ay] = toScreen(A.x, A.y), [bx, by] = toScreen(B.x, B.y);
+        if (!onScreen2(ax, ay) && !onScreen2(bx, by)) continue;
+        c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
+        c.setLineDash([0.1, 10]);
+        c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
+        c.setLineDash([]);
+        const t = (((now / 1000) * 0.12 + (i * owned.length + j) * 0.6) % 2), f = t < 1 ? t : 2 - t;
+        const px = ax + (bx - ax) * f, py = ay + (by - ay) * f;
+        const ang = Math.atan2(by - ay, bx - ax) + (t < 1 ? 0 : Math.PI);
+        c.save(); c.translate(px, py); c.rotate(ang);
+        c.fillStyle = '#16233f';
+        c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
+        c.restore();
       }
     }
     // Placed businesses: a circle on the map, wherever the player
@@ -777,6 +804,17 @@ const MapView = (() => {
   top.addEventListener('pointerup', up); top.addEventListener('pointercancel', e => { pts.delete(e.pointerId); pinch = null; });
   top.addEventListener('wheel', e => { e.preventDefault(); const rect = top.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
+  // Buyable white dots on the world map: major cities, US state
+  // capitals, and the USA/Canada capitals (which otherwise have no
+  // dot). Keyed so a bought dot can be found again from the save.
+  function dotSites() {
+    const out = [], seen = new Set();
+    const push = (key, name, a3, x, y) => { if (seen.has(key)) return; seen.add(key); out.push({ key, name, a3, x, y }); };
+    (W.cities || []).forEach(ct => { if (ct.isMajor && !ct.isCapital) push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); });
+    if (typeof US_CAPITALS !== 'undefined') US_CAPITALS.forEach(st => push('us:' + st.s, st.c, 'USA', st.x, st.y));
+    ['USA', 'CAN'].forEach(a3 => { const k = W.byA3 && W.byA3[a3]; if (k && W.cities[k.capital]) { const ct = W.cities[k.capital]; push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); } });
+    return out;
+  }
   function tap(sx, sy) {
     if (!pickMode) {
       // Placing a business: any map tap places it, wherever it lands.
@@ -798,9 +836,15 @@ const MapView = (() => {
         S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
       }
-      // City dots and names stay on the map, but cities are not
-      // enterable: taps on a dot or pill fall through to the country
-      // underneath, which opens the country panel.
+      // White dots are buyable: tapping one opens the airport/hub
+      // buy sheet for that city, instead of the country underneath.
+      if (viewKind === 'world') {
+        let best = null, bd = 16;
+        dotSites().forEach(d => { const [x, y] = toScreen(d.x, d.y); const dist = Math.hypot(x - sx, y - sy); if (dist < bd) { bd = dist; best = d; } });
+        if (best) { handlers.dot && handlers.dot(best); return; }
+      }
+      // Cities are not enterable: taps that miss a dot fall through
+      // to the country underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
       // In a region, cluster, or regionMap view, land taps stay in that map.

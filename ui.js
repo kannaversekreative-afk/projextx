@@ -1001,7 +1001,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap);
   MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
@@ -1215,6 +1215,21 @@ function onCountryTap(a3) {
   // that takes you into it. Its business panel still opens from
   // inside the country view, so no access is lost.
   openCountryGoPopup(a3);
+}
+function onDotTap(dot) {
+  if (!S || !dot) return;
+  UI.dotBuy = dot;
+  const owned = S.airports && S.airports[dot.key];
+  const fmt = n => '$' + Math.round(n).toLocaleString();
+  let html = `<h2>${esc(dot.name)}</h2>`;
+  if (owned) {
+    html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here.</p>`;
+  } else {
+    html += `<p>Airport brings in people only. Hub brings in people and cargo.</p><p>Cash: ${fmt(S.cash)}</p>`;
+    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
+    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${fmt(1250000)}</button>`;
+  }
+  openModal(html, 'sheet');
 }
 function openCountryPanel(a3) {
   if (!S) return;
@@ -3512,6 +3527,20 @@ const A = {
   marsTravel: () => { closePanel(); closeModal(); CityView.openMars(); document.body.classList.add('in-city'); renderCityHUD(); toast('Welcome to Mars.', 'good'); },
   marsBuyMine: x => { const err = marsBuySite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine bought. Income arrives every week.', 'good'); save(); refreshAll(); },
   marsSellMine: x => { const err = marsSellSite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine sold.', 'good'); save(); refreshAll(); },
+  airportBuy: x => {
+    const [key, type] = (x || '').split('|');
+    const dot = UI.dotBuy && UI.dotBuy.key === key ? UI.dotBuy : null;
+    if (!dot) return toast('Pick a dot first.', 'bad');
+    if (!S.airports) S.airports = {};
+    if (S.airports[key]) return toast('You already own a building here.', 'bad');
+    const price = type === 'hub' ? 1250000 : 220000;
+    if (S.cash < price) return toast('Not enough cash.', 'bad');
+    S.cash -= price;
+    S.airports[key] = { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y };
+    UI.dotBuy = null;
+    save(); closeModal(); renderHUD();
+    toast(type === 'hub' ? 'Hub bought.' : 'Airport bought.', 'good');
+  },
   casinoTab: x => { UI.casinoTab = x; renderPanel(); },
   casinoBet: x => { const err = casinoSetBet(x); if (err) return toast(err, 'bad'); renderPanel(); },
   casinoSlots: () => { const err = casinoSlots(); if (err) return toast(err, 'bad'); save(); renderPanel(); renderHUD(); },
