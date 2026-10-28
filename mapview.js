@@ -47,7 +47,8 @@ const MapView = (() => {
   // bounds, and its own screen. Nothing from the world leaks into it.
   const CLUSTER_MAPS = [
     ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'],
-    ['Pennsylvania', 'New Jersey', 'Connecticut', 'Rhode Island', 'Delaware']
+    ['Pennsylvania', 'New Jersey', 'Connecticut', 'Rhode Island', 'Delaware'],
+    ['Maryland', 'Virginia', 'West Virginia', 'Ohio', 'Kentucky']
   ];
   let viewCluster = 0;
   const clusterStates = () => CLUSTER_MAPS[viewCluster] || CLUSTER_MAPS[0];
