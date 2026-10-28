@@ -21,9 +21,9 @@ const MapView = (() => {
   // its own first-level regions (WORLD_REGIONS, converted from
   // Natural Earth admin-1). Tapping a region goes to that region
   // alone on its own map — the USA's regions open as 5-state cluster
-  // maps, other countries' regions open alone. Gold dots show only
-  // inside a cluster map (those states' capitals) and inside a
-  // single-region view (that region's capital).
+  // maps, other countries' regions open alone. Dots (gold capitals,
+  // city dots) show only on the world map — no dots on any other
+  // map (2026-10-28).
   // Regions are NAMED shapes — never matched by bbox or signature,
   // so no wrong region can slip in (Connecticut's ring once did, as
   // "Long Island", because its box fits inside New York's).
@@ -646,22 +646,9 @@ const MapView = (() => {
     const kShip = Math.min(1.6, Math.max(0.35, 0.65 * Math.sqrt(v.s)));
     const onScreen = (sx, sy) => sx > -30 && sy > -30 && sx < vw + 30 && sy < vh + 30;
     const layerOn = key => !st || !st.mapLayers || st.mapLayers[key] !== false;
-    // Cluster map: only its 5 capitals' gold dots. No pills, no
-    // cities, no vehicles, no military — nothing from the world.
-    if (viewKind === 'cluster') {
-      if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
-        clusterStates().forEach(name => {
-          const cp = US_CAPITALS.find(c => c.s === name);
-          if (!cp) return;
-          const [sx, sy] = toScreen(cp.x, cp.y);
-          if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
-          const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
-          c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
-          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-        });
-      }
-      return;
-    }
+    // Cluster map: shapes only. No dots, no pills, no cities, no
+    // vehicles, no military — nothing from the world.
+    if (viewKind === 'cluster') return;
     // RegionMap view: shapes only. No pills, no cities, no vehicles,
     // no military — nothing from the world. No dots either: region
     // capitals are not in the data yet.
@@ -704,10 +691,11 @@ const MapView = (() => {
       // point except the selected-city halo above.
     });
     // Major cities: white dots with a dark outline, like the
-    // screenshot — every major city, not just the capital. Cities are
-    // not enterable: tapping a dot selects the country underneath.
-    // Capitals keep their country name pill instead.
-    if (layerOn('cities')) {
+    // screenshot — every major city, not just the capital. World map
+    // only: no dots on any other map. Cities are not enterable:
+    // tapping a dot selects the country underneath. Capitals keep
+    // their country name pill instead.
+    if (viewKind === 'world' && layerOn('cities')) {
       W.cities.forEach(ct => {
         if (ct.isCapital || !ct.isMajor) return;
 
@@ -749,21 +737,6 @@ const MapView = (() => {
       if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
       const isSel = id === sel, text = W.byA3[ct.a3].name;
       if (pill(c, sx, sy - 13, text, isSel ? PILL_SEL : mineSet.has(id) ? PILL_MINE : PILL, id)) n++;
-    }
-    // Gold capital dots: ONLY inside a region view, and only that
-    // region's own capital. No dots on the world, none in a country
-    // view — regions there are tapped by their land, not by a dot.
-    // Black dot with a solid gold fill, no gold star.
-    if (viewKind === 'region' && layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
-      const cp = US_CAPITALS.find(c => c.s === viewRegion);
-      if (cp) {
-        const [sx, sy] = toScreen(cp.x, cp.y);
-        if (sx >= -10 && sy >= -10 && sx <= vw + 10 && sy <= vh + 10) {
-          const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
-          c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
-          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-        }
-      }
     }
   }
   function drawPickLabels(c) {
