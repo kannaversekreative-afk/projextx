@@ -2557,6 +2557,7 @@ const STORE_GAMES = [
   { id: 'college', name: 'College Football', sub: 'Hashmark College', icon: '🎓', color: '#e0812b', genre: 'Sports', rating: '4.7', ratings: '61K', chart: 4, desc: 'States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.', tag: 'Recruit. Win. Repeat.' },
   { id: 'battle', name: 'Battle Board', sub: 'War mini-game', icon: '⚔️', color: '#e5484d', genre: 'Strategy', rating: '4.6', ratings: '23K', chart: 5, desc: 'The 6×6 war mini-game.', tag: 'Outthink the board.', builtin: true },
   { id: 'tennis', name: 'Tennis', sub: 'Match', icon: '🎾', color: '#65a30d', genre: 'Sports', rating: '4.7', ratings: '38K', chart: 6, desc: 'A fast tennis match against the CPU — 15, 30, 40, deuce, first to 4 games.', tag: 'Serve. Rally. Win.' },
+  { id: 'brainrot', name: 'Brain Rot', sub: 'Meme Feed', icon: '🧠', color: '#ff3d8b', genre: 'Social', rating: '4.5', ratings: '1K', chart: 7, desc: 'A snap-scrolling meme feed with animated stories, live streams, series, DMs, and coins. All fake, all on your device.', tag: 'Scroll. Laugh. Rot.' },
 ];
 const storeGame = id => STORE_GAMES.find(g => g.id === id);
 const downloadedGames = () => { if (typeof S === 'undefined' || !S) return []; if (!Array.isArray(S.downloaded)) S.downloaded = []; return S.downloaded.map(storeGame).filter(Boolean); };
@@ -2631,9 +2632,9 @@ function storeHTML() {
 }
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
-  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed', tennis: 'minigames/tennis.html?v=20261026fi' }[UI.mgGame];
-    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis' }[UI.mgGame];
+  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis' || UI.mgGame === 'brainrot') {
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed', tennis: 'minigames/tennis.html?v=20261026fi', brainrot: 'minigames/brainrot/index.html?v=20261026fm' }[UI.mgGame];
+    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis', brainrot: 'Brain Rot' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
