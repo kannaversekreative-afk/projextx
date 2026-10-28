@@ -1247,12 +1247,12 @@ function onDotTap(dot) {
       html += `<p>Trade: ${Math.floor(owned.trade || 0).toLocaleString()} (+${(lv + 1) * 100}/sec)</p>`;
       html += `<p>Ports haul trade by ship. Trade arriving at a hub sells for $1 per unit.</p>`;
     } else if (owned.type === 'hub') {
-      html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()} (+${lv + 1}/sec)</p>`;
+      html += `<p>Population: ${Math.floor(owned.pop || 0).toLocaleString()} (+${lv + 1}/sec)</p>`;
       const sends = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'airport') sends.push(esc(other.name) + ' ' + Math.min(lv, other.level || 1) + '/sec'); });
       if (sends.length) html += `<p>Sends: ${sends.join(', ')}</p>`;
     } else {
-      html += `<p>Population: ${Math.floor(owned.pop || 100).toLocaleString()}</p>`;
+      html += `<p>Population: ${Math.floor(owned.pop || 0).toLocaleString()}</p>`;
       const recv = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'hub') recv.push(esc(other.name) + ' ' + Math.min(other.level || 1, lv) + '/sec'); });
       if (recv.length) html += `<p>Receives: ${recv.join(', ')}</p>`;
@@ -1320,7 +1320,7 @@ function onDotTap(dot) {
 function onRouteDotTap(dot) {
   const src = UI.routing;
   if (!src || !S.airports || !S.airports[src]) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.', 'bad'); }
-  if (dot.key === src) return toast('Pick a different site for the destination.', 'bad');
+  if (dot.key === src) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.'); }
   const a = S.airports[src], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport, hub, or port there first.', 'bad');
   if ((a.type === 'port' && b.type === 'airport') || (a.type === 'airport' && b.type === 'port')) return toast('Ports trade with ports and hubs, not airports.', 'bad');
@@ -1349,12 +1349,12 @@ function onRouteCancel() {
 function onMoveDotTap(dot) {
   const mv = UI.moving;
   if (!mv || !S.airports || !S.airports[mv.from]) { UI.moving = null; return toast('Move cancelled.', 'bad'); }
-  if (dot.key === mv.from) return toast('Pick a different site for the destination.', 'bad');
+  if (dot.key === mv.from) { UI.moving = null; return toast('Move cancelled.'); }
   const a = S.airports[mv.from], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport or hub there first.', 'bad');
   if (a.type === 'port' || b.type === 'port') return toast('Ports haul trade, not people.', 'bad');
   if (!(S.routes || []).some(r => (r.from === mv.from && r.to === dot.key) || (r.from === dot.key && r.to === mv.from))) return toast('No route there yet. Draw one first.', 'bad');
-  if (a.pop === undefined) a.pop = 100;
+  if (a.pop === undefined) a.pop = 0;
   const amount = Math.floor(a.pop * mv.pct);
   if (amount < 1) return toast('Not enough people to move.', 'bad');
   const d = Math.max(30, Math.hypot(a.x - b.x, a.y - b.y));
@@ -1366,7 +1366,7 @@ function onMoveCancel() { UI.moving = null; }
 function onTradeDotTap(dot) {
   const tr = UI.trading;
   if (!tr || !S.airports || !S.airports[tr.from]) { UI.trading = null; return toast('Trade move cancelled.', 'bad'); }
-  if (dot.key === tr.from) return toast('Pick a different site for the destination.', 'bad');
+  if (dot.key === tr.from) { UI.trading = null; return toast('Trade cancelled.'); }
   const a = S.airports[tr.from], b = S.airports[dot.key];
   if (!b) return toast('Buy an airport, hub, or port there first.', 'bad');
   if (b.type !== 'port' && b.type !== 'hub') return toast('Trade goes to a port or a hub. Hubs buy it for cash.', 'bad');
@@ -3725,7 +3725,7 @@ const A = {
     const price = type === 'hub' ? (hubFree ? 0 : 1250000) : type === 'port' ? 600000 : 220000;
     if (S.cash < price) return toast('Not enough cash.', 'bad');
     S.cash -= price;
-    S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0 } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 100 };
+    S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0 } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 0 };
     UI.dotBuy = null;
     save(); closeModal(); renderHUD();
     if (Object.keys(S.airports).length >= 2) { UI.routing = key; toast((type === 'hub' ? 'Hub' : type === 'port' ? 'Port' : 'Airport') + ' bought. Tap a site to connect your route.', 'good'); }
@@ -3734,7 +3734,7 @@ const A = {
   routeStart: key => {
     closeModal();
     UI.routing = key; UI.routeChange = null; UI.moving = null; UI.trading = null;
-    toast('Tap a destination dot to draw the route.', 'good');
+    toast('Drag toward a dot — it locks on automatically. Tap the source dot to cancel.', 'good');
   },
   moveStart: x => {
     const [key, pct] = (x || '').split('|');
@@ -3760,7 +3760,7 @@ const A = {
     const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
     if ((fl[type] || 0) < 1) return toast('Buy a ' + pt.name + ' first.', 'bad');
     const a = S.airports[pick.from];
-    if (a.pop === undefined) a.pop = 100;
+    if (a.pop === undefined) a.pop = 0;
     const amount = Math.min(pick.amount, Math.floor(a.pop));
     if (amount < 1) return toast('Not enough people to move.', 'bad');
     const trips = Math.ceil(amount / pt.cap);

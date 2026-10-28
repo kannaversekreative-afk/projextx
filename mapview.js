@@ -436,7 +436,7 @@ const MapView = (() => {
     if (typeof S !== 'undefined' && S && S.airports) {
       for (const k in S.airports) {
         const a = S.airports[k];
-        if (a.type !== 'port' && a.pop === undefined) a.pop = 100;
+        if (a.type !== 'port' && a.pop === undefined) a.pop = 0;
         if (a.level === undefined) a.level = 1;
         if (a.type === 'hub' && a.pop < a.level * 20000) a.pop = Math.min(a.pop + (a.level + 1) * dt, a.level * 20000);
         if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += (a.level + 1) * 100 * dt; }
@@ -446,8 +446,8 @@ const MapView = (() => {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
           const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 100; if (B.pop < bLv * 20000) B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; if (A.pop < aLv * 20000) A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
+          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
+          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
         }
       }
       // Percent flows: a route can carry a standing percent of
@@ -477,8 +477,8 @@ const MapView = (() => {
             }
           }
           const amt = rate * pct * dt;
-          if (A.pop === undefined) A.pop = 100;
-          if (B.pop === undefined) B.pop = 100;
+          if (A.pop === undefined) A.pop = 0;
+          if (B.pop === undefined) B.pop = 0;
           A.pop -= amt;
           B.pop += amt;
         }
@@ -490,7 +490,7 @@ const MapView = (() => {
           mp.t += dt / mp.dur;
           if (mp.t >= 1) {
             const B = S.airports[mp.to];
-            if (B) { if (B.pop === undefined) B.pop = 100; B.pop += mp.amount; }
+            if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; }
             S.moves.splice(i, 1);
             save();
           }
@@ -874,10 +874,18 @@ const MapView = (() => {
       if (dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
         const src = S.airports[dsrc];
         const [sx, sy] = toScreen(src.x, src.y);
+        // Auto-lock: the nearest dot within finger range locks on
+        // while dragging, and the preview line snaps to it, so a
+        // route connects even when the finger lands near the dot
+        // instead of exactly on it.
+        let ex = drawPos[0], ey = drawPos[1], locked = null;
+        try { locked = viewKind === 'cluster' ? clusterDotAt(drawPos[0], drawPos[1], 34) : dotAt(drawPos[0], drawPos[1], 34); } catch (e) {}
+        if (locked) { const lp = toScreen(locked.x, locked.y); ex = lp[0]; ey = lp[1]; }
         c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
         c.setLineDash([0.1, 10]);
-        c.beginPath(); c.moveTo(sx, sy); c.lineTo(drawPos[0], drawPos[1]); c.stroke();
+        c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.stroke();
         c.setLineDash([]);
+        if (locked) { c.strokeStyle = '#f5b301'; c.lineWidth = 3; c.beginPath(); c.arc(ex, ey, 14, 0, 7); c.stroke(); }
       }
       if (S && S.airports && Array.isArray(S.moves)) {
         S.moves.forEach(mp => {
@@ -1018,7 +1026,7 @@ const MapView = (() => {
     const dx = e.clientX - prev[0], dy = e.clientY - prev[1]; moved += Math.abs(dx) + Math.abs(dy);
     if (moved > 5) { v.x += dx; v.y += dy; clampView(); dirty = true; }
   });
-  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && drawing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy); if (best) { if (UI.routing) handlers.routeDot && handlers.routeDot(best); else if (UI.moving) handlers.moveDot && handlers.moveDot(best); else if (UI.trading) handlers.tradeDot && handlers.tradeDot(best); } else { if (UI.routing) handlers.routeCancel && handlers.routeCancel(); else if (UI.moving) handlers.moveCancel && handlers.moveCancel(); else if (UI.trading) handlers.tradeCancel && handlers.tradeCancel(); } } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
+  const up = e => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 0 && drawing()) { const rect = top.getBoundingClientRect(); const sx = e.clientX - rect.left, sy = e.clientY - rect.top; drawPos = null; if (moved > 6) { const best = viewKind === 'cluster' ? clusterDotAt(sx, sy, 34) : dotAt(sx, sy, 34); if (best) { if (UI.routing) handlers.routeDot && handlers.routeDot(best); else if (UI.moving) handlers.moveDot && handlers.moveDot(best); else if (UI.trading) handlers.tradeDot && handlers.tradeDot(best); } } else if (downAt) { tap(sx, sy); } return; } if (pts.size === 0 && moved <= 6 && downAt) { const rect = top.getBoundingClientRect(); tap(e.clientX - rect.left, e.clientY - rect.top); } };
   top.addEventListener('pointerup', up); top.addEventListener('pointercancel', e => { pts.delete(e.pointerId); pinch = null; drawPos = null; });
   top.addEventListener('wheel', e => { e.preventDefault(); const rect = top.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
   function zoomAt(f, sx, sy) { const [mx, my] = toMap(sx, sy); v.s *= f; clampView(); v.x = sx - mx * v.s; v.y = sy - my * v.s; clampView(); dirty = true; }
@@ -1061,14 +1069,14 @@ const MapView = (() => {
     if (s > 1.0) return d.area >= 400;
     return false;
   }
-  function dotAt(sx, sy) {
-    let best = null, bd = 16;
+  function dotAt(sx, sy, radius) {
+    let best = null, bd = radius || 16;
     dotSites().forEach(d => { const [x, y] = toScreen(d.x, d.y); const dist = Math.hypot(x - sx, y - sy); if (dist < bd) { bd = dist; best = d; } });
     return best;
   }
-  function clusterDotAt(sx, sy) {
+  function clusterDotAt(sx, sy, radius) {
     if (typeof US_CAPITALS === 'undefined') return null;
-    let best = null, bd = 16;
+    let best = null, bd = radius || 16;
     clusterStates().forEach(name => {
       const cap = US_CAPITALS.find(u => u.s === name);
       if (!cap) return;
@@ -1099,31 +1107,30 @@ const MapView = (() => {
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
       }
       // Route mode: the player tapped Draw route, then taps a dot
-      // to draw the route there. Any other tap cancels route mode.
-      // Works on every map.
+      // to draw the route there. A tap near a dot auto-locks onto
+      // it (34px, finger-sized); a tap that misses stays in route
+      // mode instead of cancelling, and tapping the source dot
+      // cancels. Works on every map.
       if (typeof UI !== 'undefined' && UI.routing) {
-        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy, 34) : dotAt(sx, sy, 34);
         if (best) handlers.routeDot && handlers.routeDot(best);
-        else handlers.routeCancel && handlers.routeCancel();
         return;
       }
       // Move mode: the player picked a percent, then taps a dot
-      // on one of their routes to move people there. Any other
-      // tap cancels move mode. Works on every map.
+      // on one of their routes to move people there. Same auto-lock
+      // and stay-in-mode rules as route mode. Works on every map.
       if (typeof UI !== 'undefined' && UI.moving) {
-        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy, 34) : dotAt(sx, sy, 34);
         if (best) handlers.moveDot && handlers.moveDot(best);
-        else handlers.moveCancel && handlers.moveCancel();
         return;
       }
       // Trade mode: the player picked a trade percent at a port,
       // then taps a port or hub on one of their routes to haul
-      // trade there. Any other tap cancels trade mode. Works on
-      // every map.
+      // trade there. Same auto-lock and stay-in-mode rules.
+      // Works on every map.
       if (typeof UI !== 'undefined' && UI.trading) {
-        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy, 34) : dotAt(sx, sy, 34);
         if (best) handlers.tradeDot && handlers.tradeDot(best);
-        else handlers.tradeCancel && handlers.tradeCancel();
         return;
       }
       // White dots are buyable on every map: tapping one opens the
