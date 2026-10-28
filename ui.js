@@ -1223,7 +1223,8 @@ function onDotTap(dot) {
   UI.dotBuy = dot;
   const owned = S.airports && S.airports[dot.key];
   const fmt = n => '$' + Math.round(n).toLocaleString();
-  let html = `<h2>${esc(dot.name)}</h2>`;
+  const title = dot.key.startsWith('r:') && W.byA3[dot.a3] ? dot.name + ' (' + W.byA3[dot.a3].name + ')' : dot.name;
+  let html = `<h2>${esc(title)}</h2>`;
   if (owned) {
     html += `<p>You own a ${owned.type === 'hub' ? 'Hub' : 'Airport'} here.</p>`;
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;

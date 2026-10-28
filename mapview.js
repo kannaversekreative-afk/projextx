@@ -731,6 +731,18 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
+    // Region dots: one per first-level region, like the US states.
+    // Only when zoomed in — at world zoom 4,000+ dots would be a
+    // blob (the UK alone has 231 counties).
+    if (viewKind === 'world' && v.s > 1.0 && layerOn('cities')) {
+      regionDots().forEach(d => {
+        const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        const bought = S && S.airports && S.airports[d.key];
+        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
+    }
     // Drawn routes: dotted routes + planes on the routes the player
     // drew (see route mode). Kind follows the endpoints: hub-hub
     // carries people + cargo, airport-hub carries people only.
@@ -814,6 +826,22 @@ const MapView = (() => {
     const push = (key, name, a3, x, y) => { if (seen.has(key)) return; seen.add(key); out.push({ key, name, a3, x, y }); };
     (W.cities || []).forEach(ct => { if (ct.isMajor || ct.isCapital) push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); });
     if (typeof US_CAPITALS !== 'undefined') US_CAPITALS.forEach(st => push('us:' + st.s, st.c, 'USA', st.x, st.y));
+    if (typeof v !== 'undefined' && v.s > 1.0) regionDots().forEach(d => push(d.key, d.name, d.a3, d.x, d.y));
+    return out;
+  }
+  // Region dots: one per first-level region (except the USA, whose
+  // states already have capital dots). Position is the region's
+  // box center (from WORLD_REGIONS). Cached — regions never change.
+  let regionDotsCache = null;
+  function regionDots() {
+    if (regionDotsCache) return regionDotsCache;
+    const out = [];
+    if (typeof WORLD_REGIONS !== 'undefined') WORLD_REGIONS.forEach(r => {
+      if (r.a3 === 'USA' || !r.box) return;
+      const x = (r.box[0] + r.box[2]) / 2, y = (r.box[1] + r.box[3]) / 2;
+      out.push({ key: 'r:' + r.a3 + ':' + r.name, name: r.name, a3: r.a3, x, y });
+    });
+    regionDotsCache = out;
     return out;
   }
   function dotAt(sx, sy) {
