@@ -423,7 +423,7 @@ const MapView = (() => {
   function step(dt) {
     const st = S_(); if (!st) return;
     // Airline citizens: hubs are originators by nature, no toggle.
-    // A hub grows (level + 1)/sec constantly. An airport grows
+    // A hub grows (level + 1)/sec constantly, up to capacity level x 20000. An airport grows
     // only when connected to a hub, receiving per hub route the
     // slower of the hub's send and its own receive, both equal to
     // level, so flow is min(hub level, airport level)/sec.
@@ -435,7 +435,7 @@ const MapView = (() => {
         const a = S.airports[k];
         if (a.type !== 'port' && a.pop === undefined) a.pop = 100;
         if (a.level === undefined) a.level = 1;
-        if (a.type === 'hub') a.pop += (a.level + 1) * dt;
+        if (a.type === 'hub') a.pop = Math.min(a.pop + (a.level + 1) * dt, a.level * 20000);
         if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += (a.level + 1) * 100 * dt; }
       }
       if (Array.isArray(S.routes)) {
@@ -443,8 +443,8 @@ const MapView = (() => {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
           const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 100; B.pop += Math.min(aLv, bLv) * dt; }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; A.pop += Math.min(bLv, aLv) * dt; }
+          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 100; B.pop = Math.min(B.pop + Math.min(aLv, bLv) * dt, bLv * 20000); }
+          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 100; A.pop = Math.min(A.pop + Math.min(bLv, aLv) * dt, aLv * 20000); }
         }
       }
       // Percent flows: a route can carry a standing percent of
@@ -462,6 +462,7 @@ const MapView = (() => {
           const A = S.airports[from], B = S.airports[to];
           if (!A || !B) { delete S.flowPct[k]; continue; }
           if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) { delete S.flowPct[k]; continue; }
+          if ((B.pop || 0) >= (B.level || 1) * 20000) continue;
           let rate = 0;
           if (A.type === 'hub') rate = (A.level || 1) + 1;
           else {
@@ -510,6 +511,18 @@ const MapView = (() => {
             save();
           }
         }
+      }
+      // Overcrowding: a site at capacity (level x 20000) stops growing
+      // (capped above) and drags its country's stability down in
+      // countryDay. News fires once when a site first fills, not
+      // every step, and resets when it drops below capacity.
+      for (const k in S.airports) {
+        const site = S.airports[k];
+        if (!site || site.type === 'port') continue;
+        if ((site.pop || 0) >= (site.level || 1) * 20000) {
+          if (!site.crowdedNotified && typeof news === 'function') news('World', `Overcrowding at ${site.name}: the site is full, so it stopped growing and stability is dropping. Upgrade it or move people out.`, site.a3);
+          site.crowdedNotified = true;
+        } else site.crowdedNotified = false;
       }
       if (dt > 0) { const nowMs = Date.now(); if (!lastPopSave || nowMs - lastPopSave > 30000) { lastPopSave = nowMs; save(); } }
     }

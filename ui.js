@@ -1266,6 +1266,8 @@ function onDotTap(dot) {
         if (g > worstGap) { worstGap = g; worstName = other.name; worstLv = other.level || 1; }
       });
       if (worstGap > 0) html += `<p>⚠ Bottleneck: ${esc(worstName)} is level ${worstLv} but you are level ${lv}. Upgrade to unlock +${worstGap}/sec flow.</p>`;
+      const cap = lv * 20000;
+      if ((owned.pop || 0) >= cap) html += `<p>⚠ Overcrowded: at capacity (${Math.floor(owned.pop).toLocaleString()} / ${cap.toLocaleString()}). Stability is dropping. Upgrade or move people out.</p>`;
     }
     if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
     else {

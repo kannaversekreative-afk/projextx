@@ -526,6 +526,18 @@ function countryDay(a3) {
   c.pop *= 1 + pg / 365;
   c.drift *= 0.97; c.fx = c.fx.filter(f => f.until > S.day);
   c.stab = clamp(c.stab + (55 + k.wealth * 10 - c.stab) * 0.002 + gauss() * 0.4 + (a3 === S.home ? homeBonus('stab') / 365 : 0), 0, 100);
+  // Overcrowding: each full site (pop at level x 20000 capacity)
+  // drags stability down 0.5/day while it stays full. Fix it by
+  // upgrading (raises capacity) or moving people out; stab drifts
+  // back toward baseline once no site is full.
+  if (S.airports) {
+    let crowded = 0;
+    for (const k in S.airports) {
+      const site = S.airports[k];
+      if (site && site.a3 === a3 && site.type !== 'port' && (site.pop || 0) >= (site.level || 1) * 20000) crowded++;
+    }
+    if (crowded > 0) c.stab = clamp(c.stab - crowded * 0.5, 0, 100);
+  }
   if (c.stab < 32 && c.unrest <= S.day && rand() < 0.003) { c.unrest = S.day + 30 + Math.floor(rand() * 60); shockCountry(a3, 'unrest'); news('World', `Mass protests paralyse ${k.name}.`, a3); live(`Protests in ${k.name}`, c.unrest - S.day, 'World', a3); }
   if (c.stab < 18 && rand() < 0.0015) { shockCountry(a3, 'coup'); c.stab = 40; news('War', `Military coup in ${k.name}. The government has fallen.`, a3); }
   if (S.day >= c.nextElect) {
