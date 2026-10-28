@@ -1027,7 +1027,7 @@ function showInherit() {
       <button class="intro-mode" data-a="introMode" data-x="offline"><b>Offline</b><span>Play on your own. World — the real world as it is today — or Random World, a fully generated world with random land, countries, economies and companies.</span></button>
       <button class="intro-mode" data-a="introMode" data-x="online"><b>Online</b><span>Same two worlds, but against real players. PvP comes later — it is not built yet.</span></button>
     </div>
-    <button class="btn" data-a="introMode" data-x="minigames" style="margin-top:4px">🎮 Mini Games — no country needed</button>
+    <button class="btn" data-a="introMode" data-x="minigames" style="margin-top:4px">🎮 App Store — no country needed</button>
     <div id="inheritStep" class="intro-step"></div>`;
   $('inherit').classList.add('open');
 }
@@ -1061,7 +1061,7 @@ function renderInheritStep() {
     if (sel) sel.addEventListener('change', updateInheritInfo);
     updateInheritInfo();
   } else if (UI.introMode === 'minigames') {
-    step.innerHTML = `<div class="inherit-line">Mini Games</div>
+    step.innerHTML = `<div class="inherit-line">App Store</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">The battle grid, on its own. No country, no war, no consequences — just you against the enemy, round after round.</p>
       <label style="color:#bbb;font-size:14px;font-weight:800;text-align:left;width:min(480px,90vw)">Board — size and shape</label>
       <select id="miniBoard" aria-label="Choose a battle board">${BATTLE_SIZE_OPTIONS.map(o => `<option value="${o.id}" ${o.id === '6x6' ? 'selected' : ''}>${o.label}${o.shape !== 'grid' ? ' · ' + o.shape : ''}</option>`).join('')}</select>
@@ -2227,7 +2227,7 @@ function battleTickRender(b) {
   battleAITurn(b);
 }
 function miniModalHTML(b) {
-  return `<h2>${ICONS.minigames} Mini Games — battle grid</h2><p class="muted small">Standalone · No country, no consequences · ${b.w} × ${b.h}${b.shape !== 'grid' ? ' · ' + b.shape : ''} board</p>` + battleHTML(b, { tile: 'miniTile', tool: 'miniTool', leave: 'miniLeave', wait: 'miniWait', again: 'miniAgain' });
+  return `<h2>${ICONS.minigames} App Store — battle grid</h2><p class="muted small">Standalone · No country, no consequences · ${b.w} × ${b.h}${b.shape !== 'grid' ? ' · ' + b.shape : ''} board</p>` + battleHTML(b, { tile: 'miniTile', tool: 'miniTool', leave: 'miniLeave', wait: 'miniWait', again: 'miniAgain' });
 }
 PANELS.wartaunt = () => {
   const plan = UI.pendingWarPlan; if (!plan) return panelShell('War', '', '<p class="muted">Pick a country to invade first.</p>');
@@ -2242,11 +2242,11 @@ PANELS.warbattle = () => {
 };
 PANELS.minigames = () => {
   const b = UI.miniPanelBattle;
-  if (!b) return panelShell('Mini Games', 'Battle grid, no country needed — no consequences, play again as much as you like.',
+  if (!b) return panelShell('App Store', 'Battle grid, no country needed — no consequences, play again as much as you like.',
     `<div class="row wrap">${BATTLE_SIZE_OPTIONS.map(o => `<button class="btn" data-a="miniPanelStart" data-x="${o.id}">${o.shape === 'ring' ? '⭕' : '▦'} ${o.label}${o.shape !== 'grid' ? ' · ' + o.shape : ''}</button>`).join('')}</div>
     <p class="muted small">Pick a board: smaller than 6×6, 6×6, bigger, wide, tall, or a ring. Each side starts with 50 units in a corner, and every tile you own makes 1 unit per second.</p>`);
   battleTickRender(b);
-  return panelShell('Mini Games — battle grid', 'Standalone · No country, no consequences', battleHTML(b, { tile: 'miniPanelTile', tool: 'miniPanelTool', leave: 'miniPanelLeave', again: 'miniPanelAgain' }));
+  return panelShell('App Store — battle grid', 'Standalone · No country, no consequences', battleHTML(b, { tile: 'miniPanelTile', tool: 'miniPanelTool', leave: 'miniPanelLeave', again: 'miniPanelAgain' }));
 };
 const militaryBody = () => {
   const cs = country(S.home);
@@ -2402,7 +2402,7 @@ PANELS.settings = () => {
   return panelShell('Settings', '',
     `<div class="kv"><span>Sound volume</span><span><input type="range" min="0" max="1" step="0.1" value="${S.settings.vol}" data-in="vol" data-x=""> ${Math.round(S.settings.vol * 100)}%</span></div>
     <div class="kv"><span>Map motion (vehicles)</span><button class="btn" data-a="toggleMotion">${S.settings.motion ? 'ON' : 'OFF'}</button></div>
-    <div class="kv"><span>Mini-games</span><button class="btn" data-a="toggleMinigames">${minigamesEnabled() ? 'ON' : 'OFF'}</button></div>
+    <div class="kv"><span>App Store</span><button class="btn" data-a="toggleMinigames">${minigamesEnabled() ? 'ON' : 'OFF'}</button></div>
     <div class="kv"><span>War battle board</span><span>${['4x4', '6x6', '8x8', '10x10'].map(s => `<button class="btn small ${(S.settings.battleSize || '6x6') === s ? 'on' : ''}" data-a="setBattleSize" data-x="${s}">${s}</button>`).join(' ')}</span></div>
     <div class="kv"><span>Save</span><b>IndexedDB, full history, no size cap</b></div>
     <button class="btn" data-a="exportSave">COPY SAVE TO CLIPBOARD</button>
@@ -2495,20 +2495,22 @@ function sportScoresHTML() {
 // from this menu so nothing that was here is lost.
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
-  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx' }[UI.mgGame];
-    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball' }[UI.mgGame];
-    if (UI.inPhone) return panelShell('Mini Games', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
-    return panelShell('Mini Games', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← Mini Games</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
+  if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey') {
+    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ea' }[UI.mgGame];
+    const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey' }[UI.mgGame];
+    if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
+    return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
   }
   if (UI.mgGame === 'battle') return OLD_MINIGAMES_PANEL();
-  return panelShell('Mini Games', '', `<div class="card in"><h3>Pick a game</h3>
+  return panelShell('App Store', '', `<div class="card in"><h3>Pick a game</h3>
     <button class="btn3d orange wide" data-a="mgplay" data-x="pro">🏈 PRO FOOTBALL · Hashmark GM</button>
     <p class="muted small">Franchise, MyGM and My Team. Real nicknames only: Ravens, Cowboys, Packers.</p>
     <button class="btn3d orange wide" data-a="mgplay" data-x="college">🎓 COLLEGE FOOTBALL · Hashmark College</button>
     <p class="muted small">States only: Ohio, Alabama, Texas. Recruiting, transfer portal, NIL.</p>
     <button class="btn3d orange wide" data-a="mgplay" data-x="baseball">⚾ BASEBALL · Pennant GM</button>
     <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Same 30 teams as Worl Sports.</p>
+    <button class="btn3d orange wide" data-a="mgplay" data-x="hockey">🏒 HOCKEY · Blueline GM</button>
+    <p class="muted small">Franchise, MyGM, MyPlayer and My Team. Premier Hockey Association.</p>
     <button class="btn wide" data-a="mgplay" data-x="battle">⚔️ BATTLE BOARD · the 6×6 war mini-game</button>
     <button class="btn wide" data-a="panel" data-x="sports">Worl Sports · football, baseball &amp; basketball leagues</button></div>`);
 };
@@ -2988,7 +2990,7 @@ const MENU_ITEMS = [
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['markets', ICONS.markets, 'Trade'],
   ['radio', '📻', 'Robot Radio'],
-  ['minigames', '🎮', 'Mini Games'],
+  ['minigames', '🎮', 'App Store'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
 ];
 function moreSheet() {
