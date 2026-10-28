@@ -17,17 +17,20 @@ const MapView = (() => {
   // View hierarchy (not game modes): world -> country -> region.
   // The world shows countries only: no region borders, no gold dots.
   // Tapping a country goes to that country alone, sectioned by its
-  // regions (US states for now — other countries' region shapes are
-  // a later data load, so they show unsectioned). Tapping a region
-  // goes to that region alone. Gold dots show only inside a region
-  // view, and only that region's own capital.
-  // Regions are NAMED shapes (US_STATE_RINGS, converted from us-atlas
-  // with state names) — never matched by bbox or signature, so no
-  // wrong state can slip in (Connecticut's ring once did, as
+  // real regions: the USA by its 50 states, every other country by
+  // its own first-level regions (WORLD_REGIONS, converted from
+  // Natural Earth admin-1). Tapping a region goes to that region
+  // alone on its own map — the USA's regions open as 5-state cluster
+  // maps, other countries' regions open alone. Gold dots show only
+  // inside a cluster map (those states' capitals) and inside a
+  // single-region view (that region's capital).
+  // Regions are NAMED shapes — never matched by bbox or signature,
+  // so no wrong region can slip in (Connecticut's ring once did, as
   // "Long Island", because its box fits inside New York's).
-  let viewKind = 'world'; // 'world' | 'country' | 'region'
+  let viewKind = 'world'; // 'world' | 'country' | 'region' | 'cluster' | 'regionMap'
   let viewA3 = null;      // country in country/region views
   let viewRegion = null;  // state name in region views
+  let viewRegionName = null; // world-region name in regionMap views
   const stateEntry = name => (typeof US_STATE_RINGS !== 'undefined' ? US_STATE_RINGS.find(s => s.name === name) : null);
   const regionRings = name => { const st = stateEntry(name); return st ? st.rings : []; };
   const regionBox = name => {
@@ -88,6 +91,39 @@ const MapView = (() => {
   };
   const clusterForState = name => CLUSTER_MAPS.findIndex(list => list.includes(name));
   const isClusterState = name => clusterForState(name) >= 0;
+  // World regions: every non-USA country's real first-level regions
+  // (WORLD_REGIONS, converted from Natural Earth admin-1). The USA
+  // is excluded — it keeps its 5-state cluster maps.
+  const worldRegionsFor = a3 => (typeof WORLD_REGIONS !== 'undefined' ? WORLD_REGIONS.filter(r => r.a3 === a3) : []);
+  const worldRegionEntry = (a3, name) => worldRegionsFor(a3).find(r => r.name === name) || null;
+  const worldRegionBox = (a3, name) => {
+    const e = worldRegionEntry(a3, name); if (!e) return null;
+    const b = e.box;
+    if (b[2] - b[0] <= 300) return b;
+    // Antimeridian wrap (a region crossing 180°): frame its largest
+    // ring instead of the whole world.
+    let best = null, bestA = -1;
+    e.rings.forEach(ring => {
+      let rx0 = 1e9, ry0 = 1e9, rx1 = -1e9, ry1 = -1e9;
+      ring.forEach(p => { rx0 = Math.min(rx0, p[0]); ry0 = Math.min(ry0, p[1]); rx1 = Math.max(rx1, p[0]); ry1 = Math.max(ry1, p[1]); });
+      const a = (rx1 - rx0) * (ry1 - ry0);
+      if (a > bestA) { bestA = a; best = [rx0, ry0, rx1, ry1]; }
+    });
+    return best || b;
+  };
+  const worldRegionPathsCache = {};
+  const worldRegionPaths = (a3, name) => {
+    const key = a3 + '|' + name;
+    if (!worldRegionPathsCache[key]) {
+      const e = worldRegionEntry(a3, name);
+      worldRegionPathsCache[key] = e ? e.rings.map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; }) : [];
+    }
+    return worldRegionPathsCache[key];
+  };
+  const worldRegionAt = (a3, mx, my) => {
+    for (const r of worldRegionsFor(a3)) { if (worldRegionPaths(a3, r.name).some(p => hit.isPointInPath(p, mx, my))) return r.name; }
+    return null;
+  };
   const regionPathsCache = {};
   const regionPaths = name => {
     if (!regionPathsCache[name]) regionPathsCache[name] = regionRings(name).map(ring => { const p = new Path2D(); ring.forEach((pt, i) => { if (i === 0) p.moveTo(pt[0], pt[1]); else p.lineTo(pt[0], pt[1]); }); p.closePath(); return p; });
@@ -95,10 +131,12 @@ const MapView = (() => {
   };
   const pointInRegion = (name, mx, my) => regionPaths(name).some(p => hit.isPointInPath(p, mx, my));
   const regionAt = (mx, my) => {
-    // Only the USA has named regions so far.
-    if (viewA3 !== 'USA' || typeof US_STATE_RINGS === 'undefined') return null;
-    for (const st of US_STATE_RINGS) { if (pointInRegion(st.name, mx, my)) return st.name; }
-    return null;
+    if (viewA3 === 'USA') {
+      if (typeof US_STATE_RINGS === 'undefined') return null;
+      for (const st of US_STATE_RINGS) { if (pointInRegion(st.name, mx, my)) return st.name; }
+      return null;
+    }
+    return worldRegionAt(viewA3, mx, my);
   };
   const frameBox = box => {
     const [x0, y0, x1, y1] = box;
@@ -107,9 +145,9 @@ const MapView = (() => {
     v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s;
     clampView(); dirty = true;
   };
-  const resetView = () => { viewKind = 'world'; viewA3 = null; viewRegion = null; };
+  const resetView = () => { viewKind = 'world'; viewA3 = null; viewRegion = null; viewRegionName = null; };
   const enterCountry = a3 => {
-    viewKind = 'country'; viewA3 = a3; viewRegion = null;
+    viewKind = 'country'; viewA3 = a3; viewRegion = null; viewRegionName = null;
     if (a3 === 'USA' && typeof US_STATE_RINGS !== 'undefined') {
       // Frame the 48 contiguous states (Alaska/Hawaii draw when panned to).
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -135,6 +173,20 @@ const MapView = (() => {
     // behind this map, so you can never zoom or pan out to it.
     if (viewKind === 'cluster') {
       const box = clusterBox();
+      if (box) {
+        const [x0, y0, x1, y1] = box;
+        const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
+        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
+        v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
+        return;
+      }
+    }
+    // RegionMap view is its own map: zoom stops at the region filling
+    // the screen, and panning keeps the region on screen, so you can
+    // never zoom or pan out into the world behind it.
+    if (viewKind === 'regionMap') {
+      const box = worldRegionBox(viewA3, viewRegionName);
       if (box) {
         const [x0, y0, x1, y1] = box;
         const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
@@ -179,22 +231,36 @@ const MapView = (() => {
       clusterRings().forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
       return;
     }
+    // RegionMap view: only that world region's shape, alone on the
+    // sea. No dots — region capitals are not in the data yet.
+    if (viewKind === 'regionMap') {
+      c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
+      const e = worldRegionEntry(viewA3, viewRegionName);
+      if (e) e.rings.forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
+      return;
+    }
     // Region view: only that region's shape, alone on the sea.
     if (viewKind === 'region') {
       c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
       regionRings(viewRegion).forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
       return;
     }
-    // Country view: the country alone, sectioned by its regions.
+    // Country view: the country alone, sectioned by its real regions.
     // The USA is its 50 state rings; other countries are their own
-    // shape until their region data lands.
+    // first-level regions (WORLD_REGIONS). Countries with no region
+    // data (Palestine, South Sudan, Vatican) keep their single shape.
     if (viewKind === 'country') {
       c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
       if (viewA3 === 'USA' && typeof US_STATE_RINGS !== 'undefined') {
         US_STATE_RINGS.forEach(st => st.rings.forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); }));
       } else {
-        const k = W.byA3[viewA3];
-        if (k && k.hasShape) { c.fill(k.path); c.stroke(k.path); }
+        const wregs = worldRegionsFor(viewA3);
+        if (wregs.length) {
+          wregs.forEach(rg => rg.rings.forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); }));
+        } else {
+          const k = W.byA3[viewA3];
+          if (k && k.hasShape) { c.fill(k.path); c.stroke(k.path); }
+        }
       }
       return;
     }
@@ -580,6 +646,10 @@ const MapView = (() => {
       }
       return;
     }
+    // RegionMap view: shapes only. No pills, no cities, no vehicles,
+    // no military — nothing from the world. No dots either: region
+    // capitals are not in the data yet.
+    if (viewKind === 'regionMap') return;
     if (st && st.settings.motion && layerOn('vehicles')) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co) return;
@@ -732,8 +802,8 @@ const MapView = (() => {
       // underneath, which opens the country panel.
       const vk = vehicleAt(sx, sy);
       if (vk != null) { handlers.vehicle && handlers.vehicle(vk); return; }
-      // In a region or cluster view, land taps stay in that map.
-      if (viewKind === 'region' || viewKind === 'cluster') return;
+      // In a region, cluster, or regionMap view, land taps stay in that map.
+      if (viewKind === 'region' || viewKind === 'cluster' || viewKind === 'regionMap') return;
       // In a country view, a tap on a region opens that region's
       // Go popup; any other tap stays in the country view.
       if (viewKind === 'country') {
@@ -782,12 +852,14 @@ const MapView = (() => {
     home() { resetView(); const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
     world() { resetView(); flyTo(MAP_W / 2, MAP_H / 2, 0); },
     showCountry(a3) { enterCountry(a3); },
-    showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; const box = regionBox(region); if (box) frameBox(box); },
-    showCluster(a3, state) { viewCluster = Math.max(0, clusterForState(state)); viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; const box = clusterBox(); if (box) frameBox(box); },
+    showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; viewRegionName = null; const box = regionBox(region); if (box) frameBox(box); },
+    showCluster(a3, state) { viewCluster = Math.max(0, clusterForState(state)); viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; viewRegionName = null; const box = clusterBox(); if (box) frameBox(box); },
     isClusterState(name) { return isClusterState(name); },
+    showRegionMap(a3, region) { viewKind = 'regionMap'; viewA3 = a3; viewRegion = null; viewRegionName = region; const box = worldRegionBox(a3, region); if (box) frameBox(box); },
+    isWorldRegion(a3, name) { return !!worldRegionEntry(a3, name); },
     exitToWorld() { resetView(); fit(); dirty = true; },
-    exitToCountry() { if ((viewKind === 'region' || viewKind === 'cluster') && viewA3) enterCountry(viewA3); },
-    viewInfo() { return { kind: viewKind, a3: viewA3, region: viewRegion }; },
+    exitToCountry() { if ((viewKind === 'region' || viewKind === 'cluster' || viewKind === 'regionMap') && viewA3) enterCountry(viewA3); },
+    viewInfo() { return { kind: viewKind, a3: viewA3, region: viewKind === 'regionMap' ? viewRegionName : viewRegion }; },
 
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
     // Headless test hooks only: advance vehicles one step and read

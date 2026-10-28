@@ -502,6 +502,10 @@ function renderHUD() {
       const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
       return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
     }
+    if (vi.kind === 'regionMap') {
+      const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
+      return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
+    }
     return '';
   })();
   $('hud').innerHTML = `
@@ -3299,7 +3303,7 @@ const A = {
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
-  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0], p[1]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
+  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isWorldRegion && MapView.isWorldRegion(p[0], p[1])) MapView.showRegionMap(p[0], p[1]); else if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0], p[1]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
   exitToWorld: () => { MapView.exitToWorld(); renderHUD(); },
   exitToCountry: () => { MapView.exitToCountry(); renderHUD(); },
   countryPanel: x => { openCountryPanel(x); },
