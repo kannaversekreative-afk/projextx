@@ -1038,8 +1038,7 @@ function renderInheritStep() {
     step.innerHTML = `<div class="inherit-line">Offline</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">Play on your own, no other players.</p>
       <button class="btn3d orange wide" data-a="introMode" data-x="world">🌍 WORLD — the real world as it is today</button>
-      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — generated land, countries, economies, companies</button>
-      <button class="btn3d wide" data-a="introMode" data-x="state">🗺️ STATE — one state as your whole world (test: New York)</button>`;
+      <button class="btn3d wide" data-a="introMode" data-x="random">🎲 RANDOM WORLD — generated land, countries, economies, companies</button>`;
   } else if (UI.introMode === 'online') {
     step.innerHTML = `<div class="inherit-line">Online</div>
       <p style="color:#bbb;font-size:14px;font-weight:800">The same two worlds, against real players. PvP is coming later — it is not built yet, and nothing here pretends otherwise: there are no AI rivals dressed up as online players.</p>
@@ -1083,14 +1082,6 @@ function renderInheritStep() {
     const updateInheritInfo = () => { const kk = W.byA3[sel.value]; if (!kk) return; if (inp) inp.value = kk.name; if (infoEl) { const cap = W.cities[kk.capital]; infoEl.textContent = `Capital: ${cap ? cap.name : '—'} · ${fmtPop(kk.pop0)} people · GDP ${fmtMoney(kk.gdp0 * 1e6, true)} · ${inheritDifficulty(kk)}`; } };
     if (sel) sel.addEventListener('change', updateInheritInfo);
     updateInheritInfo();
-  } else if (UI.introMode === 'state') {
-    // State start (test slice): New York only. The full 48-state
-    // picker comes after this test — no broken options are offered.
-    step.innerHTML = `<div class="inherit-line">You start with one state</div>
-      <select id="inheritState" aria-label="Choose a state to start in"><option value="New York" selected>New York</option></select>
-      <div id="inheritInfo" style="color:#bbb;font-size:14px;font-weight:800">Capital: Albany · the whole world is this state, alone on screen</div>
-      <p>State start: one state as your whole world, in its real shape, filling the screen. New York is the test start — more states next.</p>
-      <button class="btn3d orange wide" data-a="stateContinue">START IN NEW YORK</button>`;
   }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
@@ -1107,22 +1098,16 @@ function chooseMode() {
     <div class="modes">
       <button class="mode" data-a="pickMode" data-x="normal"><div class="mode-ic">⏳</div><b>Normal</b><span>No time limit. Press Age to move a year forward, vehicles keep moving while you wait. At the end you get a final score for population, money and how far you beat the market.</span></button>
       <button class="mode" data-a="pickMode" data-x="infinite"><div class="mode-ic">♾️</div><b>Infinite</b><span>No goal and no end. Press Age to move a year forward whenever you want.</span></button>
-      <button class="mode" data-a="pickMode" data-x="state"><div class="mode-ic">🗺️</div><b>State</b><span>Start with one state as your whole world. Test start: New York.</span></button>
+
     </div>`, 'center');
 }
 function startPick() {
   closeModal(); UI.pick = { a3: null };
-  // State start (test slice): New York is preselected, framed alone
-  // on screen. The full 48-state picker comes after this test.
-  if (UI.mode === 'state') { UI.pick.state = 'New York'; UI.pick.a3 = 'USA'; const b = MapView.stateBox('New York'); if (b) MapView.frameBox(b[0], b[1], b[2], b[3]); renderPick(); return; }
+
   MapView.setPick(true); MapView.world(); renderPick();
 }
 function renderPick() {
-  if (UI.mode === 'state') {
-    $('hud').innerHTML = `<div class="pick-top card"><b>Start in New York</b><span class="muted">One state as your whole world. New York is the test start — more states next.</span>
-      <div style="margin-top:8px"><button class="btn" data-a="confirmState">Start in New York →</button></div></div>`;
-    return;
-  }
+
   const a3 = UI.pick.a3, k = a3 && W.byA3[a3];
   const q = (UI.pq || '').trim().toLowerCase();
   const list = q ? W.countries.filter(c => c.playable && c.capital != null && c.name.toLowerCase().includes(q)).slice(0, 6) : [];
@@ -1155,11 +1140,8 @@ function enterGame(returning) {
   if (da + ca > 0) setTimeout(() => toast(`+${fmtMoney(da + ca, true)} added to your cash`, 'good'), 600);
   if (typeof applyCapitalName === 'function') { try { applyCapitalName(); } catch (e) {} }
   renderHUD();
-  // State world: frame the picked state alone, filling the screen —
-  // not the home country. No tutorial yet; it arrives with the
-  // capital-dot office flow.
-  if (S.mode === 'state') { const b = MapView.stateBox(S.state); if (b) MapView.frameBox(b[0], b[1], b[2], b[3]); else MapView.home(); } else MapView.home();
-  if (returning) welcomeBack(); else S.tutorial = S.mode === 'state' ? -1 : 0;
+  MapView.home();
+  if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
 }
 const TUT = [
@@ -3238,12 +3220,12 @@ const A = {
   pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
   confirmCountry: () => nameCompany(),
-  confirmState: () => nameCompany(),
+
   swatch: (x, el) => { UI.color = x; document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === el)); },
   beginGame: () => {
     const name = ($('cname').value || '').trim() || 'Tycoon Co.';
     const look = (UI.pickLooks || [])[UI.pickLookIdx || 0] || null;
-    if (UI.mode === 'state') { S = newGame({ mode: 'state', home: 'USA', state: UI.pick.state || 'New York', name, color: UI.color, look }); save(); enterGame(false); return; }
+
     S = newGame({ mode: UI.mode, home: UI.pick.a3, name, color: UI.color, look }); save(); enterGame(false);
   },
   introMode: x => {
@@ -3252,7 +3234,7 @@ const A = {
     // lists generated countries; leaving it restores real Earth, so a
     // later World game can never inherit a generated map.
     if (x === 'random' && typeof switchWorldToRandom === 'function') { UI.randomSeed = Math.floor(Math.random() * 1e9); switchWorldToRandom(UI.randomSeed); }
-    else if ((x === 'world' || x === 'offline' || x === 'state') && typeof switchWorldToReal === 'function') switchWorldToReal();
+    else if ((x === 'world' || x === 'offline') && typeof switchWorldToReal === 'function') switchWorldToReal();
     renderInheritStep();
   },
   introRandom: () => { const sel = document.getElementById('inheritCountry'); if (!sel) return; const list = W.playable; sel.value = list[Math.floor(Math.random() * list.length)].a3; sel.dispatchEvent(new Event('change')); },
@@ -3280,10 +3262,7 @@ const A = {
     const inp = document.getElementById('inheritName'); const countryName = inp ? (inp.value.trim() || W.byA3[a3].name) : W.byA3[a3].name;
     S = newGame({ mode: 'infinite', home: a3, leader: true, name: 'Leader', countryName, look: (UI.inheritLooks || [])[UI.inheritLookIdx || 0] || null }); save(); enterGame(false);
   },
-  stateContinue: () => {
-    const sel = document.getElementById('inheritState'); const state = sel ? sel.value : 'New York';
-    S = newGame({ mode: 'state', home: 'USA', state, leader: true, name: 'Leader' }); save(); enterGame(false);
-  },
+
   tutNext: () => { S.tutorial++; renderTutorial(); save(); },
   tutSkip: () => { S.tutorial = -1; renderTutorial(); save(); },
   panel: x => { if (UI.panel === x && !UI.stack.length) return closePanel(); if (x === 'markets') UI.q = ''; if (x === 'web') UI.web = { view: 'home', q: '', a3: null }; openPanel(x); },

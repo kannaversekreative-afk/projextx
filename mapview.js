@@ -14,23 +14,6 @@ const MapView = (() => {
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
   const COL = { sea: '#eaf2ff', sea2: '#eaf2ff', land: '#ffffff', home: '#dbeafe', border: 'rgba(47,124,246,0.35)', grid: 'rgba(47,124,246,0.08)' };
-  // One-state world (test slice: New York first). State rings in
-  // us-states.js are unlabeled, so a state's rings are the ones
-  // whose bbox sits inside that state's map bbox. The box below is
-  // tight on purpose: Block Island, RI (x 602.2) stays outside it,
-  // and every neighbouring state's ring sticks out of it on at
-  // least one side, so the filter returns exactly New York's rings
-  // (mainland, Long Island, Staten Island, small islands).
-  const STATE_BOX = { 'New York': [556.5, 354.0, 601.5, 385.5] };
-  const stateRings = name => {
-    const b = STATE_BOX[name]; if (!b || typeof US_STATE_BORDERS === 'undefined') return [];
-    return US_STATE_BORDERS.filter(ring => {
-      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      ring.forEach(p => { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
-      return x0 >= b[0] && x1 <= b[2] && y0 >= b[1] && y1 <= b[3];
-    });
-  };
-  const stateMode = st => st && st.mode === 'state' && st.state && STATE_BOX[st.state];
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
   function resize() {
@@ -55,15 +38,7 @@ const MapView = (() => {
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
-    // One-state world: only the picked state exists. Its rings are
-    // filled as land on the sea background; every other country and
-    // state is simply not drawn, so the state sits alone on screen.
-    if (stateMode(st)) {
-      const rings = stateRings(st.state);
-      c.fillStyle = COL.land; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
-      rings.forEach(ring => { c.beginPath(); ring.forEach((p, i) => { if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }); c.closePath(); c.fill(); c.stroke(); });
-      return;
-    }
+
     const [x0, y0] = toMap(0, 0), [x1, y1] = toMap(vw, vh);
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
@@ -486,8 +461,7 @@ const MapView = (() => {
     if (layerOn('cities')) {
       W.cities.forEach(ct => {
         if (ct.isCapital || !ct.isMajor) return;
-        // One-state world: only major cities inside the picked state.
-        if (st && st.mode === 'state' && st.state) { const b = STATE_BOX[st.state]; if (!b || ct.x < b[0] || ct.x > b[2] || ct.y < b[1] || ct.y > b[3]) return; }
+
         const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
         c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
@@ -539,8 +513,7 @@ const MapView = (() => {
     // capital-choose-business office flow is a separate build.
     if (layerOn('capitals') && typeof US_CAPITALS !== 'undefined') {
       US_CAPITALS.forEach(cp => {
-        // One-state world: only the picked state's capital dot.
-        if (st && st.mode === 'state' && st.state && cp.s !== st.state) return;
+
         const [sx, sy] = toScreen(cp.x, cp.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(2.5, Math.min(6, 2 + v.s * 0.8));
         c.fillStyle = '#FFD700'; c.strokeStyle = '#111827'; c.lineWidth = 2;
@@ -639,10 +612,7 @@ const MapView = (() => {
     zoom(f) { zoomAt(f, vw / 2, vh / 2); },
     home() { const st = S_(); if (!st) { fit(); return; } const k = W.byA3[st.home]; if (!k) { fit(); return; } const cap = (k.capital != null && W.cities[k.capital]) ? W.cities[k.capital] : null; const cx = cap ? cap.x : (k.box[0] + k.box[2]) / 2, cy = cap ? cap.y : (k.box[1] + k.box[3]) / 2; anim = null; const w = Math.max(8, k.box[2] - k.box[0]), h = Math.max(8, k.box[3] - k.box[1]); const ts = Math.min(8, Math.max(2.5, Math.min(vw / (w * 1.2), vh / (h * 1.4)))); const apply = () => { v.s = ts; v.x = vw / 2 - cx * ts; v.y = vh / 2 - cy * ts; clampView(); dirty = true; }; apply(); const sx = v.x, sy = v.y, ss = v.s; setTimeout(() => { if (Math.abs(v.s - ss) > 0.01 || Math.abs(v.x - sx) > 1 || Math.abs(v.y - sy) > 1) { apply(); } }, 600); return { s: v.s, x: v.x, y: v.y, capX: cx, capY: cy, vw: vw, vh: vh }; },
     world() { flyTo(MAP_W / 2, MAP_H / 2, 0); },
-    stateBox(name) { return STATE_BOX[name] || null; },
-    // Frame a map bbox the way fit() frames the world: the box fills
-    // the screen on the limiting dimension, same shape, nothing else.
-    frameBox(x0, y0, x1, y1) { const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0); anim = null; v.s = Math.max(vw / w, vh / h); v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s; clampView(); dirty = true; },
+
     vehicle(key) { const v = vehicleList(performance.now()).find(vd => vd.key === key); return v || null; },
     // Headless test hooks only: advance vehicles one step and read
     // their positions, so a harness can prove boats actually move.
