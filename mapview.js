@@ -717,24 +717,19 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
-    // Airport sites: main map only. White dots at NYC + the US/Canada
-    // capitals (capitals otherwise have no dot). Bought dots fill
-    // dark blue. Tapping a dot opens the buy sheet (see tap()).
-    if (viewKind === 'world') {
-      const hub = W.cities.find(c => c.code === 'NYC');
-      const spokes = [];
-      if (W.byA3['USA'] && W.cities[W.byA3['USA'].capital]) spokes.push(W.cities[W.byA3['USA'].capital]);
-      if (W.byA3['CAN'] && W.cities[W.byA3['CAN'].capital]) spokes.push(W.cities[W.byA3['CAN'].capital]);
-      if (hub && spokes.length) {
-        const onScreen = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
-        [hub, ...spokes].forEach(ct => {
-          const [sx, sy] = toScreen(ct.x, ct.y); if (!onScreen(sx, sy)) return;
-          const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          const bought = S && S.airports && S.airports['c' + ct.id];
-          c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
-          c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
-        });
-      }
+    // Capitals: every country gets a white dot at its capital, so
+    // airports and hubs can be bought anywhere in the world.
+    // Bought dots fill dark blue. Tapping a dot opens the buy
+    // sheet (see tap()).
+    if (viewKind === 'world' && layerOn('cities')) {
+      W.cities.forEach(ct => {
+        if (!ct.isCapital) return;
+        const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
+        const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
+        const bought = S && S.airports && S.airports['c' + ct.id];
+        c.fillStyle = bought ? '#2563eb' : '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+        c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
+      });
     }
     // Drawn routes: dotted routes + planes on the routes the player
     // drew (see route mode). Kind follows the endpoints: hub-hub
@@ -817,9 +812,8 @@ const MapView = (() => {
   function dotSites() {
     const out = [], seen = new Set();
     const push = (key, name, a3, x, y) => { if (seen.has(key)) return; seen.add(key); out.push({ key, name, a3, x, y }); };
-    (W.cities || []).forEach(ct => { if (ct.isMajor && !ct.isCapital) push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); });
+    (W.cities || []).forEach(ct => { if (ct.isMajor || ct.isCapital) push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); });
     if (typeof US_CAPITALS !== 'undefined') US_CAPITALS.forEach(st => push('us:' + st.s, st.c, 'USA', st.x, st.y));
-    ['USA', 'CAN'].forEach(a3 => { const k = W.byA3 && W.byA3[a3]; if (k && W.cities[k.capital]) { const ct = W.cities[k.capital]; push('c' + ct.id, ct.name, ct.a3, ct.x, ct.y); } });
     return out;
   }
   function dotAt(sx, sy) {
