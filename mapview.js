@@ -300,15 +300,6 @@ const MapView = (() => {
     });
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
-    // Antarctica at the bottom, named United Council of the Worl
-    // (not a playable country — a labeled landmass, visual only).
-    // Points are [x, height above the map bottom]; the peninsula
-    // juts up toward South America around x 620-720.
-    c.fillStyle = '#e6eefb'; c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
-    c.beginPath();
-    const ant = [[0, 60], [150, 90], [300, 70], [450, 95], [580, 80], [620, 150], [700, 140], [720, 90], [850, 75], [1000, 100], [1150, 70], [1300, 90], [1450, 65], [1600, 85], [1750, 70], [1900, 90], [2000, 60]];
-    ant.forEach((p, i) => { const y = MAP_H - p[1]; if (i === 0) c.moveTo(p[0], y); else c.lineTo(p[0], y); });
-    c.lineTo(MAP_W, MAP_H); c.lineTo(0, MAP_H); c.closePath(); c.fill(); c.stroke();
     if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
     if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
@@ -724,61 +715,23 @@ const MapView = (() => {
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });
     }
-    // Airports: main map only. NYC hub + US/Canada capital spokes,
-    // dotted routes, planes flying. Markers are regular blue dots.
-    // Visual only: tapping still selects the country underneath.
+    // Airport sites: main map only. White dots at NYC + the US/Canada
+    // capitals (capitals otherwise have no dot). Routes and planes
+    // removed — the network is player-built via buy. Tapping still
+    // selects the country underneath for now.
     if (viewKind === 'world') {
       const hub = W.cities.find(c => c.code === 'NYC');
       const spokes = [];
       if (W.byA3['USA'] && W.cities[W.byA3['USA'].capital]) spokes.push(W.cities[W.byA3['USA'].capital]);
       if (W.byA3['CAN'] && W.cities[W.byA3['CAN'].capital]) spokes.push(W.cities[W.byA3['CAN'].capital]);
       if (hub && spokes.length) {
-        const [hx, hy] = toScreen(hub.x, hub.y);
         const onScreen = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
-        const routeStyle = 'dotted'; // dotted | dashed | solid
-        const planeModel = 'jet'; // jet | prop | jumbo
-        spokes.forEach((sp, i) => {
-          const [sx, sy] = toScreen(sp.x, sp.y);
-          if (!onScreen(hx, hy) && !onScreen(sx, sy)) return;
-          c.strokeStyle = '#16233f'; c.lineWidth = 3; c.lineCap = 'round';
-          c.setLineDash(routeStyle === 'dotted' ? [0.1, 10] : routeStyle === 'dashed' ? [10, 8] : []);
-          c.beginPath(); c.moveTo(hx, hy); c.lineTo(sx, sy); c.stroke();
-          c.setLineDash([]);
-          // Plane flying the route, ping-pong like the war fighters.
-          const t = (((now / 1000) * 0.12 + i * 0.6) % 2), f = t < 1 ? t : 2 - t;
-          const px = hx + (sx - hx) * f, py = hy + (sy - hy) * f;
-          const ang = Math.atan2(sy - hy, sx - hx) + (t < 1 ? 0 : Math.PI);
-          c.save(); c.translate(px, py); c.rotate(ang);
-          c.fillStyle = '#16233f';
-          if (planeModel === 'prop') {
-            c.beginPath(); c.ellipse(0, 0, 9, 3, 0, 0, 7); c.fill();
-            c.fillRect(-1, -9, 3, 18); c.fillRect(-8, -4, 2, 8);
-            c.strokeStyle = '#16233f'; c.lineWidth = 2;
-            c.beginPath(); c.moveTo(10, -4); c.lineTo(10, 4); c.stroke();
-          } else if (planeModel === 'jumbo') {
-            c.scale(1.5, 1.5);
-            c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
-          } else {
-            c.beginPath(); c.moveTo(11, 0); c.lineTo(-7, 7); c.lineTo(-3, 0); c.lineTo(-7, -7); c.closePath(); c.fill();
-          }
-          c.restore();
-        });
-        // Regular blue dots for hub + spokes (gold hub ring removed).
         [hub, ...spokes].forEach(ct => {
           const [sx, sy] = toScreen(ct.x, ct.y); if (!onScreen(sx, sy)) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          c.fillStyle = '#2563eb'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
+          c.fillStyle = '#ffffff'; c.strokeStyle = '#16233f'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
-      }
-    }
-    // United Council of the Worl: plain text label on Antarctica
-    // (pills are gone, so this is text, not a pill).
-    if (viewKind === 'world') {
-      const [ax, ay] = toScreen(1100, MAP_H - 45);
-      if (ax > -200 && ay > -20 && ax < vw + 200 && ay < vh + 20) {
-        c.fillStyle = '#16233f'; c.font = '800 15px Nunito, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.fillText('United Council of the Worl', ax, ay);
       }
     }
     // Placed businesses: a circle on the map, wherever the player
