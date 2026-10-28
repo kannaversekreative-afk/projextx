@@ -230,10 +230,10 @@ function flowBoardFull() { const c = S.co && S.co[S.home]; return !!c && typeof 
 function flowCanExpand() { return !!S.flow && flowHasOffice(S.home) && flowBoardFull(); }
 function flowDominated(a3) { return !!S.flow && controlled(a3) && flowHasOffice(a3); }
 function buyOffice(a3) {
-  if (!S.flow) return 'Offices are part of the new-game flow.';
+  if (!S.flow && a3 !== S.home) return 'Offices are part of the new-game flow.';
   const c = S.co && S.co[a3]; if (!c) return 'No company there.';
   if (c.office) return 'You already own an office there.';
-  if (!controlled(a3)) return 'Control the flagship company first (50%+ stake).';
+  if ((S.flow || a3 !== S.home) && !controlled(a3)) return 'Control the flagship company first (50%+ stake).';
   if (S.cash < OFFICE_COST) return 'Not enough business cash.';
   S.cash -= OFFICE_COST; c.office = { day: S.day, cost: OFFICE_COST };
   news('Business', `Office opened in ${cname(a3)}.`, a3);
