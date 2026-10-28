@@ -348,9 +348,10 @@ const MapView = (() => {
       out.push([back[0] + Math.sin(now / 700) * 4, back[1] - 6, ang + Math.PI, c => fighter(c, Math.max(1, country(w.b).milLv.air)), false, { kind: 'fighter', a3: w.b, other: w.a, war: true, idx: 1, key: `war:${w.a}-${w.b}-1` }]);
     });
     const show = [st.home];
-    if (v.s > 1.4) Object.keys(st.countries).sort((a, b) => milPower(b) - milPower(a)).slice(0, 12).forEach(a => { if (a !== st.home) show.push(a); });
+    if (v.s > 1.4) Object.keys(st.countries).filter(a => { const cs = st.countries[a]; return cs && cs.milLv; }).sort((a, b) => milPower(b) - milPower(a)).slice(0, 12).forEach(a => { if (a !== st.home) show.push(a); });
     show.forEach((a3, i) => {
       const cs = st.countries[a3], cap = W.cities[W.byA3[a3].capital];
+      if (!cs || !cs.milLv || !cap) return;
       // Orbit radii were 9 (fighter) and 7 (warship) map units — smaller
       // than the sprites themselves, so military units spun in place over
       // their own capital. 26/28 map units is wider than any sprite, so
@@ -426,7 +427,13 @@ const MapView = (() => {
         const [sx, sy] = toScreen(x, y); if (!onScreen(sx, sy)) return;
         drawSprite(sx, sy, a, kShip, cc => u.type === 'plane' ? plane(cc, co.fleet, co.color) : u.type === 'container' ? containerShip(cc, co.fleet, co.color) : tanker(cc, co.fleet));
       });
-      military(now).forEach(([x, y, a, fn, isShip]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, kShip, fn); });
+      // A military failure must never blank the whole top layer: the
+      // zoom-only branch (v.s > 1.4) runs sea-routing code no other
+      // zoom touches, and one throw there used to clear every dot
+      // and pill, because drawTop clears the canvas first. Jets may
+      // drop out; the dots, pills and cities still draw, and the
+      // error is logged instead of swallowing the map.
+      try { military(now).forEach(([x, y, a, fn, isShip]) => { const [sx, sy] = toScreen(x, y); if (onScreen(sx, sy)) drawSprite(sx, sy, a, kShip, fn); }); } catch (e) { console.error('map military draw failed', e); }
     }
     if (!st) return;
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);
