@@ -53,7 +53,8 @@ const MapView = (() => {
     ['Alabama', 'Mississippi', 'Louisiana', 'Arkansas', 'Missouri'],
     ['Michigan', 'Indiana', 'Illinois', 'Wisconsin', 'Minnesota'],
     ['Iowa', 'Kansas', 'Nebraska', 'South Dakota', 'North Dakota'],
-    ['Oklahoma', 'Texas', 'New Mexico', 'Colorado', 'Wyoming']
+    ['Oklahoma', 'Texas', 'New Mexico', 'Colorado', 'Wyoming'],
+    ['Montana', 'Idaho', 'Utah', 'Arizona', 'Nevada']
   ];
   let viewCluster = 0;
   const clusterStates = () => CLUSTER_MAPS[viewCluster] || CLUSTER_MAPS[0];
