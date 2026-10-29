@@ -1142,15 +1142,15 @@ function showPlayScreen() {
   try { MapView.drawNow(); } catch (e) {}
   const has = !!(S && S.mode === 'inc');
   const cont = (has && S.companyName) ? `<div class="play-cont">Continuing ${esc(S.companyName)}</div>` : '';
-  // Full-screen map: the wordmark and PLAY float over it (no panel
-  // block). No THE — just WORL INC., centered. Reset floats in the
-  // bottom-left corner, out of the centered stack.
+  // Full-screen map: the wordmark sits dead-center, PLAY floats a
+  // little below it with a gap, Reset floats bottom-left. No panel
+  // block. No THE — just WORL INC.
   $('playscreen').innerHTML = `<div class="play-float"><div class="play-logo"><div class="play-main">WORL INC.</div></div>
-    ${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
+    <div class="play-below">${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
       <button class="play-btn danger" data-a="playResetYes">DELETE WORLD</button>
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
-    : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
-      ${has ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}`}
+    : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}`}</div>
+    ${(!UI.playConfirm && has) ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}
   </div>`;
   $('playscreen').classList.add('open');
 }
