@@ -993,6 +993,16 @@ function updateGameOrientation() {
   };
   requestAnimationFrame(tick);
 }
+let __worlVer = null;
+try { const _s = document.querySelector('script[src*="ui.js"]'); __worlVer = _s ? ((_s.src.match(/[?&]v=([^&]+)/) || [])[1] || null) : null; } catch (e) {}
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !__worlVer) return;
+  try {
+    const _t = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
+    const _m = _t.match(/ui\.js\?v=([^"'\s&]+)/);
+    if (_m && _m[1] !== __worlVer) location.reload();
+  } catch (e) {}
+});
 async function boot() {
   updateGameOrientation();
   window.addEventListener('resize', updateGameOrientation);
