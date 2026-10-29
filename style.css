@@ -6,13 +6,13 @@
   --font: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #ebf1fd; color: var(--ink); color-scheme: light; font-family: var(--font); font-weight: 700; }
+html, body { margin: 0; height: 100%; height: 100vh; height: 100dvh; overflow: hidden; background: #a3c6e6; color: var(--ink); color-scheme: light; font-family: var(--font); font-weight: 700; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
 button:disabled { opacity: 0.45; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(47,124,246,0.6); outline-offset: 2px; }
 input, select { font: inherit; }
 svg { display: block; }
-#map { position: fixed; inset: 0; touch-action: none; }
+#map { position: fixed; inset: 0; height: 100vh; height: 100dvh; width: 100vw; touch-action: none; }
 #map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #hud, #popup, #tut, #chud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hud > *, #popup > *, #tut > *, #chud > * { pointer-events: auto; }
@@ -461,7 +461,7 @@ body.in-city #hud { display: none; }
    tablet and a desktop are untouched, because they are already
    horizontal. Phone panels stay full-width sheets (see the override
    below), not the web side sheet on the right. */
-#game { position: fixed; inset: 0; overflow: hidden; }
+#game { position: fixed; inset: 0; height: 100vh; height: 100dvh; width: 100vw; overflow: hidden; }
 body.landscape-phone #game { position: fixed; inset: 0; top: auto; left: auto; width: auto; height: auto; transform: none; overflow: hidden; }
 body.landscape-phone #panel { left: auto; right: 12px; top: 12px; bottom: 12px; width: min(420px, 52%); max-height: none; }
 body.landscape-phone .popup { top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100% - 120px); }
@@ -1072,19 +1072,19 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .stmt-t { font-weight: 900; border-top: 2px solid var(--line); padding-top: 6px; }
 
 /* ---------- play screen + new-business flow (hh) ---------- */
-#playscreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; height: auto; z-index: 200; display: none; }
-#playscreen.open { display: block; }
-.play-float { position: absolute; inset: 0; }
-.play-logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; text-align: center; color: #0b1e3a; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
+#playscreen { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 200; display: none; flex-direction: column; }
+#playscreen.open { display: flex; }
+.play-map { flex: 6 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.play-logo { white-space: nowrap; text-align: center; color: #0b1e3a; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
 .play-main { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 900; font-size: clamp(40px, 11vw, 110px); line-height: 1.0; letter-spacing: 0.5px; margin: 0; }
-.play-below { position: absolute; left: 0; right: 0; top: calc(50% + clamp(40px, 11vw, 110px) / 2 + 28px); display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.play-reset { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); color: #0b1e3a; text-shadow: 0 1px 8px rgba(255,255,255,0.7); font-weight: 800; font-size: 14px; padding: 6px; }
-.play-btn { width: min(420px, 82vw); padding: 11px; border-radius: 20px; background: #3a4756; border: 2px solid #6e7f94; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+.play-panel { flex: 4 1 0; min-height: 230px; background: #2a3648; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 14px; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); }
+.play-reset { color: #9fb3c8; font-weight: 800; font-size: 14px; padding: 6px; }
+.play-btn { width: min(420px, 82vw); padding: 14px 11px; border-radius: 20px; background: #3a4756; border: 2px solid #6e7f94; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 .play-btn.danger { background: #8c2f2f; border-color: #c05a5a; }
-.play-link { color: #e6edf5; text-shadow: 0 1px 8px rgba(0,0,0,0.6); font-weight: 800; font-size: 14px; padding: 6px; }
-.play-cont { color: #0b1e3a; text-shadow: 0 1px 8px rgba(255,255,255,0.7); font-size: 14px; font-weight: 700; }
-.play-warn { color: #0b1e3a; text-shadow: 0 1px 8px rgba(255,255,255,0.7); font-weight: 800; text-align: center; max-width: 420px; margin: 0; }
-#create { position: fixed; top: 0; left: 0; right: 0; bottom: 0; height: auto; z-index: 210; display: none; background: #2a3648; color: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.play-link { color: #9fb3c8; font-weight: 800; font-size: 14px; padding: 6px; }
+.play-cont { color: #9fb3c8; font-size: 14px; font-weight: 700; }
+.play-warn { color: #fff; font-weight: 800; text-align: center; max-width: 420px; margin: 0; }
+#create { position: fixed; top: 0; left: 0; right: 0; bottom: 0; height: 100vh; height: 100dvh; z-index: 210; display: none; background: #2a3648; color: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #create.open { display: block; }
 .crt-head { position: sticky; top: 0; z-index: 2; background: #2a3648; display: flex; justify-content: space-between; align-items: center; padding: calc(20px + env(safe-area-inset-top)) 20px 12px; }
 .crt-head h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }

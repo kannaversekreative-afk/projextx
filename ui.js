@@ -1145,12 +1145,13 @@ function showPlayScreen() {
   // Full-screen map: the wordmark sits dead-center, PLAY floats a
   // little below it with a gap, Reset floats bottom-left. No panel
   // block. No THE — just WORL INC.
-  $('playscreen').innerHTML = `<div class="play-float"><div class="play-logo"><div class="play-main">WORL INC.</div></div>
-    <div class="play-below">${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
+  $('playscreen').innerHTML = `<div class="play-map"><div class="play-logo"><div class="play-main">WORL INC.</div></div></div>
+  <div class="play-panel">
+    ${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
       <button class="play-btn danger" data-a="playResetYes">DELETE WORLD</button>
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
-    : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}`}</div>
-    ${(!UI.playConfirm && has) ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}
+    : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
+      ${has ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}`}
   </div>`;
   $('playscreen').classList.add('open');
 }
