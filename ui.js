@@ -516,7 +516,6 @@ function renderHUD() {
     return '';
   })();
   $('hud').innerHTML = `
-  <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
