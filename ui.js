@@ -516,15 +516,7 @@ function renderHUD() {
     return '';
   })();
   $('hud').innerHTML = `
-  <button class="hud-pill hud-tl" data-a="panel" data-x="profile" aria-label="User profile">
-    <span class="hud-avatar">${(S.you && S.you.look && typeof portraitSVG === 'function') ? portraitSVG(S.you.look, 34) : esc(youName.charAt(0).toUpperCase())}</span>
-    <span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)}</small></span>
-  </button>
-  <button class="hud-pill hud-money" data-a="panel" data-x="bank" aria-label="Business money"><span>💰 ${fmtMoney(S.cash)}</span></button>
-  <button class="hud-pill hud-tr" data-a="newsPaper" aria-label="Newspaper">${fmtDate(S.day)}</button>
   <button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">📱</button>
-  <div class="airtabs" id="airtabs">${['routes', 'fleet', 'airline', 'more'].map(t => `<button data-a="airTab" data-x="${t}"${(UI.airTab || 'routes') === t ? ' class="sel"' : ''}>${t === 'routes' ? 'Routes' : t === 'fleet' ? 'Fleet' : t === 'airline' ? 'Airline' : 'More'}</button>`).join('')}</div>
-  ${viewBtns}
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
