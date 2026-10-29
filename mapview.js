@@ -482,10 +482,28 @@ const MapView = (() => {
       if (Array.isArray(S.routes)) {
         for (const r of S.routes) {
           const A = S.airports[r.from], B = S.airports[r.to];
-          if (!A || !B) continue;
-          const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.to); } }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.from); } }
+          if (!A && !B) continue;
+          const aLv = (A && A.level) || 1, bLv = (B && B.level) || 1;
+          if (A && B) {
+            if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.to); } }
+            if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.from); } }
+          }
+          // Site -> shop routes: a hub or airport connected straight
+          // to a business feeds people into the shop itself (biz.pop),
+          // at min(source level, shop level)/sec, capped like a site.
+          // No fare — the shop's sales multiplier is the payoff.
+          if (S.mode === 'inc' && S.incBiz) {
+            if (A && (A.type === 'hub' || A.type === 'airport') && !B && S.incBiz[r.to]) {
+              const bz = S.incBiz[r.to]; if (bz.pop === undefined) bz.pop = 0;
+              const bl = bz.level || 1;
+              if (bz.pop < bl * 20000) bz.pop = Math.min(bz.pop + Math.min(aLv, bl) * dt, bl * 20000);
+            }
+            if (B && (B.type === 'hub' || B.type === 'airport') && !A && S.incBiz[r.from]) {
+              const bz = S.incBiz[r.from]; if (bz.pop === undefined) bz.pop = 0;
+              const bl = bz.level || 1;
+              if (bz.pop < bl * 20000) bz.pop = Math.min(bz.pop + Math.min(bLv, bl) * dt, bl * 20000);
+            }
+          }
         }
       }
       // Percent flows: a route can carry a standing percent of
@@ -913,10 +931,24 @@ const MapView = (() => {
     // move by hand). The plane starts at the hub, so the loaded
     // leg runs hub to airport and the return leg comes back.
     const drawAirline = (now) => {
+      // A route end is a site, or a business dot (for hub/airport ->
+      // shop routes): its map position comes from the business record
+      // (new builds) or from the state/city tables (older saves).
+      const routeEnd = key => {
+        const s = S.airports && S.airports[key];
+        if (s) return s;
+        if (S && S.mode === 'inc' && S.incBiz && S.incBiz[key]) {
+          const b = S.incBiz[key];
+          if (b.x != null && b.y != null) return { x: b.x, y: b.y };
+          if (key.startsWith('us:') && typeof US_CAPITALS !== 'undefined') { const cap = US_CAPITALS.find(u => u.s === key.slice(3)); if (cap) return { x: cap.x, y: cap.y }; }
+          if (key.startsWith('c') && typeof W !== 'undefined' && W.cities) { const ct = W.cities.find(x => x.id === +key.slice(1)); if (ct) return { x: ct.x, y: ct.y }; }
+        }
+        return null;
+      };
       if (S && S.airports && Array.isArray(S.routes)) {
         const onScreen2 = (sx, sy) => sx > -40 && sy > -40 && sx < vw + 40 && sy < vh + 40;
         S.routes.forEach((r, idx) => {
-          const A0 = S.airports[r.from], B0 = S.airports[r.to];
+          const A0 = routeEnd(r.from), B0 = routeEnd(r.to);
           if (!A0 || !B0) return;
           const A = (A0.type === 'hub' && B0.type !== 'hub') ? A0 : (B0.type === 'hub' && A0.type !== 'hub') ? B0 : A0;
           const B = A === A0 ? B0 : A0;
@@ -1201,6 +1233,15 @@ const MapView = (() => {
         let pb = null, bd = 26;
         S.placed.forEach(b => { const [x, y] = toScreen(b.x, b.y); const d = Math.hypot(x - sx, y - sy); if (d < bd) { bd = d; pb = b; } });
         if (pb) { handlers.placed && handlers.placed(pb.id); return; }
+      }
+      // Shop-side connect: the player tapped CONNECT on a shop's
+      // sheet, then taps one of their airports or hubs to draw the
+      // route straight into the shop. Same auto-lock and stay-in-
+      // mode rules as route mode.
+      if (typeof UI !== 'undefined' && UI.connecting) {
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy, 34) : dotAt(sx, sy, 34);
+        if (best) handlers.connectDot && handlers.connectDot(best);
+        return;
       }
       // Route mode: the player tapped Draw route, then taps a dot
       // to draw the route there. A tap near a dot auto-locks onto

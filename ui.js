@@ -282,7 +282,7 @@ const chgVs = (c) => {
 
 // ---------- modals / panels ----------
 function openModal(html, kind) {
-  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null; UI.connecting = null;
   UI.modal = kind || 'sheet';
   $('modal').innerHTML = `<div class="scrim ${UI.modal}" data-a="scrim"><div class="mbox ${UI.modal}" data-stop>${UI.modal === 'sheet' ? `<button class="xbtn mclose" data-a="closeModal" aria-label="Close">${IC.close}</button>` : ''}${html}</div></div>`;
 }
@@ -297,7 +297,7 @@ function closeModal() { if (UI.modal === 'phone') { UI.phoneApp = null; UI.phone
 // opened from anywhere else (HUD pill, map, city) still use the
 // #panel page; phone apps always open inside the phone box.
 function openPanel(name, args) {
-  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null;
+  UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null; UI.connecting = null;
   if (UI.modal === 'phone') {
     if (UI.phoneApp) UI.phoneStack.push({ panel: UI.phoneApp, stack: UI.stack.slice() });
     UI.phoneApp = name; UI.panel = name; UI.stack = args ? [args] : [];
@@ -990,7 +990,7 @@ async function boot() {
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
   W = buildWorld();
   MapView.init();
-  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel); MapView.on('tradeDot', onTradeDotTap); MapView.on('tradeCancel', onTradeCancel);
+  MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('connectDot', onConnectDotTap); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel); MapView.on('tradeDot', onTradeDotTap); MapView.on('tradeCancel', onTradeCancel);
   MapView.on('region', openRegionGoPopup);
   MapView.on('place', placeBusiness); MapView.on('placed', openPlacedCard);
   MapView.on('empty', () => { if (!UI.pick) closePopup(); });
@@ -1396,11 +1396,12 @@ function onDotTap(dot) {
     (S.routes || []).filter(r => r.from === dot.key || r.to === dot.key).forEach(r => {
       const otherKey = r.from === dot.key ? r.to : r.from;
       const other = S.airports && S.airports[otherKey];
-      if (!other) return;
-      const kind = (owned.type === 'port' || other.type === 'port') ? 'Trade' : (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
-      const bottlenecked = owned.type !== 'port' && other.type !== 'port' && ((owned.type === 'hub' && other.type === 'airport') || (owned.type === 'airport' && other.type === 'hub')) && (other.level || 1) > lv;
-      html += `<p>→ ${esc(other.name)} (${kind})${bottlenecked ? ' ⚠' : ''} <button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
-      if (owned.type === 'port' || other.type === 'port') return;
+      const otherBiz = (!other && S.mode === 'inc' && S.incBiz) ? S.incBiz[otherKey] : null;
+      if (!other && !otherBiz) return;
+      const kind = otherBiz ? 'Shoppers' : (owned.type === 'port' || other.type === 'port') ? 'Trade' : (owned.type === 'hub' && other.type === 'hub') ? 'Cargo' : 'Passengers';
+      const bottlenecked = !!other && owned.type !== 'port' && other.type !== 'port' && ((owned.type === 'hub' && other.type === 'airport') || (owned.type === 'airport' && other.type === 'hub')) && (other.level || 1) > lv;
+      html += `<p>→ ${esc(other ? other.name : otherBiz.name)} (${kind})${bottlenecked ? ' ⚠' : ''} ${otherBiz ? '' : `<button class="btn3d" data-a="routeChange" data-x="${r.from}|${r.to}">Change</button> `}<button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
+      if (!other || owned.type === 'port' || other.type === 'port') return;
       const outPct = (S.flowPct && S.flowPct[dot.key + '|' + otherKey]) || 0;
       const inPct = (S.flowPct && S.flowPct[otherKey + '|' + dot.key]) || 0;
       const pctBtn = (v, label) => `<button class="btn3d" data-a="flowPct" data-x="${dot.key}|${otherKey}|${v}">${label}</button>`;
@@ -1467,6 +1468,7 @@ function onDotTap(dot) {
         else if (biz.type !== 'airline') html += `<p class="muted small">IPO needs a profit (income above salaries) first.</p>`;
       } else if (boardCount > 0) html += `<p class="muted small">IPO unlocks with a full board (${boardCount}/5 hired).</p>`;
       html += `<button class="btn3d orange wide" data-a="incManage" data-x="${dot.key}">MANAGE ${esc(biz.name).toUpperCase()}</button>`;
+      if (!owned) html += `<button class="btn3d orange wide" data-a="incConnect" data-x="${dot.key}">CONNECT TO HUB OR AIRPORT</button>`;
     } else {
       html += `<button class="btn3d orange wide" data-a="incBuildPick" data-x="${dot.key}">BUILD BUSINESS</button>`;
     }
@@ -1478,8 +1480,21 @@ function onRouteDotTap(dot) {
   if (!src || !S.airports || !S.airports[src]) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.', 'bad'); }
   if (dot.key === src) { UI.routing = null; UI.routeChange = null; return toast('Route cancelled.'); }
   const a = S.airports[src], b = S.airports[dot.key];
-  if (!b) return toast('Buy an airport, hub, or port there first.', 'bad');
-  if ((a.type === 'port' && b.type === 'airport') || (a.type === 'airport' && b.type === 'port')) return toast('Ports trade with ports and hubs, not airports.', 'bad');
+  const biz = (S.mode === 'inc' && S.incBiz) ? S.incBiz[dot.key] : null;
+  if (!b && !biz) return toast('Nothing to connect to here yet — build a business on this dot, or buy an airport or hub here first.', 'bad');
+  if (b && ((a.type === 'port' && b.type === 'airport') || (a.type === 'airport' && b.type === 'port'))) return toast('Ports trade with ports and hubs, not airports.', 'bad');
+  if (!b && biz) {
+    // Shops take people directly: a hub or airport route feeds the
+    // shop itself, no second airport needed on the shop's dot.
+    if (a.type === 'port') return toast('Ports haul trade, not people. Connect an airport or hub instead.', 'bad');
+    if (UI.routeChange) { UI.routing = null; UI.routeChange = null; return toast('Remove the old route first, then draw this one.', 'bad'); }
+    if (!S.routes) S.routes = [];
+    if (S.routes.some(r => (r.from === src && r.to === dot.key) || (r.from === dot.key && r.to === src))) return toast('That route already exists.', 'bad');
+    S.routes.push({ from: src, to: dot.key });
+    UI.routing = null;
+    save(); renderHUD(); tutCheck();
+    return toast('Route added — people will flow to your shop.', 'good');
+  }
   if (!S.routes) S.routes = [];
   if (UI.routeChange) {
     const old = UI.routeChange;
@@ -1501,6 +1516,23 @@ function onRouteDotTap(dot) {
 function onRouteCancel() {
   UI.routing = null; UI.routeChange = null;
   toast('Route cancelled.');
+}
+// Shop-side connect: from a shop's sheet, CONNECT TO HUB OR AIRPORT
+// arms a pick; tapping one of your airports or hubs draws the route
+// straight into the shop. Same stay-in-mode rules as route mode.
+function onConnectDotTap(dot) {
+  const bizKey = UI.connecting;
+  if (!bizKey || !S.incBiz || !S.incBiz[bizKey]) { UI.connecting = null; return toast('Connection cancelled.', 'bad'); }
+  if (dot.key === bizKey) { UI.connecting = null; return toast('Connection cancelled.'); }
+  const site = S.airports && S.airports[dot.key];
+  if (!site) return toast('That dot has no airport or hub yet.', 'bad');
+  if (site.type === 'port') return toast('Ports haul trade, not people. Tap an airport or hub.', 'bad');
+  if (!S.routes) S.routes = [];
+  if (S.routes.some(r => (r.from === dot.key && r.to === bizKey) || (r.from === bizKey && r.to === dot.key))) { UI.connecting = null; return toast('Already connected.', 'bad'); }
+  S.routes.push({ from: dot.key, to: bizKey });
+  UI.connecting = null;
+  save(); renderHUD(); tutCheck();
+  toast('Connected — people will flow to your shop.', 'good');
 }
 function onMoveDotTap(dot) {
   const mv = UI.moving;
@@ -3771,6 +3803,12 @@ const A = {
     const rows = sec.types.map(t => `<div class="srow"><span class="avatar">🏪</span><span class="sname"><b>${esc(t.name)}</b><span class="muted">${fmt(t.cost)} to build · earns ${fmt(t.income)}/sec</span></span><button class="btn" data-a="incBuild" data-x="${dotKey}|${secId}|${t.id}"${S.cash < t.cost ? ' disabled' : ''}>Build</button></div>`).join('');
     openModal(`<h2>${esc(sec.name).toUpperCase()}</h2><p class="muted">${esc(sec.blurb)}</p><div class="menu-list">${rows}</div>`, 'sheet');
   },
+  incConnect: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    closeModal();
+    UI.connecting = x; UI.routing = null; UI.routeChange = null; UI.moving = null; UI.trading = null;
+    toast('Tap one of your airports or hubs to connect it to this shop.', 'good');
+  },
   incBuild: (x) => {
     if (!S || S.mode !== 'inc') return;
     const [dotKey, secId, typeId] = (x || '').split('|');
@@ -3791,7 +3829,7 @@ const A = {
       S.airports[dotKey] = { type: 'airport', name: d ? d.name : dotKey, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
       S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: 0, fare: true, level: 1, spent: t.cost, hubs: [], dotKey, loc: d ? d.name : dotKey };
     } else {
-      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost, dotKey, loc: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.name : dotKey };
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost, dotKey, loc: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.name : dotKey, x: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.x : undefined, y: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.y : undefined };
     }
     save(); renderHUD();
     toast(`${t.name} built.`, 'good');
@@ -3988,8 +4026,9 @@ const A = {
       if (!mgrNames.length) body += `<p>You run this shop directly.</p>`;
       else body += `<p>Managed by: ${mgrNames.map(esc).join(', ')}</p>`;
       const site = S.airports && S.airports[dotKey];
-      if (site && site.pop != null) body += `<p>People here: ${Math.floor(site.pop).toLocaleString()} · ×${(typeof incBizPeopleMult === 'function' ? incBizPeopleMult(biz) : 1).toFixed(1)} sales</p>`;
-      else body += `<p class="muted small">No airport or hub here yet — buy one and connect it to bring people to this shop.</p>`;
+      const ppl = (site && site.pop != null) ? site.pop : (biz.pop != null ? biz.pop : null);
+      if (ppl != null) body += `<p>People here: ${Math.floor(ppl).toLocaleString()} · ×${(typeof incBizPeopleMult === 'function' ? incBizPeopleMult(biz) : 1).toFixed(1)} sales</p>`;
+      else body += `<p class="muted small">No people here yet — use CONNECT on the shop's sheet to link an airport or hub.</p>`;
       body += `</div><h3>STAFF</h3>`;
       if (biz.manager) body += `<p>General Manager ✓ $5/sec (+20%) <button class="btn" data-a="incManagerFire" data-x="${dotKey}">Fire</button></p>`;
       else body += `<p>General Manager — $5/sec (+20%) <button class="btn" data-a="incManagerHire" data-x="${dotKey}">Hire</button></p>`;

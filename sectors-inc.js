@@ -104,15 +104,19 @@ function incBizMktCostPerSec(biz, t) {
   t.marketing.forEach((card, i) => { if (biz.marketing[i]) c += card.cost; });
   return c / 600;
 }
-// People at this business's dot: the airport/hub site on the same dot.
-// More people = more customers = more sales, up to 5x at 4,000 people.
-// No site (or a port, which hauls trade not people) = no boost.
+// People at this business's dot: the airport/hub site on the same dot,
+// or people routed straight into the shop from a hub or airport
+// (biz.pop). More people = more customers = more sales, up to 5x at
+// 4,000 people. A port hauls trade not people, so it gives no boost.
 function incBizPeopleMult(biz) {
   try {
-    if (!biz || !biz.dotKey || typeof S === 'undefined' || !S || !S.airports) return 1;
-    const site = S.airports[biz.dotKey];
-    if (!site || site.pop == null) return 1;
-    return 1 + Math.min(site.pop, 4000) / 1000;
+    if (!biz || typeof S === 'undefined' || !S) return 1;
+    if (biz.dotKey && S.airports) {
+      const site = S.airports[biz.dotKey];
+      if (site && site.pop != null) return 1 + Math.min(site.pop, 4000) / 1000;
+    }
+    if (biz.pop != null) return 1 + Math.min(biz.pop, 4000) / 1000;
+    return 1;
   } catch (e) { return 1; }
 }
 // Per-second money breakdown for one business. Revenue is gross sales
