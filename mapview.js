@@ -150,7 +150,7 @@ const MapView = (() => {
   const frameBox = box => {
     const [x0, y0, x1, y1] = box;
     const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
-    anim = null; v.s = Math.min(vw / w, vh / h);
+    anim = null; v.s = Math.max(vw / w, vh / h);
     v.x = vw / 2 - (x0 + x1) / 2 * v.s; v.y = vh / 2 - (y0 + y1) / 2 * v.s;
     clampView(); dirty = true;
   };
@@ -189,8 +189,10 @@ const MapView = (() => {
   const S_ = () => (typeof S !== 'undefined' && S ? S : null);
 
   function resize() {
+    const ow = vw, oh = vh;
     dpr = Math.min(2, window.devicePixelRatio || 1); vw = wrap.clientWidth; vh = wrap.clientHeight;
     [base, top].forEach(c => { c.width = vw * dpr; c.height = vh * dpr; c.style.width = vw + 'px'; c.style.height = vh + 'px'; });
+    if (ow > 0 && oh > 0) { v.x += (vw - ow) / 2; v.y += (vh - oh) / 2; }
     if (v.s < Math.max(vw / MAP_W, vh / MAP_H)) fit();
     clampView(); dirty = true;
   }
@@ -204,7 +206,7 @@ const MapView = (() => {
       if (box) {
         const [x0, y0, x1, y1] = box;
         const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
-        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.s = Math.max(Math.max(vw / w, vh / h), Math.min(60, v.s));
         v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
         v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
         return;
@@ -218,7 +220,7 @@ const MapView = (() => {
       if (box) {
         const [x0, y0, x1, y1] = box;
         const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
-        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.s = Math.max(Math.max(vw / w, vh / h), Math.min(60, v.s));
         v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
         v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
         return;
@@ -232,7 +234,7 @@ const MapView = (() => {
       if (box) {
         const [x0, y0, x1, y1] = box;
         const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0);
-        v.s = Math.max(Math.min(vw / w, vh / h), Math.min(60, v.s));
+        v.s = Math.max(Math.max(vw / w, vh / h), Math.min(60, v.s));
         v.x = Math.min(vw / 2 - x0 * v.s, Math.max(vw / 2 - x1 * v.s, v.x));
         v.y = Math.min(vh / 2 - y0 * v.s, Math.max(vh / 2 - y1 * v.s, v.y));
         return;
@@ -1333,6 +1335,8 @@ const MapView = (() => {
     requestAnimationFrame(frame);
   }
   window.addEventListener('resize', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resize(); });
 
   return {
     init() { resize(); fit(); requestAnimationFrame(frame); },
