@@ -122,7 +122,18 @@ async function idbPut(key, val) {
 }
 async function idbDel(key) {
   const db = await idb(); if (!db) return;
-  try { db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(key); } catch (e) {}
+  // Await the transaction itself: the old fire-and-forget delete
+  // returned before the delete committed, so a fast reload — or an
+  // auto-save already in flight — could resurrect the "deleted" save.
+  return new Promise(res => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => res(false);
+      tx.onabort = () => res(false);
+    } catch (e) { res(false); }
+  });
 }
 function migrateSave(s) {
   if (!s || !s.co) return s;
@@ -192,7 +203,7 @@ async function loadSave() {
 }
 let saveInFlight = false, savePending = false;
 async function save() {
-  if (!S || UI.pick) return;
+  if (!S || UI.pick || UI.deleting) return;
   // Never drop a save: if one is already writing, mark a follow-up pass so the
   // latest state is written after it, instead of silently losing the trade.
   if (saveInFlight) { savePending = true; return; }
@@ -3980,8 +3991,11 @@ function incRemoveAirlineSites(biz, airportKey) {
 function incAirportUpCost(lv) { return [0, 100000, 250000, 500000, 1000000][lv] || 0; }
 const A = {
   newGame: async () => {
+    // Null + flag first, so no in-flight auto-save can rewrite the
+    // save after the delete commits; then await the real delete.
+    UI.deleting = true; S = null;
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
-    S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
+    UI.deleting = false; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
     if (typeof switchWorldToReal === 'function') switchWorldToReal();
     document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; $('tut').innerHTML = ''; showPlayScreen();
   },
@@ -4045,8 +4059,9 @@ const A = {
   playReset: () => { UI.playConfirm = true; showPlayScreen(); },
   playResetNo: () => { UI.playConfirm = false; showPlayScreen(); },
   playResetYes: async () => {
+    UI.deleting = true; S = null;
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
-    S = null; UI.playConfirm = false; hidePlayScreen(); showCreate();
+    UI.deleting = false; UI.playConfirm = false; hidePlayScreen(); showCreate();
   },
   // New-business flow.
   createClose: () => { hideCreate(); showPlayScreen(); },
