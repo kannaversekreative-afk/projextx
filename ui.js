@@ -1156,7 +1156,7 @@ function enterGame(returning) {
   // Worl Inc. new games open on the 5-state New York cluster map,
   // so the player sees their starting states and dots immediately.
   if (S.mode === 'inc' && !returning) { MapView.showCluster('USA', 'New York'); renderHUD(); }
-  if (returning) welcomeBack(); else S.tutorial = (S.mode === 'inc' ? -1 : 0);
+  if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
 }
 const TUT = [
@@ -1177,15 +1177,20 @@ const TUT_FLOW = [
   { t: () => `Now move people for war: on the map, tap a white dot in ${esc(cname(S.home))} and buy a hub (the first one is free). People you move home reinforce your war power.`, done: () => { try { return !!(S.airports && Object.values(S.airports).some(s => s && s.a3 === S.home)); } catch (e) { return false; } } },
   { t: () => `You are ready to expand. Open Nation, pick a country, and plan your first attack — your mobilized citizens boost your win chance.`, btn: 'Got it' },
 ];
+const TUT_INC = [
+  { t: () => 'First, buy an airport or hub. That is where people come from. Tap a dot on the map, then BUY AIRPORT or BUY HUB — your first hub is free.', done: () => { try { return !!(S.airports && Object.values(S.airports).some(a => a && (a.type === 'airport' || a.type === 'hub'))); } catch (e) { return false; } } },
+  { t: () => 'Now connect it. Draw a route from your airport or hub to a business or city. People flowing in is what creates business at your stores.', done: () => { try { return !!(S.routes && S.routes.length); } catch (e) { return false; } } },
+  { t: () => 'Upgrade to go faster. Upgrading the airport, hub, or business brings in more people per second, so your stores earn faster.', btn: 'Start playing' },
+];
 function renderTutorial() {
-  const T = S && S.flow ? TUT_FLOW : TUT;
+  const T = (S && S.mode === 'inc') ? TUT_INC : (S && S.flow ? TUT_FLOW : TUT);
   if (!S || S.tutorial == null || S.tutorial < 0 || S.tutorial >= T.length) { $('tut').innerHTML = ''; return; }
   const s = T[S.tutorial];
   const tutText = typeof s.t === 'function' ? s.t() : s.t;
   $('tut').innerHTML = `<div class="tut card"><p>${tutText}</p><div class="row end"><button data-a="tutSkip">Skip</button>${s.btn ? `<button class="btn" data-a="tutNext">${s.btn}</button>` : '<span class="muted small">Do this to continue</span>'}</div></div>`;
 }
 function tutCheck() {
-  const T = S && S.flow ? TUT_FLOW : TUT;
+  const T = (S && S.mode === 'inc') ? TUT_INC : (S && S.flow ? TUT_FLOW : TUT);
   if (S && S.tutorial >= 0 && S.tutorial < T.length && T[S.tutorial].done && T[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
 }
 function welcomeBack() {
@@ -1369,7 +1374,7 @@ function onDotTap(dot) {
     if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
     else {
       const upCost = owned.type === 'hub' ? [0, 500000, 1000000, 2000000, 4000000][lv] : owned.type === 'port' ? [0, 250000, 500000, 1000000, 2000000][lv] : [0, 100000, 250000, 500000, 1000000][lv];
-      const nextRate = owned.type === 'hub' ? (lv + 2) + '/sec' : owned.type === 'port' ? ((lv + 2) * 100) + ' trade/sec' : (lv + 1) + '/sec per hub';
+      const nextRate = owned.type === 'hub' ? (2 * (lv + 1)) + '/sec' : owned.type === 'port' ? ((lv + 2) * 100) + ' trade/sec' : (lv + 1) + '/sec import + hub routes';
       html += `<button class="btn3d orange wide" data-a="upgradeSite" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE TO LEVEL ${lv + 1} (${nextRate}) ${fmt(upCost)}</button>`;
     }
     const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0 };
@@ -1403,12 +1408,12 @@ function onDotTap(dot) {
     });
   } else {
     if (S.mode === 'inc') {
-      html += `<p>Build a business here. Build an Airline (Transportation) to run planes, airports and hubs — passengers pay $50 each when they arrive. Ports haul trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs.</p><p>Cash: ${fmt(S.cash)}</p>`;
+      html += `<p>People come from airports and hubs. Buy one first, then connect it to your businesses and cities — people flowing in is what creates business at your stores. Upgrading the airport, hub, or business brings more people per second, so stores earn faster. Ports haul trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs.</p><p>Cash: ${fmt(S.cash)}</p>`;
+      const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
       const ownsAirline = S.incBiz && Object.values(S.incBiz).some(b => b && b.type === 'airline');
-      if (ownsAirline) {
-        const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
-        html += `<button class="btn3d orange wide" data-a="incHubBuild" data-x="${dot.key}"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUILD HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
-      }
+      html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
+      if (ownsAirline) html += `<button class="btn3d orange wide" data-a="incHubBuild" data-x="${dot.key}"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUILD HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
+      else html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
       html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
     } else {
       html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs. Passengers pay $50 each when they arrive, so routes earn as people fly.</p><p>Cash: ${fmt(S.cash)}</p>`;
@@ -1490,7 +1495,7 @@ function onRouteDotTap(dot) {
   if (S.routes.some(r => (r.from === src && r.to === dot.key) || (r.from === dot.key && r.to === src))) return toast('That route already exists.', 'bad');
   S.routes.push({ from: src, to: dot.key });
   UI.routing = null;
-  save(); renderHUD();
+  save(); renderHUD(); tutCheck();
   toast('Route added.', 'good');
 }
 function onRouteCancel() {
@@ -3784,9 +3789,9 @@ const A = {
       if (!S.airports) S.airports = {};
       const d = (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy : null;
       S.airports[dotKey] = { type: 'airport', name: d ? d.name : dotKey, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
-      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: 0, fare: true, level: 1, spent: t.cost, hubs: [] };
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: 0, fare: true, level: 1, spent: t.cost, hubs: [], dotKey, loc: d ? d.name : dotKey };
     } else {
-      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost };
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost, dotKey, loc: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.name : dotKey };
     }
     save(); renderHUD();
     toast(`${t.name} built.`, 'good');
@@ -3955,74 +3960,143 @@ const A = {
   incManage: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
     const parts = (x || '').split('|');
-    const dotKey = parts[0], tab = parts[1] || 'overview';
+    const dotKey = parts[0], tab = parts[1] || 'service';
     const biz = S.incBiz[dotKey];
     if (!biz) return;
+    if (!biz.dotKey) biz.dotKey = dotKey;
     const fmt = n => '$' + Math.round(n).toLocaleString();
     const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
-    const net = (typeof incBizNetPerSec === 'function' ? incBizNetPerSec(biz) : (biz.income || 0) * (biz.level || 1));
+    const rates = (typeof incBizRates === 'function' ? incBizRates(biz) : { net: (biz.income || 0) * (biz.level || 1) });
+    const ratings = (typeof incBizRatings === 'function' ? incBizRatings(biz) : { price: 3, product: 3, service: 1, atmosphere: 2.5, overall: 2.4, reviews: 0 });
+    const loc = biz.loc || (dotKey.startsWith('us:') ? dotKey.slice(3) : dotKey);
+    const logoSrc = (typeof INC_LOGOS !== 'undefined' && INC_LOGOS[biz.type]) ? INC_LOGOS[biz.type] : '';
+    const initials = (biz.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const logoImg = (cls) => logoSrc ? `<img class="bizlogo ${cls}" src="${logoSrc}">` : `<span class="bizinit ${cls}">${initials}</span>`;
+    const head = `<div class="bizhead">${logoImg('')}<div><h2 style="margin:0">${esc(biz.name)}</h2><p class="muted small" style="margin:0">${esc(loc)} · ${sec ? esc(sec.name) : ''} · Level ${biz.level || 1}</p></div></div>`;
     const tabBtn = (id, label) => `<button class="btn${tab === id ? ' on' : ''}" data-a="incManage" data-x="${dotKey}|${id}">${label}</button>`;
-    let tabs = `<p>${tabBtn('overview', 'Overview')} ${tabBtn('products', 'Products')} ${tabBtn('managers', 'Managers')} ${tabBtn('operations', 'Operations')}${t && t.blends ? ` ${tabBtn('blends', 'Blends')}` : ''}</p>`;
+    const tabs = `<p class="biztabs">${tabBtn('service', 'Service')} ${tabBtn('product', 'Product')} ${tabBtn('marketing', 'Marketing')} ${tabBtn('finance', 'Finance')}</p>`;
+    const stars = r => '★'.repeat(Math.max(0, Math.min(5, Math.round(r)))) + '☆'.repeat(5 - Math.max(0, Math.min(5, Math.round(r))));
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     let body = '';
-    if (tab === 'overview') {
-      body += `<p>${sec ? esc(sec.name) : ''} · Level ${biz.level || 1} · Base ${fmt(biz.income || 0)}/sec · Net ${fmt(net)}/sec</p>`;
-      const sales = biz.sales || [];
-      if (!sales.length) body += `<p class="muted">No sales yet — weekly sales land with each newspaper edition.</p>`;
-      else {
-        const max = Math.max(1, ...sales.map(v => Math.abs(v)));
-        const bars = sales.map(v => `<span style="display:inline-block;width:16px;height:${Math.max(2, Math.round(Math.abs(v) / max * 60))}px;background:${v >= 0 ? '#2f7cf6' : '#e5484d'};margin-right:2px;vertical-align:bottom" title="${fmt(v)}"></span>`).join('');
-        body += `<p>Weekly sales (last ${sales.length}):</p><p>${bars}</p><p class="muted small">Latest week: ${fmt(sales[sales.length - 1])}</p>`;
-      }
-      if (biz.type === 'airline') body += `<p class="muted">Airlines earn passenger fares ($50 each, boosted by board), not flat income. Net above is board salaries only.</p>`;
-    } else if (tab === 'products') {
-      const prods = (t && t.products) ? t.products : [];
-      if (!prods.length) body += `<p class="muted">No products for this type yet.</p>`;
-      else {
-        body += `<p class="muted">Pricing moves income: the average of current price / base price scales base income.</p>`;
-        prods.forEach((p, i) => {
-          const cur = (biz.prices && biz.prices[p.name] != null) ? biz.prices[p.name] : p.price;
-          body += `<p>${esc(p.name)} — ${fmt(cur)} (base ${fmt(p.price)}) <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|-1">-10%</button> <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|1">+10%</button></p>`;
-        });
-      }
-    } else if (tab === 'managers') {
-      if (biz.manager) body += `<p>Manager ✓ $5/sec (+20% income) <button class="btn" data-a="incManagerFire" data-x="${dotKey}">Fire</button></p>`;
-      else body += `<p>Manager — $5/sec (+20% income) <button class="btn" data-a="incManagerHire" data-x="${dotKey}">Hire</button></p>`;
+    if (tab === 'service') {
+      const mgrNames = [];
+      if (biz.manager) mgrNames.push('General Manager');
+      if (biz.type === 'coffee' && typeof INC_COFFEE_MANAGERS !== 'undefined') for (const m of INC_COFFEE_MANAGERS) if (biz.coffeeManagers && biz.coffeeManagers[m.id]) mgrNames.push(`${m.name} (${m.skill})`);
+      if (typeof incBizTypeManagers === 'function') for (const m of incBizTypeManagers(biz)) if (biz.typeManagers && biz.typeManagers[m.id]) mgrNames.push(`${m.name} (${m.skill})`);
+      body += `<div class="bizstore">${logoImg('big')}<p><b>${esc(biz.name)}</b> — ${esc(loc)}</p>`;
+      if (!mgrNames.length) body += `<p>You run this shop directly.</p>`;
+      else body += `<p>Managed by: ${mgrNames.map(esc).join(', ')}</p>`;
+      const site = S.airports && S.airports[dotKey];
+      if (site && site.pop != null) body += `<p>People here: ${Math.floor(site.pop).toLocaleString()} · ×${(typeof incBizPeopleMult === 'function' ? incBizPeopleMult(biz) : 1).toFixed(1)} sales</p>`;
+      else body += `<p class="muted small">No airport or hub here yet — buy one and connect it to bring people to this shop.</p>`;
+      body += `</div><h3>STAFF</h3>`;
+      if (biz.manager) body += `<p>General Manager ✓ $5/sec (+20%) <button class="btn" data-a="incManagerFire" data-x="${dotKey}">Fire</button></p>`;
+      else body += `<p>General Manager — $5/sec (+20%) <button class="btn" data-a="incManagerHire" data-x="${dotKey}">Hire</button></p>`;
       if (biz.type === 'coffee' && typeof INC_COFFEE_MANAGERS !== 'undefined') {
-        body += `<p class="muted">Coffee managers (each +15% income):</p>`;
+        body += `<p class="muted">Coffee managers (each +15%):</p>`;
         if (!biz.coffeeManagers) biz.coffeeManagers = {};
         for (const m of INC_COFFEE_MANAGERS) {
           if (biz.coffeeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incCoffeeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
           else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incCoffeeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
         }
       }
-      const typeMgrs = (typeof incBizTypeManagers === 'function' ? incBizTypeManagers(biz) : []);
-      if (typeMgrs.length) {
-        body += `<p class="muted">${esc(biz.name)} managers (each +15% income):</p>`;
-        if (!biz.typeManagers) biz.typeManagers = {};
-        for (const m of typeMgrs) {
-          if (biz.typeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incTypeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
-          else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incTypeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
+      if (typeof incBizTypeManagers === 'function') {
+        const typeMgrs = incBizTypeManagers(biz);
+        if (typeMgrs.length) {
+          body += `<p class="muted">${esc(biz.name)} managers (each +15%):</p>`;
+          if (!biz.typeManagers) biz.typeManagers = {};
+          for (const m of typeMgrs) {
+            if (biz.typeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incTypeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
+            else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incTypeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
+          }
         }
       }
-    } else if (tab === 'operations') {
-      const ops = (t && t.ops) ? t.ops : [];
-      if (!ops.length) body += `<p class="muted">No operations for this type yet.</p>`;
+      body += `<h3>CUSTOMER REVIEWS</h3><p><b style="font-size:28px">${ratings.overall.toFixed(1)}</b> · ${ratings.reviews} reviews</p>`;
+      for (const [label, val] of [['Price', ratings.price], ['Product', ratings.product], ['Service', ratings.service], ['Atmosphere', ratings.atmosphere]]) {
+        body += `<p>${label} ${stars(val)} ${val.toFixed(1)}</p>`;
+      }
+      body += `<p class="muted small">Reviews grow as customers buy. Raising prices lowers the Price rating; hiring managers raises Service.</p>`;
+    } else if (tab === 'product') {
+      const prods = (t && t.products) ? t.products : [];
+      const wk = (biz.weekly && biz.weekly.length) ? biz.weekly[biz.weekly.length - 1] : null;
+      if (!prods.length) body += `<p class="muted">No products for this type yet.</p>`;
       else {
-        if (biz.boost && biz.boost.until && Date.now() < biz.boost.until) body += `<p>⚡ Boost active: ×${biz.boost.mult} for ${Math.ceil((biz.boost.until - Date.now()) / 1000)}s more.</p>`;
-        if (biz.bonusIncome) body += `<p>Permanent bonuses: +${fmt(biz.bonusIncome)}/sec.</p>`;
-        ops.forEach((op, i) => {
-          if (op.kind === 'timed') body += `<p>${esc(op.name)} — ×${op.mult} income for ${op.secs}s — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
-          else body += `<p>${esc(op.name)} — +${fmt(op.value)}/sec forever — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+        body += `<p class="muted small">Pricing moves sales: the average of current price / base price across on-menu products scales base income. Turn a product off the menu and it stops selling.</p>`;
+        prods.forEach((p, i) => {
+          const cur = (biz.prices && biz.prices[p.name] != null) ? biz.prices[p.name] : p.price;
+          const cost = p.cost || 0;
+          const margin = p.price ? Math.round((p.price - cost) / p.price * 100) : 0;
+          const pStars = clamp(Math.round(1 + (p.price - cost) / p.price * 4), 1, 5);
+          const onMenu = !(biz.offMenu && biz.offMenu[p.name]);
+          const rev = wk && wk.prodRev ? (wk.prodRev[p.name] || 0) : 0;
+          const units = wk && wk.prodUnits ? (wk.prodUnits[p.name] || 0) : 0;
+          body += `<div class="prodcard"><p><b>${esc(p.name)}</b> ${stars(pStars)}</p><p><button class="btn${onMenu ? ' on' : ''}" data-a="incMenu" data-x="${dotKey}|${i}">${onMenu ? 'On Menu ✓' : 'Off Menu'}</button> <span class="muted small">Sales last week: ${units} · ${fmt(rev)}</span></p><p>Unit cost ${fmt(cost)} <span class="donut" style="--p:${margin}"><span>${margin}%</span></span> Price <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|-1">−</button> ${fmt(cur)} <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|1">+</button></p></div>`;
         });
       }
-    } else if (tab === 'blends') {
-      const blends = biz.blends || [];
-      if (!blends.length) body += `<p class="muted">No blends yet.</p>`;
-      else blends.forEach(b => { body += `<p>${esc(b.name)} — +${fmt(b.income)}/sec</p>`; });
-      body += `<button class="btn wide" data-a="incBlend" data-x="${dotKey}">CREATE BLEND (two best products, +50% synergy)</button>`;
+      if (t && t.blends) {
+        const blends = biz.blends || [];
+        body += `<h3>BLENDS</h3>`;
+        if (!blends.length) body += `<p class="muted">No blends yet.</p>`;
+        else blends.forEach(b => { body += `<p>${esc(b.name)} — +${fmt(b.income)}/sec</p>`; });
+        body += `<button class="btn wide" data-a="incBlend" data-x="${dotKey}">CREATE BLEND (two best products, +50% synergy)</button>`;
+      }
+    } else if (tab === 'marketing') {
+      const cards = (t && t.marketing) ? t.marketing : [];
+      if (!biz.marketing) biz.marketing = {};
+      if (!cards.length) body += `<p class="muted">No promotions for this type yet.</p>`;
+      else {
+        body += `<p class="muted small">Each active promotion adds 5% to sales and charges its weekly fee.</p>`;
+        cards.forEach((card, i) => {
+          const on = !!biz.marketing[i];
+          body += `<div class="mktcard"><p><b>${esc(card.name)}</b></p><p>${on ? 'On' : 'Off'} · ${fmt(card.cost)} per week · +5% sales when on <button class="btn${on ? ' on' : ''}" data-a="incMkt" data-x="${dotKey}|${i}">${on ? 'Turn off' : 'Turn on'}</button></p></div>`;
+        });
+      }
+      const ops = (t && t.ops) ? t.ops : [];
+      body += `<h3>CAMPAIGNS</h3>`;
+      if (biz.boost && biz.boost.until && Date.now() < biz.boost.until) body += `<p>⚡ Boost active: ×${biz.boost.mult} for ${Math.ceil((biz.boost.until - Date.now()) / 1000)}s more.</p>`;
+      if (biz.bonusIncome) body += `<p>Permanent bonuses: +${fmt(biz.bonusIncome)}/sec.</p>`;
+      if (!ops.length) body += `<p class="muted">No campaigns for this type yet.</p>`;
+      else ops.forEach((op, i) => {
+        if (op.kind === 'timed') body += `<p>${esc(op.name)} — ×${op.mult} sales for ${op.secs}s — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+        else body += `<p>${esc(op.name)} — +${fmt(op.value)}/sec forever — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+      });
+    } else if (tab === 'finance') {
+      const weeks = biz.weekly || [];
+      const wk = weeks.length ? weeks[weeks.length - 1] : null;
+      const prev = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+      if (!wk) body += `<p class="muted">No sales yet — weekly numbers land with each newspaper edition.</p>`;
+      else {
+        const chg = (a, b) => { if (b == null) return ''; const d = a - b; const pct = b ? Math.round(d / Math.abs(b) * 100) : 0; return `${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))} (${pct}%)`; };
+        body += `<p>STORE REVENUE <b>${fmt(wk.rev)}</b> <span class="muted small">${prev ? chg(wk.rev, prev.rev) : ''}</span></p>`;
+        body += `<p>STORE INCOME <b>${fmt(wk.net)}</b> <span class="muted small">${prev ? chg(wk.net, prev.net) : ''}</span></p>`;
+        const last5 = weeks.slice(-5);
+        const max = Math.max(1, ...last5.map(w => Math.max(Math.abs(w.rev), Math.abs(w.net))));
+        const bars = last5.map(w => `<span class="barpair"><span class="bar rev" style="height:${Math.max(2, Math.round(Math.abs(w.rev) / max * 60))}px"></span><span class="bar inc" style="height:${Math.max(2, Math.round(Math.abs(w.net) / max * 60))}px"></span><span class="barlab">${esc(w.date || '')}</span></span>`).join('');
+        body += `<div class="bars">${bars}</div>`;
+        body += `<h3>STORE INCOME STATEMENT</h3><div class="stmt"><p class="stmt-h">REVENUES</p>`;
+        const prods = (t && t.products) ? t.products : [];
+        prods.forEach(p => {
+          const r = wk.prodRev ? (wk.prodRev[p.name] || 0) : 0;
+          const pr = prev && prev.prodRev ? (prev.prodRev[p.name] || 0) : 0;
+          body += `<p><span>${esc(p.name)}</span><span>${fmt(r)}</span><span class="muted small">${prev ? chg(r, pr) : ''}</span></p>`;
+        });
+        body += `<p class="stmt-t"><span>Total Revenues</span><span>${fmt(wk.rev)}</span></p><p class="stmt-h">EXPENSES</p>`;
+        for (const [label, v] of [['Cost of Goods Sold', wk.cogs], ['Rent', wk.rent], ['Salaries', wk.sal], ['Depreciation', wk.dep], ['Marketing', wk.mkt], ['Administrative Cost', wk.adm]]) {
+          body += `<p><span>${label}</span><span>${fmt(v)}</span></p>`;
+        }
+        const totExp = wk.cogs + wk.rent + wk.sal + wk.dep + wk.mkt + wk.adm;
+        body += `<p class="stmt-t"><span>Total Expenses</span><span>${fmt(totExp)}</span></p><p class="stmt-t"><span>OPERATING INCOME</span><span>${fmt(wk.net)}</span></p><p><span>Taxes</span><span>$0</span></p><p class="stmt-t"><span>NET INCOME</span><span>${fmt(wk.net)}</span></p></div>`;
+        if (biz.type === 'airline') body += `<p class="muted">Airlines earn passenger fares ($50 each, boosted by board and marketing), not product sales. Net above is salaries and marketing fees only.</p>`;
+      }
+      const remodelCost = Math.round((biz.cost || 0) * 0.5);
+      const remodels = biz.remodels || 0;
+      if (remodels >= 5) body += `<button class="btn3d orange wide" disabled>FULLY REMODELED</button>`;
+      else body += `<button class="btn3d orange wide" data-a="incRemodel" data-x="${dotKey}"${S.cash < remodelCost ? ' disabled' : ''}>REMODEL STORE ${fmt(remodelCost)}</button>`;
+      body += `<button class="btn3d orange wide" data-a="incDelete" data-x="${dotKey}">CLOSE STORE</button>`;
+      body += `<p class="muted small">Remodel: +0.5 atmosphere, +5% sales. Close deletes the business (no refund — sell from the dot sheet for 80% back).</p>`;
     }
-    openModal(`<h2>MANAGE ${esc(biz.name).toUpperCase()}</h2>${tabs}${body}<p><button class="btn wide" data-a="incBack">BACK</button></p>`, 'sheet');
+    openModal(`${head}${tabs}${body}<p><button class="btn wide" data-a="incBack">BACK</button></p>`, 'sheet');
   },
   incPrice: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4038,19 +4112,19 @@ const A = {
     biz.prices[p.name] = Math.max(1, Math.round(cur * (parseInt(dirS, 10) > 0 ? 1.1 : 0.9)));
     save();
     toast(`${p.name} now $${biz.prices[p.name].toLocaleString()}.`, 'good');
-    A.incManage(dotKey + '|products');
+    A.incManage(dotKey + '|product');
   },
   incManagerHire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
     S.incBiz[x].manager = true; save();
     toast('Manager hired (+20% income, $5/sec).', 'good');
-    A.incManage(x + '|managers');
+    A.incManage(x + '|service');
   },
   incManagerFire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
     delete S.incBiz[x].manager; save();
     toast('Manager fired.', 'good');
-    A.incManage(x + '|managers');
+    A.incManage(x + '|service');
   },
   incCoffeeHire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4060,7 +4134,7 @@ const A = {
     if (!biz.coffeeManagers) biz.coffeeManagers = {};
     biz.coffeeManagers[mid] = true; save();
     toast('Coffee manager hired.', 'good');
-    A.incManage(dotKey + '|managers');
+    A.incManage(dotKey + '|service');
   },
   incCoffeeFire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4069,7 +4143,7 @@ const A = {
     if (!biz || !biz.coffeeManagers) return;
     delete biz.coffeeManagers[mid]; save();
     toast('Coffee manager fired.', 'good');
-    A.incManage(dotKey + '|managers');
+    A.incManage(dotKey + '|service');
   },
   incBlend: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
@@ -4086,7 +4160,7 @@ const A = {
     biz.blends.push({ name, income: inc });
     save();
     toast(`${name} created (+$${inc}/sec).`, 'good');
-    A.incManage(x + '|blends');
+    A.incManage(x + '|product');
   },
   incTypeHire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4096,7 +4170,7 @@ const A = {
     if (!biz.typeManagers) biz.typeManagers = {};
     biz.typeManagers[mid] = true; save();
     toast('Manager hired.', 'good');
-    A.incManage(dotKey + '|managers');
+    A.incManage(dotKey + '|service');
   },
   incTypeFire: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4105,7 +4179,7 @@ const A = {
     if (!biz || !biz.typeManagers) return;
     delete biz.typeManagers[mid]; save();
     toast('Manager fired.', 'good');
-    A.incManage(dotKey + '|managers');
+    A.incManage(dotKey + '|service');
   },
   incOp: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz) return;
@@ -4122,7 +4196,51 @@ const A = {
     else biz.bonusIncome = (biz.bonusIncome || 0) + op.value;
     save();
     toast(`${op.name} running.`, 'good');
-    A.incManage(dotKey + '|operations');
+    A.incManage(dotKey + '|marketing');
+  },
+
+  incMenu: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, idxS] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const pr = t && t.products ? t.products[parseInt(idxS, 10)] : null;
+    if (!pr) return;
+    if (!biz.offMenu) biz.offMenu = {};
+    if (biz.offMenu[pr.name]) delete biz.offMenu[pr.name]; else biz.offMenu[pr.name] = true;
+    save();
+    toast(`${pr.name} ${biz.offMenu[pr.name] ? 'off' : 'on'} the menu.`, 'good');
+    A.incManage(dotKey + '|product');
+  },
+  incMkt: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, idxS] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const card = t && t.marketing ? t.marketing[parseInt(idxS, 10)] : null;
+    if (!card) return;
+    if (!biz.marketing) biz.marketing = {};
+    const idx = parseInt(idxS, 10);
+    biz.marketing[idx] = !biz.marketing[idx];
+    save();
+    toast(`${card.name} ${biz.marketing[idx] ? 'on' : 'off'} (+5% sales when on, $${card.cost}/week).`, 'good');
+    A.incManage(dotKey + '|marketing');
+  },
+  incRemodel: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const biz = S.incBiz[x];
+    if ((biz.remodels || 0) >= 5) return toast('Fully remodeled already.', 'bad');
+    const cost = Math.round((biz.cost || 0) * 0.5);
+    if (S.cash < cost) return toast('Not enough business cash.', 'bad');
+    S.cash -= cost;
+    biz.remodels = (biz.remodels || 0) + 1;
+    save();
+    toast(`Store remodeled (+0.5 atmosphere, +5% sales).`, 'good');
+    A.incManage(x + '|finance');
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
@@ -4262,7 +4380,7 @@ const A = {
     S.cash -= price;
     S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0 } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 0 };
     UI.dotBuy = null;
-    save(); closeModal(); renderHUD();
+    save(); closeModal(); renderHUD(); tutCheck();
     if (Object.keys(S.airports).length >= 2) { UI.routing = key; toast((type === 'hub' ? 'Hub' : type === 'port' ? 'Port' : 'Airport') + ' bought. Tap a site to connect your route.', 'good'); }
     else toast(type === 'hub' ? 'Hub bought.' : type === 'port' ? 'Port bought.' : 'Airport bought.', 'good');
   },

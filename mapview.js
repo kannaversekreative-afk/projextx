@@ -444,9 +444,10 @@ const MapView = (() => {
       if (Date.now() - (S.incPaperAt || 0) >= 600000) {
         S.incPaperAt = Date.now();
         try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); } catch (e) { console.error('newspaper beat failed', e); }
-        // Weekly sales per business (for the Manage chart): net/sec x
-        // 600 seconds per game week, last 12 weeks kept.
-        try { if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1); b.sales = ((b.sales || []).concat([Math.round(net * 600)])).slice(-12); } } catch (e) {}
+        // Weekly Finance records per business: one income-statement week
+        // (revenue, costs, net, per-product revenue/units, game date),
+        // last 12 weeks kept. Reviews grow with units sold.
+        try { if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; if (!b.dotKey) b.dotKey = k; const wk = (typeof incBizWeekly === 'function') ? incBizWeekly(b) : null; if (wk) { try { wk.date = (typeof fmtDate === 'function' && S.day != null) ? fmtDate(S.day) : ''; } catch (e) {} b.weekly = ((b.weekly || []).concat([wk])).slice(-12); const units = Object.values(wk.prodUnits || {}).reduce((a, c) => a + c, 0); b.reviews = (b.reviews || 0) + Math.floor(units / 20); b.sales = ((b.sales || []).concat([wk.net])).slice(-12); } } } catch (e) {}
         try { save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
       }
     }
@@ -454,13 +455,15 @@ const MapView = (() => {
     // salaries) from the shared helper, so board, manager, pricing,
     // blends and president all flow through one formula.
     if (typeof S !== 'undefined' && S && S.mode === 'inc' && S.incBiz) {
-      for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1); S.cash += net * dt; }
+      for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; if (!b.dotKey) b.dotKey = k; const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1); S.cash += net * dt; }
     }
     // Airline citizens: hubs are originators by nature, no toggle.
-    // A hub grows (level + 1)/sec constantly, up to capacity level x 20000. An airport grows
-    // only when connected to a hub, receiving per hub route the
+    // A hub generates 2/sec x level constantly, up to capacity level
+    // x 20000. An airport imports 1/sec x level on its own, and grows
+    // faster when connected to a hub, receiving per hub route the
     // slower of the hub's send and its own receive, both equal to
     // level, so flow is min(hub level, airport level)/sec.
+    // Upgrading a hub or airport raises its rate, so it fills faster.
     // Capacity pauses growth, it never deletes people: a site
     // pushed above capacity by a manual move keeps its people
     // (and drags stability) until it is drained or upgraded.
@@ -472,7 +475,8 @@ const MapView = (() => {
         const a = S.airports[k];
         if (a.type !== 'port' && a.pop === undefined) a.pop = 0;
         if (a.level === undefined) a.level = 1;
-        if (a.type === 'hub' && a.pop < a.level * 20000) a.pop = Math.min(a.pop + (a.level + 1) * dt, a.level * 20000);
+        if (a.type === 'hub' && a.pop < a.level * 20000) a.pop = Math.min(a.pop + (a.level * 2) * dt, a.level * 20000);
+        if (a.type === 'airport' && a.pop < a.level * 20000) a.pop = Math.min(a.pop + a.level * dt, a.level * 20000);
         if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += (a.level + 1) * 100 * dt; }
       }
       if (Array.isArray(S.routes)) {
@@ -501,7 +505,7 @@ const MapView = (() => {
           if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) { delete S.flowPct[k]; continue; }
           if ((B.pop || 0) >= (B.level || 1) * 20000) continue;
           let rate = 0;
-          if (A.type === 'hub') rate = (A.level || 1) + 1;
+          if (A.type === 'hub') rate = (A.level || 1) * 2;
           else {
             for (const r of (S.routes || [])) {
               const otherKey = r.from === from ? r.to : (r.to === from ? r.from : null);
@@ -822,15 +826,16 @@ const MapView = (() => {
       });
       return gap;
     };
-    // Dot fill: white unowned, teal port, dark blue airport/hub,
-    // yellow for a 1-level bottleneck, red for a gap of 2 or more
-    // (losing 2+/sec of flow until upgraded).
+    // Dot fill: white unowned, teal port, DARK BLUE anything bought
+    // (airport, hub, or business), yellow for a 1-level bottleneck,
+    // red for a gap of 2 or more (losing 2+/sec of flow until upgraded).
+    const dotOwned = key => (S && S.airports && S.airports[key]) || (S && S.incBiz && S.incBiz[key]) || null;
     const dotFill = (bought, key) => {
       if (!bought) return '#ffffff';
       const gap = bottleneckGap(key);
       if (gap >= 2) return '#e5484d';
       if (gap === 1) return '#f5b301';
-      return bought.type === 'port' ? '#0e7490' : '#2563eb';
+      return bought.type === 'port' ? '#0e7490' : '#1e40af';
     };
     // Airline dots on every map, in the same place: major cities,
     // US state capitals, country capitals, and region dots, all in
@@ -843,7 +848,7 @@ const MapView = (() => {
           if (ct.isCapital || !ct.isMajor) return;
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          const bought = S && S.airports && S.airports['c' + ct.id];
+          const bought = dotOwned('c' + ct.id);
           const df = dotFill(bought, 'c' + ct.id); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
@@ -852,7 +857,7 @@ const MapView = (() => {
         US_CAPITALS.forEach(st => {
           const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          const bought = S && S.airports && S.airports['us:' + st.s];
+          const bought = dotOwned('us:' + st.s);
           const df = dotFill(bought, 'us:' + st.s); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
@@ -862,7 +867,7 @@ const MapView = (() => {
           if (!ct.isCapital) return;
           const [sx, sy] = toScreen(ct.x, ct.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          const bought = S && S.airports && S.airports['c' + ct.id];
+          const bought = dotOwned('c' + ct.id);
           const df = dotFill(bought, 'c' + ct.id); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
@@ -872,7 +877,7 @@ const MapView = (() => {
           if (!regionDotVisible(d, v.s)) return;
           const [sx, sy] = toScreen(d.x, d.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-          const bought = S && S.airports && S.airports[d.key];
+          const bought = dotOwned(d.key);
           const df = dotFill(bought, d.key); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
@@ -1023,7 +1028,7 @@ const MapView = (() => {
         if (!cap) return;
         const [sx, sy] = toScreen(cap.x, cap.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
-        const bought = S && S.airports && S.airports['us:' + cap.s];
+        const bought = dotOwned('us:' + cap.s);
         const df = dotFill(bought, 'us:' + cap.s); c.fillStyle = df; c.strokeStyle = df === '#ffffff' ? '#0f172a' : '#ffffff'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
       });

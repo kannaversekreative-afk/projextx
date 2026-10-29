@@ -1042,3 +1042,30 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 /* Photo-map stage: the transformed wrapper for the picture (and any overlay). */
 .pm-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 #pmTraffic { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+
+/* Worl Inc. business template (Service / Product / Marketing / Finance):
+   logo header, product + marketing cards, margin donut, weekly paired
+   bars, income-statement rows. Light theme, same as the game sheets. */
+.bizhead { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.bizlogo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; background: #e8f0ff; }
+.bizlogo.big { width: 72px; height: 72px; }
+.bizinit { width: 44px; height: 44px; border-radius: 50%; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; flex: none; }
+.bizinit.big { width: 72px; height: 72px; font-size: 22px; }
+.biztabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.bizstore { text-align: center; margin: 8px 0; }
+.bizstore .bizlogo.big, .bizstore .bizinit.big { margin: 0 auto; }
+.prodcard, .mktcard { border: 2px solid var(--line); border-radius: 20px; padding: 14px; margin-top: 12px; }
+.prodcard p, .mktcard p { margin: 6px 0; }
+.donut { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: conic-gradient(var(--orange) calc(var(--p) * 1%), #e2e8f0 0); vertical-align: middle; margin: 0 6px; }
+.donut span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #fff; font-size: 12px; font-weight: 900; }
+.bars { display: flex; gap: 14px; align-items: flex-end; margin: 12px 0; }
+.barpair { display: inline-block; text-align: center; }
+.bar { display: inline-block; width: 14px; vertical-align: bottom; border-radius: 6px 6px 0 0; }
+.bar.rev { background: var(--blue); margin-right: 3px; }
+.bar.inc { background: var(--orange); }
+.barlab { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+.stmt p { display: flex; justify-content: space-between; gap: 10px; }
+.stmt p span:first-child { text-align: left; }
+.stmt p span:nth-child(2) { text-align: right; white-space: nowrap; }
+.stmt-h { font-weight: 900; }
+.stmt-t { font-weight: 900; border-top: 2px solid var(--line); padding-top: 6px; }
