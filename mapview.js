@@ -13,11 +13,11 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  // Light map, matched to Apple's light bar: the sea is the bar's
-  // light gray (not blue), land is white. Everything drawn on it
+  // Light map, matched to Apple's bar: the sea is the bar strip's
+  // own pale light blue, land is white. Everything drawn on it
   // keeps dark outlines / blue accents, so dots, routes, pills and
   // the play-screen wordmark stay readable.
-  const COL = { sea: '#e8e8e8', sea2: '#dedede', land: '#ffffff', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
+  const COL = { sea: '#dee8f3', sea2: '#dbe6f3', land: '#ffffff', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
   // Title screen: the world pauses and the map goes pristine — no
   // save-state tints, no home stroke, no dots, no simulation. The
   // play screen is map + logo + PLAY, nothing else on top of it.
