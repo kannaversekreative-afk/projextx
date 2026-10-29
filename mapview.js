@@ -438,6 +438,10 @@ const MapView = (() => {
         try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
       }
     }
+    // Worl Inc. businesses earn every second: income × level each.
+    if (typeof S !== 'undefined' && S && S.mode === 'inc' && S.incBiz) {
+      for (const k in S.incBiz) { const b = S.incBiz[k]; if (b) S.cash += (b.income || 0) * (b.level || 1) * dt; }
+    }
     // Airline citizens: hubs are originators by nature, no toggle.
     // A hub grows (level + 1)/sec constantly, up to capacity level x 20000. An airport grows
     // only when connected to a hub, receiving per hub route the

@@ -1390,6 +1390,25 @@ function onDotTap(dot) {
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
     html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
   }
+  // Worl Inc. businesses: build on any dot, earn per second, upgrade,
+  // sell (80% back) or delete. Separate from airline sites — a dot can
+  // hold both an airport and a business.
+  if (S.mode === 'inc' && typeof INC_SECTORS !== 'undefined') {
+    if (!S.incBiz) S.incBiz = {};
+    const biz = S.incBiz[dot.key];
+    if (biz) {
+      const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+      const lv = biz.level || 1;
+      const inc = (biz.income || 0) * lv;
+      html += `<h3>${esc(biz.name)}</h3><p>${sec ? esc(sec.name) : esc(biz.sector)} · Level ${lv} · Earns ${fmt(inc)}/sec</p>`;
+      if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
+      else { const upCost = (biz.cost || 0) * lv; html += `<button class="btn3d orange wide" data-a="incUpgrade" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE TO LEVEL ${lv + 1} (${fmt(inc + (biz.income || 0))}/sec) ${fmt(upCost)}</button>`; }
+      const sellVal = Math.round((biz.cost || 0) * lv * 0.8);
+      html += `<p><button class="btn3d" data-a="incSell" data-x="${dot.key}">SELL ${fmt(sellVal)}</button> <button class="btn3d" data-a="incDelete" data-x="${dot.key}">DELETE</button></p>`;
+    } else {
+      html += `<button class="btn3d orange wide" data-a="incBuildPick" data-x="${dot.key}">BUILD BUSINESS</button>`;
+    }
+  }
   openModal(html, 'sheet');
 }
 function onRouteDotTap(dot) {
@@ -3656,6 +3675,66 @@ const A = {
     const inp = document.getElementById('incName');
     const name = (inp && inp.value.trim()) || 'Founder';
     S = newGame({ mode: 'inc', home: 'USA', name }); save(); enterGame(false);
+  },
+  // Worl Inc. businesses: pick a sector, pick a type, build on a dot.
+  incBuildPick: (x) => {
+    if (!S || S.mode !== 'inc' || typeof INC_SECTORS === 'undefined') return;
+    const rows = INC_SECTORS.map(s => `<div class="srow"><span class="avatar">🏢</span><span class="sname"><b>${esc(s.name)}</b><span class="muted">${esc(s.blurb)}</span></span><button class="btn" data-a="incSectorPick" data-x="${x}|${s.id}">Pick</button></div>`).join('');
+    const special = `<div class="srow"><span class="avatar">🏛️</span><span class="sname"><b>Special</b><span class="muted">Buildings that do not fit a sector yet.</span></span><button class="btn" data-a="incSectorPick" data-x="${x}|special">Pick</button></div>`;
+    openModal(`<h2>BUILD BUSINESS</h2><p class="muted">Pick a sector first.</p><div class="menu-list">${rows}${special}</div>`, 'sheet');
+  },
+  incSectorPick: (x) => {
+    if (!S || S.mode !== 'inc') return;
+    const [dotKey, secId] = (x || '').split('|');
+    const sec = (typeof incSectorById === 'function' ? incSectorById(secId) : null);
+    if (!sec) return toast('No such sector.', 'bad');
+    const fmt = n => '$' + Math.round(n).toLocaleString();
+    const rows = sec.types.map(t => `<div class="srow"><span class="avatar">🏪</span><span class="sname"><b>${esc(t.name)}</b><span class="muted">${fmt(t.cost)} to build · earns ${fmt(t.income)}/sec</span></span><button class="btn" data-a="incBuild" data-x="${dotKey}|${secId}|${t.id}"${S.cash < t.cost ? ' disabled' : ''}>Build</button></div>`).join('');
+    openModal(`<h2>${esc(sec.name).toUpperCase()}</h2><p class="muted">${esc(sec.blurb)}</p><div class="menu-list">${rows}</div>`, 'sheet');
+  },
+  incBuild: (x) => {
+    if (!S || S.mode !== 'inc') return;
+    const [dotKey, secId, typeId] = (x || '').split('|');
+    const sec = (typeof incSectorById === 'function' ? incSectorById(secId) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, typeId) : null);
+    if (!sec || !t) return toast('No such business.', 'bad');
+    if (!S.incBiz) S.incBiz = {};
+    if (S.incBiz[dotKey]) return toast('A business is already here.', 'bad');
+    if (S.cash < t.cost) return toast('Not enough business cash.', 'bad');
+    S.cash -= t.cost;
+    S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1 };
+    save(); renderHUD();
+    toast(`${t.name} built.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incUpgrade: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const biz = S.incBiz[x];
+    const lv = biz.level || 1;
+    if (lv >= 5) return toast('Already max level.', 'bad');
+    const cost = (biz.cost || 0) * lv;
+    if (S.cash < cost) return toast('Not enough business cash.', 'bad');
+    S.cash -= cost; biz.level = lv + 1;
+    save(); renderHUD();
+    toast(`${biz.name} is now level ${biz.level}.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incSell: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const biz = S.incBiz[x];
+    const val = Math.round((biz.cost || 0) * (biz.level || 1) * 0.8);
+    S.cash += val; delete S.incBiz[x];
+    save(); renderHUD();
+    toast(`${biz.name} sold for $${val.toLocaleString()}.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incDelete: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const name = S.incBiz[x].name || 'Business';
+    delete S.incBiz[x];
+    save(); renderHUD();
+    toast(`${name} deleted.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },

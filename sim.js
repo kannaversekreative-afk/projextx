@@ -54,7 +54,7 @@ function newGame(opt) {
   // New York set unlocked, and the newspaper beat (10 real minutes)
   // replaces manual week advance. incPaperAt is the wall-clock time
   // of the last auto edition, so the beat survives reloads.
-  if (opt.mode === 'inc') { S.incStates = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts']; S.incPaperAt = Date.now(); }
+  if (opt.mode === 'inc') { S.incStates = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts']; S.incPaperAt = Date.now(); S.incBiz = {}; }
   // Countries, with military levels from their real strength: the
   // 2025 Global Firepower ranking for the top 39, a GDP + population
   // formula for everyone else. Every country starts under 20.
