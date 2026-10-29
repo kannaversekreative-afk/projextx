@@ -1020,12 +1020,11 @@ async function boot() {
   addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   const saved = await loadSave();
-  if (saved) {
+  // Worl Inc. is the only game now. Old saves (any mode but inc) are
+  // ignored — Nicholas does not care about them — so opening the game
+  // always lands on the Worl Inc. start screen instead of an old game.
+  if (saved && saved.mode === 'inc') {
     S = saved;
-    // A saved Random World reloads its generated landmass from its
-    // seed, so the map, countries and cities match the save exactly.
-    // Old shuffled saves (no seed) keep real Earth, as before.
-    if (S.mode === 'random' && S.randomSeed != null && typeof switchWorldToRandom === 'function') switchWorldToRandom(S.randomSeed);
     enterGame(true);
   }
   else showInherit();
