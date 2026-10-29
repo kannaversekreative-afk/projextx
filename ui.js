@@ -1109,8 +1109,8 @@ function showPlayScreen() {
   try { MapView.drawNow(); } catch (e) {}
   const has = !!(S && S.mode === 'inc');
   const cont = (has && S.companyName) ? `<div class="play-cont">Continuing ${esc(S.companyName)}</div>` : '';
-  $('playscreen').innerHTML = `<div class="play-map"><div class="play-logo"><div class="play-the">THE</div><div class="play-main">WORL INC.</div></div></div>
-  <div class="play-panel">
+  // Full-screen map: the logo and PLAY float over it (no panel block).
+  $('playscreen').innerHTML = `<div class="play-float"><div class="play-logo"><div class="play-the">THE</div><div class="play-main">WORL INC.</div></div>
     ${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
       <button class="play-btn danger" data-a="playResetYes">DELETE WORLD</button>
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
