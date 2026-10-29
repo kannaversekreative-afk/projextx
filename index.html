@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Worl Clean — Piece 3</title>
+<title>Worl Clean — Piece 4</title>
 <style>
-/* Clean format rules (Piece 1/2, kept for Piece 3):
+/* Clean format rules (Piece 1-3, kept for Piece 4):
    - Sea lives ONLY inside a map container div, never as a full-screen canvas behind a panel.
    - html/body background is dark #2a3648, so any shortfall shows dark, never sea.
    - No position:fixed, no 100dvh/100vh on full-screen layers.
@@ -22,13 +22,27 @@ body { position: relative; }
 #map-area { flex: 0 0 58%; background: #bcd7ee; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
 #map-area canvas { position: absolute; inset: 0; display: block; }
 #map-area h1 { position: relative; z-index: 1; color: #0b1e3a; font-family: Georgia, serif; font-size: 44px; letter-spacing: 1px; margin: 0; text-align: center; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
-#panel { flex: 1; background: #2a3648; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+#panel { flex: 1; background: #2a3648; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 24px calc(20px + env(safe-area-inset-bottom)); box-sizing: border-box; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #6e7f94 #2a3648; }
+/* Piece 4 fit fix: when the create/reset boxes are open the panel is taller,
+   so the map area shrinks in flow (still no fixed layers, no window sizing)
+   instead of the panel scrolling and showing a scrollbar track. */
+#playscreen:has(#createBox.open) #map-area { flex-basis: 48%; }
+#playscreen:has(#resetBox.open) #map-area { flex-basis: 52%; }
+#playscreen:has(#createBox.open):has(#resetBox.open) #map-area { flex-basis: 44%; }
 .play-btn { width: min(420px, 82vw); padding: 14px 11px; border-radius: 20px; background: #3a4756; border: 2px solid #6e7f94; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 3px; }
-.play-cont { color: #9fb3c8; font-size: 14px; font-weight: 700; }
+.play-cont { color: #9fb3c8; font-size: 14px; font-weight: 700; text-align: center; }
 .play-reset { color: #9fb3c8; font-weight: 800; font-size: 14px; background: none; border: 0; }
 .play-ver { margin-top: auto; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #5a6b82; }
+/* Piece 4: create + reset boxes, in flow inside the panel, never overlays. */
+#createBox, #resetBox { display: none; width: min(420px, 82vw); background: #3a4756; border: 2px solid #6e7f94; border-radius: 16px; padding: 14px; box-sizing: border-box; color: #fff; }
+#createBox.open, #resetBox.open { display: block; }
+#createBox label { display: block; font-size: 13px; font-weight: 800; color: #9fb3c8; margin-bottom: 6px; }
+#createName { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 12px; border: 1px solid #6e7f94; background: #2a3648; color: #fff; font-size: 16px; }
+#createStart, #resetKeep, #resetDelete { width: 100%; margin-top: 10px; padding: 12px; border-radius: 12px; background: #2a3648; border: 2px solid #6e7f94; color: #fff; font-weight: 800; font-size: 14px; }
+#resetDelete { background: #8c2f2f; border-color: #c05a5a; }
+#resetText { font-size: 14px; font-weight: 700; margin: 0; }
 /* Game screen (Piece 3): in-flow flex column. HUD on top, map fills the
-   remaining space, bottom nav in flow at the bottom. No fixed layers. */
+   remaining space, sheet (Piece 4) in flow above the bottom nav. */
 #game { display: none; flex-direction: column; height: 100%; background: #2a3648; }
 #game.open { display: flex; }
 #hud { background: #2a3648; color: #fff; padding: 14px 16px 10px; box-sizing: border-box; }
@@ -39,6 +53,12 @@ body { position: relative; }
 #hud-note { margin: 8px 0 0; font-size: 13px; color: #9fb3c8; font-weight: 700; }
 #game-map { flex: 1; min-height: 0; background: #bcd7ee; overflow: hidden; position: relative; }
 #game-map canvas { position: absolute; inset: 0; display: block; }
+#sheet { display: none; background: #2a3648; color: #fff; border-top: 2px solid #6e7f94; padding: 16px; box-sizing: border-box; max-height: 40%; overflow-y: auto; }
+#sheet.open { display: block; }
+#sheet-row { display: flex; align-items: center; gap: 12px; }
+#sheet-title { font-weight: 900; font-size: 16px; flex: 1; }
+#sheetClose { color: #fff; background: #3a4756; border: 2px solid #6e7f94; border-radius: 12px; padding: 8px 12px; font-weight: 800; font-size: 14px; }
+#sheet-body { font-size: 14px; color: #9fb3c8; font-weight: 700; margin: 10px 0 0; }
 #nav { background: #2a3648; display: flex; gap: 8px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 #nav button { flex: 1; color: #fff; background: #3a4756; border: 2px solid #6e7f94; border-radius: 12px; padding: 12px 4px; font-weight: 800; font-size: 13px; }
 </style>
@@ -49,21 +69,39 @@ body { position: relative; }
     <div id="map-area"><canvas id="worldmap"></canvas><h1>WORL INC.</h1></div>
     <div id="panel">
       <button class="play-btn" id="playBtn">PLAY</button>
-      <div class="play-cont" id="playCont">Continuing My Company</div>
-      <button class="play-reset">Reset</button>
-      <div class="play-ver">CLEAN PIECE 3</div>
+      <div class="play-cont" id="playCont">Loading save…</div>
+      <div id="createBox">
+        <label for="createName">COMPANY NAME</label>
+        <input id="createName" placeholder="My Company" maxlength="60">
+        <button id="createStart">START</button>
+        <p style="font-size:13px;color:#9fb3c8;font-weight:700;margin:10px 0 0;">Clean placeholder start: $200,000. Stored only in the new clean save, never in the old save.</p>
+      </div>
+      <button class="play-reset" id="resetBtn">Reset</button>
+      <div id="resetBox">
+        <p id="resetText">Delete your clean save? Your old game save will NOT be touched.</p>
+        <button id="resetDelete">Delete</button>
+        <button id="resetKeep">Keep playing</button>
+      </div>
+      <div class="play-ver">CLEAN PIECE 4</div>
     </div>
   </div>
   <div id="game">
     <div id="hud">
       <div id="hud-row">
         <button id="backBtn">← Back</button>
-        <div id="hud-company">My Company (placeholder)</div>
+        <div id="hud-company">My Company</div>
         <div id="hud-cash">Cash: —</div>
       </div>
-      <div id="hud-note">World map — Piece 3</div>
+      <div id="hud-note">World map — Piece 4</div>
     </div>
     <div id="game-map"><canvas id="gamemap"></canvas></div>
+    <div id="sheet">
+      <div id="sheet-row">
+        <div id="sheet-title">Home</div>
+        <button id="sheetClose">✕ Close</button>
+      </div>
+      <p id="sheet-body">Coming in a later piece.</p>
+    </div>
     <div id="nav">
       <button data-nav="Home">Home</button>
       <button data-nav="Businesses">Businesses</button>
@@ -72,11 +110,11 @@ body { position: relative; }
     </div>
   </div>
 </div>
-<script src="world-data.js?v=20261026clean3"></script>
-<script src="world-data-a.js?v=20261026clean3"></script>
-<script src="world-data-b.js?v=20261026clean3"></script>
-<script src="world-data-c.js?v=20261026clean3"></script>
-<script src="world.js?v=20261026clean3"></script>
-<script src="map.js?v=20261026clean3"></script>
+<script src="world-data.js?v=20261026clean4"></script>
+<script src="world-data-a.js?v=20261026clean4"></script>
+<script src="world-data-b.js?v=20261026clean4"></script>
+<script src="world-data-c.js?v=20261026clean4"></script>
+<script src="world.js?v=20261026clean4"></script>
+<script src="map.js?v=20261026clean4"></script>
 </body>
 </html>
