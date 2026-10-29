@@ -972,7 +972,7 @@ function updateGameOrientation() {
   const portraitPhone = w <= 760 && h > w;
   if (orientState && orientState.w === w && orientState.h === h && orientState.vw === vwv && orientState.vh === vvh && orientState.cls === portraitPhone) return;
   orientState = { w, h, vw: vwv, vh: vvh, cls: portraitPhone };
-  document.body.classList.toggle('landscape-phone', portraitPhone);
+  document.body.classList.remove('landscape-phone');
   const game = $('game');
   if (game) {
     game.style.width = ''; game.style.height = '';

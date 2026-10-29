@@ -191,7 +191,7 @@ const MapView = (() => {
   function resize() {
     const ow = vw, oh = vh;
     dpr = Math.min(2, window.devicePixelRatio || 1); vw = wrap.clientWidth; vh = wrap.clientHeight;
-    [base, top].forEach(c => { c.width = vw * dpr; c.height = vh * dpr; c.style.width = vw + 'px'; c.style.height = vh + 'px'; });
+    [base, top].forEach(c => { c.width = vw * dpr; c.height = vh * dpr; c.style.width = '100%'; c.style.height = '100%'; });
     if (ow > 0 && oh > 0) { v.x += (vw - ow) / 2; v.y += (vh - oh) / 2; }
     if (v.s < Math.max(vw / MAP_W, vh / MAP_H)) fit();
     clampView(); dirty = true;
