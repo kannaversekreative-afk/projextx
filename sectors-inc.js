@@ -18,6 +18,7 @@ const INC_SECTORS = [
     { id: 'factory', name: 'Factory', cost: 100000, income: 40 },
     { id: 'industrial', name: 'Industrial Complex', cost: 120000, income: 45 } ] },
   { id: 'transportation', name: 'Transportation', blurb: 'Moving people and goods.', types: [
+    { id: 'airline', name: 'Airline', cost: 220000, income: 0, fare: true },
     { id: 'auto', name: 'Auto Dealership', cost: 30000, income: 11 } ] },
   { id: 'farming', name: 'Farming', blurb: 'Food from the land.', types: [] },
   { id: 'mining', name: 'Mining', blurb: 'Ore and stone from the ground.', types: [] },

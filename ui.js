@@ -1326,6 +1326,7 @@ function onDotTap(dot) {
       const sends = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'airport') sends.push(esc(other.name) + ' ' + Math.min(lv, other.level || 1) + '/sec'); });
       if (sends.length) html += `<p>Sends: ${sends.join(', ')}</p>`;
+      if (S.mode === 'inc' && typeof incAirlineForSite === 'function') { const own = incAirlineForSite(dot.key); if (own && own.airportKey !== dot.key) html += `<p>Part of your Airline.</p>`; }
     } else {
       html += `<p>Population: ${Math.floor(owned.pop || 0).toLocaleString()}</p>`;
       const recv = [];
@@ -1384,11 +1385,21 @@ function onDotTap(dot) {
       html += `<p>Flow out: ${Math.round(outPct * 100)}% ${pctBtn(0, 'Off')} ${pctBtn(0.1, '10%')} ${pctBtn(0.25, '25%')} ${pctBtn(0.5, '50%')} ${pctBtn(0.75, '75%')} ${pctBtn(1, '100%')}${inPct ? ` | In from ${esc(other.name)}: ${Math.round(inPct * 100)}%` : ''}</p>`;
     });
   } else {
-    html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs. Passengers pay $50 each when they arrive, so routes earn as people fly.</p><p>Cash: ${fmt(S.cash)}</p>`;
-    const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
-    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
-    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
-    html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
+    if (S.mode === 'inc') {
+      html += `<p>Build a business here. Build an Airline (Transportation) to run planes, airports and hubs — passengers pay $50 each when they arrive. Ports haul trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs.</p><p>Cash: ${fmt(S.cash)}</p>`;
+      const ownsAirline = S.incBiz && Object.values(S.incBiz).some(b => b && b.type === 'airline');
+      if (ownsAirline) {
+        const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
+        html += `<button class="btn3d orange wide" data-a="incHubBuild" data-x="${dot.key}"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUILD HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
+      }
+      html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
+    } else {
+      html += `<p>Airport brings in people only. Hub brings in people and cargo. Port hauls trade from far away by ship, 100x a cargo plane but way slower. Trade sells for cash at hubs. Passengers pay $50 each when they arrive, so routes earn as people fly.</p><p>Cash: ${fmt(S.cash)}</p>`;
+      const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
+      html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|airport"${S.cash < 220000 ? ' disabled' : ''}>BUY AIRPORT ${fmt(220000)}</button>`;
+      html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|hub"${!hubFree && S.cash < 1250000 ? ' disabled' : ''}>BUY HUB ${hubFree ? 'FREE' : fmt(1250000)}</button>`;
+      html += `<button class="btn3d orange wide" data-a="airportBuy" data-x="${dot.key}|port"${S.cash < 600000 ? ' disabled' : ''}>BUY PORT ${fmt(600000)}</button>`;
+    }
   }
   // Worl Inc. businesses: build on any dot, earn per second, upgrade,
   // sell (80% back) or delete. Separate from airline sites — a dot can
@@ -1400,10 +1411,17 @@ function onDotTap(dot) {
       const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
       const lv = biz.level || 1;
       const inc = (biz.income || 0) * lv;
-      html += `<h3>${esc(biz.name)}</h3><p>${sec ? esc(sec.name) : esc(biz.sector)} · Level ${lv} · Earns ${fmt(inc)}/sec</p>`;
-      if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
-      else { const upCost = (biz.cost || 0) * lv; html += `<button class="btn3d orange wide" data-a="incUpgrade" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE TO LEVEL ${lv + 1} (${fmt(inc + (biz.income || 0))}/sec) ${fmt(upCost)}</button>`; }
-      const sellVal = Math.round((biz.cost || 0) * lv * 0.8);
+      if (biz.type === 'airline') {
+        html += `<h3>${esc(biz.name)}</h3><p>${sec ? esc(sec.name) : esc(biz.sector)} · Level ${lv} · Earns $50 per arriving passenger</p>`;
+        if (biz.hubs && biz.hubs.length) { const hn = biz.hubs.map(h => (S.airports && S.airports[h]) ? S.airports[h].name : h); html += `<p>Hubs: ${hn.map(esc).join(', ')}</p>`; }
+        if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
+        else { const upCost = (typeof incAirportUpCost === 'function' ? incAirportUpCost(lv) : 0); html += `<button class="btn3d orange wide" data-a="incUpgrade" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE AIRPORT TO LEVEL ${lv + 1} ${fmt(upCost)}</button>`; }
+      } else {
+        html += `<h3>${esc(biz.name)}</h3><p>${sec ? esc(sec.name) : esc(biz.sector)} · Level ${lv} · Earns ${fmt(inc)}/sec</p>`;
+        if (lv >= 5) html += `<button class="btn3d orange wide" disabled>MAX LEVEL</button>`;
+        else { const upCost = (biz.cost || 0) * lv; html += `<button class="btn3d orange wide" data-a="incUpgrade" data-x="${dot.key}"${S.cash < upCost ? ' disabled' : ''}>UPGRADE TO LEVEL ${lv + 1} (${fmt(inc + (biz.income || 0))}/sec) ${fmt(upCost)}</button>`; }
+      }
+      const sellVal = Math.round((biz.spent || (biz.cost || 0) * lv) * 0.8);
       html += `<p><button class="btn3d" data-a="incSell" data-x="${dot.key}">SELL ${fmt(sellVal)}</button> <button class="btn3d" data-a="incDelete" data-x="${dot.key}">DELETE</button></p>`;
     } else {
       html += `<button class="btn3d orange wide" data-a="incBuildPick" data-x="${dot.key}">BUILD BUSINESS</button>`;
@@ -3618,6 +3636,23 @@ function drawDepMap(sel, from) {
 }
 
 // ---------- actions ----------
+// Worl Inc. Airline helpers: an Airline business owns its airport (the
+// S.incBiz key) plus any hubs listed in biz.hubs. Selling or deleting
+// the business removes all of its sites, routes, moves and flow rules.
+function incAirlineForSite(key) {
+  if (!S || !S.incBiz) return null;
+  if (S.incBiz[key] && S.incBiz[key].type === 'airline') return { biz: S.incBiz[key], airportKey: key };
+  for (const k in S.incBiz) { const b = S.incBiz[k]; if (b && b.type === 'airline' && (b.hubs || []).includes(key)) return { biz: b, airportKey: k }; }
+  return null;
+}
+function incRemoveAirlineSites(biz, airportKey) {
+  const keys = [airportKey].concat(biz.hubs || []);
+  if (S.airports) for (const k of keys) delete S.airports[k];
+  if (S.routes) S.routes = S.routes.filter(r => !keys.includes(r.from) && !keys.includes(r.to));
+  if (S.flowPct) for (const k in S.flowPct) if (keys.some(sk => k.startsWith(sk + '|'))) delete S.flowPct[k];
+  if (S.moves) S.moves = S.moves.filter(m => !keys.includes(m.from) && !keys.includes(m.to));
+}
+function incAirportUpCost(lv) { return [0, 100000, 250000, 500000, 1000000][lv] || 0; }
 const A = {
   newGame: async () => {
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
@@ -3702,7 +3737,18 @@ const A = {
     if (S.incBiz[dotKey]) return toast('A business is already here.', 'bad');
     if (S.cash < t.cost) return toast('Not enough business cash.', 'bad');
     S.cash -= t.cost;
-    S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1 };
+    if (typeId === 'airline') {
+      // An Airline IS its airport: building it creates the airport site
+      // (same shape as a bought airport), which routes, fleet and hubs
+      // then plug into. No flat income — it earns passenger fares.
+      if (S.airports && S.airports[dotKey]) { S.cash += t.cost; return toast('You already own a building here.', 'bad'); }
+      if (!S.airports) S.airports = {};
+      const d = (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy : null;
+      S.airports[dotKey] = { type: 'airport', name: d ? d.name : dotKey, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: 0, fare: true, level: 1, spent: t.cost, hubs: [] };
+    } else {
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost };
+    }
     save(); renderHUD();
     toast(`${t.name} built.`, 'good');
     if (UI.dotBuy) onDotTap(UI.dotBuy);
@@ -3712,9 +3758,24 @@ const A = {
     const biz = S.incBiz[x];
     const lv = biz.level || 1;
     if (lv >= 5) return toast('Already max level.', 'bad');
+    if (biz.type === 'airline') {
+      // Upgrading an Airline upgrades its airport (same cost table as a
+      // bought airport), and the business level mirrors the airport.
+      const site = S.airports && S.airports[x];
+      if (!site) return toast('Its airport is gone.', 'bad');
+      const slv = site.level || 1;
+      if (slv >= 5) return toast('Already max level.', 'bad');
+      const cost = incAirportUpCost(slv);
+      if (S.cash < cost) return toast('Not enough business cash.', 'bad');
+      S.cash -= cost; site.level = slv + 1; biz.level = slv + 1; biz.spent = (biz.spent || biz.cost) + cost;
+      save(); renderHUD();
+      toast(`${biz.name}'s airport is now level ${biz.level}.`, 'good');
+      if (UI.dotBuy) onDotTap(UI.dotBuy);
+      return;
+    }
     const cost = (biz.cost || 0) * lv;
     if (S.cash < cost) return toast('Not enough business cash.', 'bad');
-    S.cash -= cost; biz.level = lv + 1;
+    S.cash -= cost; biz.level = lv + 1; biz.spent = (biz.spent || biz.cost) + cost;
     save(); renderHUD();
     toast(`${biz.name} is now level ${biz.level}.`, 'good');
     if (UI.dotBuy) onDotTap(UI.dotBuy);
@@ -3722,7 +3783,8 @@ const A = {
   incSell: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
     const biz = S.incBiz[x];
-    const val = Math.round((biz.cost || 0) * (biz.level || 1) * 0.8);
+    const val = Math.round((biz.spent || (biz.cost || 0) * (biz.level || 1)) * 0.8);
+    if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
     S.cash += val; delete S.incBiz[x];
     save(); renderHUD();
     toast(`${biz.name} sold for $${val.toLocaleString()}.`, 'good');
@@ -3730,10 +3792,33 @@ const A = {
   },
   incDelete: (x) => {
     if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
-    const name = S.incBiz[x].name || 'Business';
+    const biz = S.incBiz[x];
+    const name = biz.name || 'Business';
+    if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
     delete S.incBiz[x];
     save(); renderHUD();
     toast(`${name} deleted.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incHubBuild: (x) => {
+    // A hub belongs to your Airline: build it on an empty dot and it
+    // joins the business (selling the Airline removes its hubs too).
+    if (!S || S.mode !== 'inc') return;
+    if (S.airports && S.airports[x]) return toast('You already own a building here.', 'bad');
+    let owner = null;
+    if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (b && b.type === 'airline') { owner = b; break; } }
+    if (!owner) return toast('Build an Airline first.', 'bad');
+    const hubFree = !S.airports || !Object.values(S.airports).some(a => a.type === 'hub');
+    const price = hubFree ? 0 : 1250000;
+    if (S.cash < price) return toast('Not enough business cash.', 'bad');
+    if (!S.airports) S.airports = {};
+    const d = (UI.dotBuy && UI.dotBuy.key === x) ? UI.dotBuy : null;
+    S.airports[x] = { type: 'hub', name: d ? d.name : x, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
+    if (!owner.hubs) owner.hubs = [];
+    if (!owner.hubs.includes(x)) owner.hubs.push(x);
+    S.cash -= price;
+    save(); renderHUD();
+    toast(hubFree ? 'Hub built (free, first hub).' : 'Hub built.', 'good');
     if (UI.dotBuy) onDotTap(UI.dotBuy);
   },
 
@@ -4014,6 +4099,13 @@ const A = {
     if (S.cash < cost) return toast('Not enough cash.', 'bad');
     S.cash -= cost;
     a.level = lv + 1;
+    // If this site belongs to an Airline business, the business tracks
+    // it: its level mirrors its airport, and every upgrade (airport or
+    // hub) counts toward what a sale pays back.
+    if (S.mode === 'inc' && typeof incAirlineForSite === 'function') {
+      const own = incAirlineForSite(key);
+      if (own) { if (own.airportKey === key) own.biz.level = a.level; own.biz.spent = (own.biz.spent || own.biz.cost) + cost; }
+    }
     save(); renderHUD();
     if (UI.dotBuy) onDotTap(UI.dotBuy);
     toast((a.type === 'hub' ? 'Hub' : a.type === 'port' ? 'Port' : 'Airport') + ' upgraded to level ' + a.level + '.', 'good');
