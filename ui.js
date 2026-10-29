@@ -1506,7 +1506,7 @@ function openAirCard() {
   const siteKeys = Object.keys(sites);
   const routes = S.routes || [];
   const fl = S.fleet || { prop: 0, jet: 0, jumbo: 0, ship: 0 };
-  const tabs = ['routes', 'fleet', 'airline', 'more'].map(t => `<button data-a="airTab" data-x="${t}"${t === tab ? ' class="sel"' : ''}>${t === 'routes' ? 'Routes' : t === 'fleet' ? 'Fleet' : t === 'airline' ? 'Airline' : 'More'}</button>`).join('');
+
   let html = '';
   if (tab === 'routes') {
     const totalVeh = (fl.prop || 0) + (fl.jet || 0) + (fl.jumbo || 0) + (fl.ship || 0);
@@ -1561,7 +1561,6 @@ function openAirCard() {
     html += `<p>How it works: hubs grow (level+1)/sec. Airports grow only on hub routes (min levels/sec). Ports generate trade (level+1)×100/sec. Passengers pay $50 on arrival; trade sells $1/unit at hubs. A full site (level×20,000) stops growing and drags stability — upgrade it or move people out.</p>`;
     html += `<p><button class="btn3d" data-a="layers">Map layers</button> <button class="btn3d" data-a="drawer">Phone</button> <button class="btn3d" data-a="closeModal">Back to map</button></p>`;
   }
-  html += `<div class="airtabs aircard-tabs">${tabs}</div>`;
   openModal(html, 'sheet');
 }
 function onDotTap(dot) {
