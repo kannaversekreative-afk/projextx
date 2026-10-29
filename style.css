@@ -1106,3 +1106,13 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .crt-logo.on { border-color: #fff; }
 #create .sw.on { box-shadow: 0 0 0 3px #fff; }
 .crt-start { display: block; width: min(480px, 90vw); margin: 28px auto 0; padding: 16px; border-radius: 18px; background: #5cb85c; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 1px; }
+
+/* Full header/bar removal, all at once: city, panel, modal, create, placing. Navigation buttons kept floating, not in bars, so nothing traps you. */
+#chud > .citytopbar, #chud > .citytoptext, #chud .hud-btn { display: none; }
+.panel-head { border-bottom: none; }
+.panel-title > div { display: none; }
+.mbox > h2 { display: none; }
+.crt-head { background: transparent; }
+.crt-head h2, .crt-guide { display: none; }
+.place-banner { background: transparent; box-shadow: none; }
+.place-banner b, .place-banner span { display: none; }
