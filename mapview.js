@@ -18,7 +18,7 @@ const MapView = (() => {
   // flat, no gradient shift. Land is white. Everything drawn on
   // it keeps dark outlines / blue accents, so dots, routes, pills
   // and the play-screen wordmark stay readable.
-  const COL = { sea: '#ebf1fd', sea2: '#ebf1fd', land: '#ffffff', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
+  const COL = { sea: '#bcd7ee', sea2: '#a3c6e6', land: '#ffffff', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
   // Title screen: the world pauses and the map goes pristine — no
   // save-state tints, no home stroke, no dots, no simulation. The
   // play screen is map + logo + PLAY, nothing else on top of it.
