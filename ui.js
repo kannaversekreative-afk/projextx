@@ -1171,6 +1171,7 @@ function showPlayScreen() {
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
     : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
       ${has ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}`}
+    <div class="play-ver">BUILD in</div>
   </div>`;
   $('playscreen').classList.add('open');
 }
@@ -3338,7 +3339,7 @@ function storeHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis' || UI.mgGame === 'brainrot') {
-    const src = { pro: 'minigames/pro.html?v=20261026im', college: 'minigames/college.html?v=20261026im', baseball: 'minigames/baseball.html?v=20261026im', hockey: 'minigames/hockey.html?v=20261026im', tennis: 'minigames/tennis.html?v=20261026im', brainrot: 'minigames/brainrot/index.html?v=20261026im' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026in', college: 'minigames/college.html?v=20261026in', baseball: 'minigames/baseball.html?v=20261026in', hockey: 'minigames/hockey.html?v=20261026in', tennis: 'minigames/tennis.html?v=20261026in', brainrot: 'minigames/brainrot/index.html?v=20261026in' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis', brainrot: 'Brain Rot' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
