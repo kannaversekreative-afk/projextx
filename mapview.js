@@ -13,10 +13,11 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  // Light map (Apple-bar match): soft blue sea, light gray land.
-  // Everything drawn on it keeps dark outlines / blue accents, so
-  // dots, routes, pills and the play-screen wordmark stay readable.
-  const COL = { sea: '#bcd7ee', sea2: '#a3c6e6', land: '#e9e9e9', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
+  // Light map, matched to Apple's light bar: the sea is the bar's
+  // light gray (not blue), land is white. Everything drawn on it
+  // keeps dark outlines / blue accents, so dots, routes, pills and
+  // the play-screen wordmark stay readable.
+  const COL = { sea: '#e8e8e8', sea2: '#dedede', land: '#ffffff', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
   // Title screen: the world pauses and the map goes pristine — no
   // save-state tints, no home stroke, no dots, no simulation. The
   // play screen is map + logo + PLAY, nothing else on top of it.
@@ -294,7 +295,7 @@ const MapView = (() => {
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
       if (!vis(k)) return;
-      let fill = k.playable ? COL.land : '#d3d3d3';
+      let fill = k.playable ? COL.land : '#f2f2f2';
       if (st && k.a3 === st.home && k.a3 !== 'USA') fill = COL.home;
       if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#eaf2ff';
       c.fillStyle = fill; c.fill(k.path);
