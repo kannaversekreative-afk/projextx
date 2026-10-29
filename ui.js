@@ -988,6 +988,9 @@ async function boot() {
   window.addEventListener('resize', updateGameOrientation);
   window.addEventListener('orientationchange', updateGameOrientation);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', updateGameOrientation);
+  // Home Screen app: register the notification service worker (https
+  // only; silently skipped on file:// playtests and old browsers).
+  try { if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
   W = buildWorld();
   MapView.init();
   MapView.on('city', onCityTap); MapView.on('country', onCountryTap); MapView.on('vehicle', openVehicleCard); MapView.on('dot', onDotTap); MapView.on('routeDot', onRouteDotTap); MapView.on('routeCancel', onRouteCancel); MapView.on('connectDot', onConnectDotTap); MapView.on('moveDot', onMoveDotTap); MapView.on('moveCancel', onMoveCancel); MapView.on('tradeDot', onTradeDotTap); MapView.on('tradeCancel', onTradeCancel);
@@ -1097,6 +1100,22 @@ function renderInheritStep() {
   }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
+// ---------- notifications ----------
+// Plumbing for the Home Screen app. The service worker (sw.js) carries
+// no fetch caching — the game always loads fresh ?v= scripts — it
+// only handles notification taps and future push events. What
+// actually pings the player gets wired once Nicholas picks the
+// events; until then these are just the permission + delivery
+// helpers, called from a user gesture, never on load.
+function requestWorlNotifications() { try { if (!('Notification' in window)) return Promise.resolve('unsupported'); return Notification.requestPermission(); } catch (e) { return Promise.resolve('denied'); } }
+function notifyWorl(title, body) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const opts = { body: body || '', icon: 'worl-icon-192.png' };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) navigator.serviceWorker.ready.then(reg => { try { reg.showNotification(title, opts); } catch (e) {} }).catch(() => {});
+    else new Notification(title, opts);
+  } catch (e) {}
+}
 // ---------- play screen + new-business flow ----------
 // The play screen is the front door: the world map (clean, no dots —
 // drawTop skips everything while UI.playScreen is set) with the
@@ -1109,13 +1128,15 @@ function showPlayScreen() {
   try { MapView.drawNow(); } catch (e) {}
   const has = !!(S && S.mode === 'inc');
   const cont = (has && S.companyName) ? `<div class="play-cont">Continuing ${esc(S.companyName)}</div>` : '';
-  // Full-screen map: the logo and PLAY float over it (no panel block).
-  $('playscreen').innerHTML = `<div class="play-float"><div class="play-logo"><div class="play-the">THE</div><div class="play-main">WORL INC.</div></div>
+  // Full-screen map: the wordmark and PLAY float over it (no panel
+  // block). No THE — just WORL INC., centered. Reset floats in the
+  // bottom-left corner, out of the centered stack.
+  $('playscreen').innerHTML = `<div class="play-float"><div class="play-logo"><div class="play-main">WORL INC.</div></div>
     ${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
       <button class="play-btn danger" data-a="playResetYes">DELETE WORLD</button>
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
     : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
-      ${has ? `<button class="play-link" data-a="playReset">Reset</button>` : ''}`}
+      ${has ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}`}
   </div>`;
   $('playscreen').classList.add('open');
 }

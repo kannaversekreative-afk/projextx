@@ -1074,8 +1074,9 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 #playscreen { position: fixed; inset: 0; z-index: 200; display: none; }
 #playscreen.open { display: block; }
 .play-float { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; }
-.play-logo { text-align: left; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,0.45); }
-.play-the, .play-main { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 900; font-size: clamp(40px, 11vw, 110px); line-height: 1.0; letter-spacing: 0.5px; margin: 0; }
+.play-logo { text-align: center; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,0.45); }
+.play-main { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 900; font-size: clamp(40px, 11vw, 110px); line-height: 1.0; letter-spacing: 0.5px; margin: 0; }
+.play-reset { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); color: #e6edf5; text-shadow: 0 1px 8px rgba(0,0,0,0.6); font-weight: 800; font-size: 14px; padding: 6px; }
 .play-btn { width: min(420px, 82vw); padding: 16px; border-radius: 20px; background: #3a4756; border: 2px solid #6e7f94; color: #fff; font-weight: 900; font-size: 20px; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 .play-btn.danger { background: #8c2f2f; border-color: #c05a5a; }
 .play-link { color: #e6edf5; text-shadow: 0 1px 8px rgba(0,0,0,0.6); font-weight: 800; font-size: 14px; padding: 6px; }
