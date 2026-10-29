@@ -5,11 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Worl Clean — Piece 2</title>
+<title>Worl Clean — Piece 3</title>
 <style>
+/* Clean format rules (Piece 1/2, kept for Piece 3):
+   - Sea lives ONLY inside a map container div, never as a full-screen canvas behind a panel.
+   - html/body background is dark #2a3648, so any shortfall shows dark, never sea.
+   - No position:fixed, no 100dvh/100vh on full-screen layers.
+   - Layout is normal flow flex column, not stacked absolute layers.
+   - Canvases size ONLY to their container via ResizeObserver (see map.js). */
 html, body { margin: 0; height: 100%; background: #2a3648; overflow: hidden; font-family: system-ui, sans-serif; }
 body { position: relative; }
 #app { height: 100%; display: flex; flex-direction: column; background: #2a3648; }
+/* Play screen (Piece 2, unchanged layout) */
+#playscreen { display: flex; flex-direction: column; height: 100%; }
+#playscreen.hidden { display: none; }
 #map-area { flex: 0 0 58%; background: #bcd7ee; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
 #map-area canvas { position: absolute; inset: 0; display: block; }
 #map-area h1 { position: relative; z-index: 1; color: #0b1e3a; font-family: Georgia, serif; font-size: 44px; letter-spacing: 1px; margin: 0; text-align: center; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
@@ -18,23 +27,56 @@ body { position: relative; }
 .play-cont { color: #9fb3c8; font-size: 14px; font-weight: 700; }
 .play-reset { color: #9fb3c8; font-weight: 800; font-size: 14px; background: none; border: 0; }
 .play-ver { margin-top: auto; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #5a6b82; }
+/* Game screen (Piece 3): in-flow flex column. HUD on top, map fills the
+   remaining space, bottom nav in flow at the bottom. No fixed layers. */
+#game { display: none; flex-direction: column; height: 100%; background: #2a3648; }
+#game.open { display: flex; }
+#hud { background: #2a3648; color: #fff; padding: 14px 16px 10px; box-sizing: border-box; }
+#hud-row { display: flex; align-items: center; gap: 12px; }
+#backBtn { color: #fff; background: #3a4756; border: 2px solid #6e7f94; border-radius: 12px; padding: 8px 12px; font-weight: 800; font-size: 14px; }
+#hud-company { font-weight: 900; font-size: 16px; flex: 1; }
+#hud-cash { font-weight: 800; font-size: 14px; color: #9fb3c8; }
+#hud-note { margin: 8px 0 0; font-size: 13px; color: #9fb3c8; font-weight: 700; }
+#game-map { flex: 1; min-height: 0; background: #bcd7ee; overflow: hidden; position: relative; }
+#game-map canvas { position: absolute; inset: 0; display: block; }
+#nav { background: #2a3648; display: flex; gap: 8px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+#nav button { flex: 1; color: #fff; background: #3a4756; border: 2px solid #6e7f94; border-radius: 12px; padding: 12px 4px; font-weight: 800; font-size: 13px; }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="map-area"><canvas id="worldmap"></canvas><h1>WORL INC.</h1></div>
-  <div id="panel">
-    <button class="play-btn" id="playBtn">PLAY</button>
-    <div class="play-cont" id="playCont">Continuing My Company</div>
-    <button class="play-reset">Reset</button>
-    <div class="play-ver">CLEAN PIECE 2</div>
+  <div id="playscreen">
+    <div id="map-area"><canvas id="worldmap"></canvas><h1>WORL INC.</h1></div>
+    <div id="panel">
+      <button class="play-btn" id="playBtn">PLAY</button>
+      <div class="play-cont" id="playCont">Continuing My Company</div>
+      <button class="play-reset">Reset</button>
+      <div class="play-ver">CLEAN PIECE 3</div>
+    </div>
+  </div>
+  <div id="game">
+    <div id="hud">
+      <div id="hud-row">
+        <button id="backBtn">← Back</button>
+        <div id="hud-company">My Company (placeholder)</div>
+        <div id="hud-cash">Cash: —</div>
+      </div>
+      <div id="hud-note">World map — Piece 3</div>
+    </div>
+    <div id="game-map"><canvas id="gamemap"></canvas></div>
+    <div id="nav">
+      <button data-nav="Home">Home</button>
+      <button data-nav="Businesses">Businesses</button>
+      <button data-nav="Phone">Phone</button>
+      <button data-nav="More">More</button>
+    </div>
   </div>
 </div>
-<script src="world-data.js?v=20261026clean2"></script>
-<script src="world-data-a.js?v=20261026clean2"></script>
-<script src="world-data-b.js?v=20261026clean2"></script>
-<script src="world-data-c.js?v=20261026clean2"></script>
-<script src="world.js?v=20261026clean2"></script>
-<script src="map.js?v=20261026clean2"></script>
+<script src="world-data.js?v=20261026clean3"></script>
+<script src="world-data-a.js?v=20261026clean3"></script>
+<script src="world-data-b.js?v=20261026clean3"></script>
+<script src="world-data-c.js?v=20261026clean3"></script>
+<script src="world.js?v=20261026clean3"></script>
+<script src="map.js?v=20261026clean3"></script>
 </body>
 </html>
