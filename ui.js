@@ -984,8 +984,7 @@ function updateGameOrientation() {
   document.body.classList.toggle('landscape-phone', portraitPhone);
   const game = $('game');
   if (game) {
-    if (portraitPhone) { game.style.width = h + 'px'; game.style.height = w + 'px'; }
-    else { game.style.width = ''; game.style.height = ''; }
+    game.style.width = ''; game.style.height = '';
   }
   let tries = 0;
   const tick = () => {
