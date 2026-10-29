@@ -1133,7 +1133,10 @@ function notifyWorl(title, body) {
 // THE WORL INC. wordmark and one PLAY button. Returning players land
 // here too; Play drops them straight back into their one world.
 function showPlayScreen() {
-  UI.playScreen = true; UI.playConfirm = false;
+  UI.playScreen = true;
+  // NOTE: do NOT reset UI.playConfirm here — playReset sets it true
+  // and then calls this to render the confirmation; resetting it
+  // here made Reset silently do nothing (the confirm never rendered).
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); hideInherit(); hideCreate();
   try { MapView.exitToWorld(); } catch (e) {}
   try { MapView.drawNow(); } catch (e) {}
