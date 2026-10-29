@@ -1213,8 +1213,9 @@ function showCreate() {
   if (!Array.isArray(UI.createLooks) || !UI.createLooks.length) UI.createLooks = Array.from({ length: 12 }, () => randLook());
   $('create').innerHTML = createHTML();
   $('create').classList.add('open');
+  document.body.style.background = '#2a3648';
 }
-function hideCreate() { $('create').innerHTML = ''; $('create').classList.remove('open'); }
+function hideCreate() { $('create').innerHTML = ''; $('create').classList.remove('open'); document.body.style.background = ''; }
 function showTitle() {
   $('hud').innerHTML = ''; MapView.setPick(false);
   openModal(`<div class="title-card">
@@ -4099,7 +4100,7 @@ const A = {
     S.competitors = (c.competitors != null ? c.competitors : 2);
     S.companyColor = c.color || CRT_COLORS[0]; S.companyLogo = c.logo || 0;
     if (UI.createLooks && UI.createLooks[c.portrait || 0]) S.you.look = UI.createLooks[c.portrait || 0];
-    save(); enterGame(false);
+    save(); document.body.style.background = ''; enterGame(false);
   },
   // Worl Inc. businesses: pick a sector, pick a type, build on a dot.
   incBuildPick: (x) => {
