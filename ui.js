@@ -1021,13 +1021,14 @@ async function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   const saved = await loadSave();
   // Worl Inc. is the only game now. Old saves (any mode but inc) are
-  // ignored — Nicholas does not care about them — so opening the game
-  // always lands on the Worl Inc. start screen instead of an old game.
-  if (saved && saved.mode === 'inc') {
-    S = saved;
-    enterGame(true);
-  }
-  else showInherit();
+  // ignored — Nicholas does not care about them. Every launch lands
+  // on the play screen, even for returning players: Play enters the
+  // one saved world, or opens the new-business flow when there is no
+  // save. One world per player — saves live in the single 'main'
+  // slot, and the creation flow is only reachable with no save or
+  // after a reset.
+  if (saved && saved.mode === 'inc') S = saved;
+  showPlayScreen();
 }
 function showInherit() {
   $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); UI.introMode = null;
@@ -1096,6 +1097,89 @@ function renderInheritStep() {
   }
 }
 function hideInherit() { $('inherit').innerHTML = ''; $('inherit').classList.remove('open'); }
+// ---------- play screen + new-business flow ----------
+// The play screen is the front door: the world map (clean, no dots —
+// drawTop skips everything while UI.playScreen is set) with the
+// THE WORL INC. wordmark and one PLAY button. Returning players land
+// here too; Play drops them straight back into their one world.
+function showPlayScreen() {
+  UI.playScreen = true; UI.playConfirm = false;
+  $('hud').innerHTML = ''; MapView.setPick(false); closeModal(); hideInherit(); hideCreate();
+  try { MapView.exitToWorld(); } catch (e) {}
+  try { MapView.drawNow(); } catch (e) {}
+  const has = !!(S && S.mode === 'inc');
+  const cont = (has && S.companyName) ? `<div class="play-cont">Continuing ${esc(S.companyName)}</div>` : '';
+  $('playscreen').innerHTML = `<div class="play-map"><div class="play-logo"><div class="play-the">THE</div><div class="play-main">WORL INC.</div></div></div>
+  <div class="play-panel">
+    ${UI.playConfirm ? `<p class="play-warn">Delete your world and start over? This cannot be undone.</p>
+      <button class="play-btn danger" data-a="playResetYes">DELETE WORLD</button>
+      <button class="play-link" data-a="playResetNo">Keep playing</button>`
+    : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
+      ${has ? `<button class="play-link" data-a="playReset">Reset</button>` : ''}`}
+  </div>`;
+  $('playscreen').classList.add('open');
+}
+function hidePlayScreen() { UI.playScreen = false; $('playscreen').innerHTML = ''; $('playscreen').classList.remove('open'); }
+// New-business flow: one scrollable page, same steps as the reference
+// (name, portrait, CEO name, level, competitors, currency, capital,
+// color, logo, start). Layout and feel only — all art here is Worl's
+// own, and every person is a shoulder-and-face portrait, never a
+// standing figure.
+const CRT_COLORS = ['#ff6b4a', '#6ec1e4', '#5cb85c', '#f5b301', '#ff6eb4', '#8b5a2b', '#8a99ad', '#9b5de5'];
+const CRT_LEVELS = ['EASY', 'NORMAL', 'DIFFICULT', 'TYCOON'];
+const CRT_CURRENCIES = [['USD', '$'], ['EUR', '€'], ['JPY', '¥'], ['GBP', '£']];
+const CRT_CAPITALS = [200000, 400000, 800000];
+function crtLogoSVG(i) {
+  const c = 'currentColor';
+  const marks = [
+    `<circle cx="50" cy="50" r="34" fill="none" stroke="${c}" stroke-width="7"/><ellipse cx="50" cy="50" rx="34" ry="14" fill="none" stroke="${c}" stroke-width="5"/><line x1="50" y1="16" x2="50" y2="84" stroke="${c}" stroke-width="5"/>`,
+    `<rect x="28" y="18" width="44" height="64" fill="${c}"/><rect x="36" y="28" width="8" height="8" fill="#1e2a38"/><rect x="56" y="28" width="8" height="8" fill="#1e2a38"/><rect x="36" y="46" width="8" height="8" fill="#1e2a38"/><rect x="56" y="46" width="8" height="8" fill="#1e2a38"/><rect x="44" y="64" width="12" height="18" fill="#1e2a38"/>`,
+    `<path d="M50,10 L61,38 L90,38 L66,56 L75,86 L50,68 L25,86 L34,56 L10,38 L39,38 Z" fill="${c}"/>`,
+    `<path d="M50,10 L84,50 L50,90 L16,50 Z" fill="${c}"/>`,
+    `<path d="M50,12 L84,46 L64,46 L64,88 L36,88 L36,46 L16,46 Z" fill="${c}"/>`,
+    `<path d="M50,10 L84,30 L84,70 L50,90 L16,70 L16,30 Z" fill="${c}"/>`,
+    `<path d="M28,62 L32,34 L50,22 L68,34 L72,62 L60,72 L40,72 Z" fill="${c}"/><rect x="44" y="72" width="12" height="12" fill="${c}"/>`,
+    `<path d="M50,88 C20,66 16,30 50,12 C84,30 80,66 50,88 Z" fill="${c}"/>`,
+  ];
+  return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${marks[i % marks.length]}</svg>`;
+}
+function createHTML() {
+  const c = UI.create;
+  const seg = (field, opts, cur, fmt) => `<div class="seg">${opts.map(o => `<button class="${String(cur) === String(o) ? 'on' : ''}" data-a="createSeg" data-x="${field}|${o}">${fmt ? fmt(o) : o}</button>`).join('')}</div>`;
+  return `<div class="crt-head"><h2>START NEW BUSINESS</h2><button class="xbtn" data-a="createClose" aria-label="Close">${IC.close}</button></div>
+  <div class="crt-guide"><div class="crt-guide-av" id="crtGuide">${(typeof portraitSVG === 'function' && UI.createLooks[c.portrait || 0]) ? portraitSVG(UI.createLooks[c.portrait || 0], 72) : ''}</div><p>Hello. Let's start your company, and let me help you go through the steps.</p></div>
+  <div class="crt-body">
+    <div class="crt-label">COMPANY NAME</div>
+    <input id="crtName" class="crt-input" maxlength="24" placeholder="Your company name" autocomplete="off">
+    <div class="crt-label">CEO PORTRAIT</div>
+    <div class="crt-grid">${(UI.createLooks || []).map((lk, i) => `<button class="crt-portrait ${i === (c.portrait || 0) ? 'on' : ''}" data-a="createPortrait" data-x="${i}">${(typeof portraitSVG === 'function') ? portraitSVG(lk, 72) : ''}</button>`).join('')}</div>
+    <div class="crt-label">CEO NAME</div>
+    <input id="crtCeo" class="crt-input" maxlength="24" placeholder="Your name" autocomplete="off">
+    <div class="crt-label">GAME LEVEL</div>
+    ${seg('level', CRT_LEVELS, c.level || 'NORMAL')}
+    <div class="crt-label">THE NUMBER OF COMPETITORS</div>
+    ${seg('competitors', [0, 1, 2, 3, 4, 5], c.competitors != null ? c.competitors : 2)}
+    <div class="crt-label">CURRENCY</div>
+    ${seg('currency', CRT_CURRENCIES.map(x => x[0]), c.currency || 'USD', code => `${(CRT_CURRENCIES.find(x => x[0] === code) || [])[1] || '$'} ${code}`)}
+    <div class="crt-label">INITIAL CAPITAL</div>
+    ${seg('capital', CRT_CAPITALS, c.capital || 200000, v => '$' + (+v).toLocaleString('en-US'))}
+    <div class="crt-label">COMPANY COLOR</div>
+    <div class="swatches">${CRT_COLORS.map(col => `<button class="sw ${col === (c.color || CRT_COLORS[0]) ? 'on' : ''}" style="background:${col}" data-a="createColor" data-x="${col}" aria-label="company colour"></button>`).join('')}</div>
+    <div class="crt-label">COMPANY LOGO</div>
+    <div class="crt-grid" id="crtLogos" style="color:${c.color || CRT_COLORS[0]}">${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<button class="crt-logo ${i === (c.logo || 0) ? 'on' : ''}" data-a="createLogo" data-x="${i}">${crtLogoSVG(i)}</button>`).join('')}</div>
+    <button class="crt-start" data-a="createStart">START BUSINESS</button>
+  </div>`;
+}
+function showCreate() {
+  // Play screen hides visually, but UI.playScreen stays set so the
+  // map behind stays clean; X returns to the play screen.
+  $('playscreen').classList.remove('open');
+  if (!UI.create) UI.create = { level: 'NORMAL', competitors: 2, currency: 'USD', capital: 200000, color: CRT_COLORS[0], logo: 0, portrait: 0 };
+  if (!Array.isArray(UI.createLooks) || !UI.createLooks.length) UI.createLooks = Array.from({ length: 12 }, () => randLook());
+  $('create').innerHTML = createHTML();
+  $('create').classList.add('open');
+}
+function hideCreate() { $('create').innerHTML = ''; $('create').classList.remove('open'); }
 function showTitle() {
   $('hud').innerHTML = ''; MapView.setPick(false);
   openModal(`<div class="title-card">
@@ -1142,7 +1226,7 @@ function nameCompany() {
     <button class="btn3d orange wide" data-a="beginGame">START</button>`, 'center');
 }
 function enterGame(returning) {
-  UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit();
+  UI.pick = null; UI.q = ''; MapView.setPick(false); closeModal(); hideInherit(); hidePlayScreen(); hideCreate();
   S.speed = 1; // Vehicle speed on the map, not game time. Worl Inc. game time advances on the newspaper beat (every 10 real minutes); old modes still move on Age.
   if (typeof ensurePerson === 'function') { try { ensurePerson(); } catch (e) {} }
   // Daily free cash grants are legacy tycoon only. Flow (employee)
@@ -3878,7 +3962,7 @@ const A = {
     await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
     S = null; closePanel(); closePopup(); if (CityView.isOpen()) leaveCity();
     if (typeof switchWorldToReal === 'function') switchWorldToReal();
-    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; $('tut').innerHTML = ''; showInherit();
+    document.body.classList.remove('in-city'); $('chud').innerHTML = ''; UI.lastCityHUD = ''; $('tut').innerHTML = ''; showPlayScreen();
   },
   pickMode: x => { UI.mode = x; UI.pq = ''; UI.q = ''; startPick(); },
   pickCountry: x => { UI.pick.a3 = x; MapView.setPick(true, x); MapView.flyToCountry(x); renderPick(); },
@@ -3930,6 +4014,53 @@ const A = {
     const inp = document.getElementById('incName');
     const name = (inp && inp.value.trim()) || 'Founder';
     S = newGame({ mode: 'inc', home: 'USA', name }); save(); enterGame(false);
+  },
+  // Play screen: one button. A save means back into the one world;
+  // no save means the new-business flow.
+  playGo: () => {
+    if (S && S.mode === 'inc') enterGame(true);
+    else showCreate();
+  },
+  playReset: () => { UI.playConfirm = true; showPlayScreen(); },
+  playResetNo: () => { UI.playConfirm = false; showPlayScreen(); },
+  playResetYes: async () => {
+    await idbDel('main'); try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    S = null; UI.playConfirm = false; hidePlayScreen(); showCreate();
+  },
+  // New-business flow.
+  createClose: () => { hideCreate(); showPlayScreen(); },
+  createSeg: (x, el) => {
+    const [field, val] = (x || '').split('|');
+    if (!UI.create || !field) return;
+    UI.create[field] = (field === 'competitors' || field === 'capital') ? +val : val;
+    const seg = el.closest('.seg'); if (seg) seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el));
+  },
+  createColor: (x, el) => {
+    if (!UI.create) return; UI.create.color = x;
+    document.querySelectorAll('#create .sw').forEach(s => s.classList.toggle('on', s === el));
+    const lg = document.getElementById('crtLogos'); if (lg) lg.style.color = x;
+  },
+  createPortrait: (x, el) => {
+    if (!UI.create) return; UI.create.portrait = +x;
+    document.querySelectorAll('#create .crt-portrait').forEach(b => b.classList.toggle('on', b === el));
+    const g = document.getElementById('crtGuide'); if (g && UI.createLooks[+x] && typeof portraitSVG === 'function') g.innerHTML = portraitSVG(UI.createLooks[+x], 72);
+  },
+  createLogo: (x, el) => {
+    if (!UI.create) return; UI.create.logo = +x;
+    document.querySelectorAll('#create .crt-logo').forEach(b => b.classList.toggle('on', b === el));
+  },
+  createStart: () => {
+    const c = UI.create || {};
+    const companyName = (document.getElementById('crtName')?.value || '').trim() || 'My Company';
+    const ceoName = (document.getElementById('crtCeo')?.value || '').trim() || 'Founder';
+    const capital = c.capital || 200000;
+    S = newGame({ mode: 'inc', home: 'USA', name: ceoName, capital, currency: c.currency || 'USD', color: c.color || CRT_COLORS[0] });
+    S.companyName = companyName; S.ceoName = ceoName;
+    S.ceoPortrait = c.portrait || 0; S.level = c.level || 'NORMAL';
+    S.competitors = (c.competitors != null ? c.competitors : 2);
+    S.companyColor = c.color || CRT_COLORS[0]; S.companyLogo = c.logo || 0;
+    if (UI.createLooks && UI.createLooks[c.portrait || 0]) S.you.look = UI.createLooks[c.portrait || 0];
+    save(); enterGame(false);
   },
   // Worl Inc. businesses: pick a sector, pick a type, build on a dot.
   incBuildPick: (x) => {

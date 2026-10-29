@@ -812,6 +812,8 @@ const MapView = (() => {
   function drawTop(now) {
     const c = tctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, vw, vh);
     const st = S_();
+    // Play screen: clean map only — no dots, pills, routes or vehicles.
+    try { if (UI.playScreen) return; } catch (e) {}
     if (pickMode) { drawPickLabels(c); return; }
     const k = Math.min(1.9, Math.max(0.75, Math.sqrt(v.s / 0.55)));
     // Ship sprites used the same near-constant scale at every zoom, so at

@@ -156,7 +156,7 @@ function newGame(opt) {
   // Worl Inc.: starting from nothing means no inherited company and a
   // modest starter stake — enough for a first small business, not an
   // airport. (The number is a starting point; Nicholas can change it.)
-  if (opt.mode === 'inc') { s.cash = 25000; s.holdings = {}; }
+  if (opt.mode === 'inc') { s.cash = opt.capital || 25000; s.holdings = {}; s.currency = opt.currency || 'USD'; }
   if (typeof ensureSports === 'function') { try { ensureSports(); } catch (e) {} }
   if (typeof ensureStores === 'function') { try { ensureStores(); } catch (e) {} }
   s.idx.v = 1000; ['d', 'w', 'm'].forEach(k => s.idx.h[k].push(1000));
@@ -169,7 +169,7 @@ function newGame(opt) {
     mail('Welcome', `You have inherited ${cname(opt.home)}`, `You are now the leader of ${cname(opt.home)}, as it is today. Treasury ${fmtMoney(s.countries[opt.home].treasury, true)}, debt ${fmtMoney(s.countries[opt.home].debt, true)}, population ${fmtPop(s.countries[opt.home].pop)}. Businesses: ${biz.map(b => b.name + ' (' + b.sector + ')').join(', ')}. Tax them, pay your people, trade, and grow — or invade a neighbour for the challenge. Your business money is separate: $750,000 to build your own businesses with.`);
   } else if (opt.mode === 'inc') {
     news('World', 'Welcome to Worl Inc. You run the United States as a business, starting from nothing. Your starting states: New York, Vermont, New Hampshire, Maine, Massachusetts.', opt.home);
-    mail('Welcome', 'Worl Inc.', 'You run the United States as a business, starting from nothing. Your starting states are New York, Vermont, New Hampshire, Maine, and Massachusetts — 5 dots on the map. Build on them, expand state by state, and take over the world. Business cash to start: $25,000. A new edition of The Ticker Times lands every 10 minutes.');
+    mail('Welcome', 'Worl Inc.', 'You run the United States as a business, starting from nothing. Your starting states are New York, Vermont, New Hampshire, Maine, and Massachusetts — 5 dots on the map. Build on them, expand state by state, and take over the world. Business cash to start: ${fmtMoney(opt.capital || 25000)}. A new edition of The Ticker Times lands every 10 minutes.');
   } else {
     news('World', `Welcome to ${W.byA3[opt.home].name}. You found ${home.name} with $750,000.`, opt.home);
     mail('Welcome', 'Your new company', `Congratulations on founding ${home.name}. You own 100% of it. Open your first location in ${W.cities[home.city].name}, then build a website to reach customers online.`);
@@ -856,13 +856,18 @@ function placedWeek() {
 }
 
 // ---------- formatting ----------
+// Currency symbol follows the player's picked currency (creation flow);
+// everything else keeps showing amounts in that currency's units.
+const CUR_SYM = { USD: '$', EUR: '€', JPY: '¥', GBP: '£' };
+function curSym() { try { const c = (typeof S !== 'undefined' && S && S.currency) || null; return (c && CUR_SYM[c]) || '$'; } catch (e) { return '$'; } }
 function fmtMoney(n, compact) {
+  const sym = curSym();
   const neg = n < 0; n = Math.abs(n); let s;
-  if (compact && n >= 1e12) s = '$' + (n / 1e12).toFixed(2) + 'T';
-  else if (compact && n >= 1e9) s = '$' + (n / 1e9).toFixed(2) + 'B';
-  else if (compact && n >= 1e6) s = '$' + (n / 1e6).toFixed(2) + 'M';
-  else if (compact && n >= 1e4) s = '$' + Math.round(n / 1e3) + 'K';
-  else s = '$' + n.toLocaleString('en-US', { maximumFractionDigits: n < 100 ? 2 : 0, minimumFractionDigits: n < 100 ? 2 : 0 });
+  if (compact && n >= 1e12) s = sym + (n / 1e12).toFixed(2) + 'T';
+  else if (compact && n >= 1e9) s = sym + (n / 1e9).toFixed(2) + 'B';
+  else if (compact && n >= 1e6) s = sym + (n / 1e6).toFixed(2) + 'M';
+  else if (compact && n >= 1e4) s = sym + Math.round(n / 1e3) + 'K';
+  else s = sym + n.toLocaleString('en-US', { maximumFractionDigits: n < 100 ? 2 : 0, minimumFractionDigits: n < 100 ? 2 : 0 });
   return (neg ? '-' : '') + s;
 }
 const fmtPct = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(x !== 0 && Math.abs(x) < 0.1 ? 2 : 1) + '%';
