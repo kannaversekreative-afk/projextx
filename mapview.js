@@ -14,6 +14,10 @@ const MapView = (() => {
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
   const COL = { sea: '#0b1e3a', sea2: '#0a1930', land: '#3a4756', home: '#1e3a5f', border: 'rgba(148,163,184,0.4)', grid: 'rgba(148,163,184,0.12)' };
+  // Title screen: the world pauses and the map goes pristine — no
+  // save-state tints, no home stroke, no dots, no simulation. The
+  // play screen is map + logo + PLAY, nothing else on top of it.
+  const playScreenOn = () => { try { return !!UI.playScreen; } catch (e) { return false; } };
   // View hierarchy (not game modes): world -> country -> region.
   // The world shows countries only: no region borders, no gold dots.
   // Tapping a country goes to that country alone, sectioned by its
@@ -239,7 +243,7 @@ const MapView = (() => {
   const toMap = (sx, sy) => [(sx - v.x) / v.s, (sy - v.y) / v.s];
 
   function drawBase() {
-    const c = bctx, st = S_(); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const c = bctx; let st = S_(); if (playScreenOn()) st = null; c.setTransform(dpr, 0, 0, dpr, 0, 0);
     const g = c.createLinearGradient(0, 0, 0, vh); g.addColorStop(0, COL.sea); g.addColorStop(1, COL.sea2);
     c.fillStyle = g; c.fillRect(0, 0, vw, vh);
     c.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
@@ -813,7 +817,7 @@ const MapView = (() => {
     const c = tctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, vw, vh);
     const st = S_();
     // Play screen: clean map only — no dots, pills, routes or vehicles.
-    try { if (UI.playScreen) return; } catch (e) {}
+    if (playScreenOn()) return;
     if (pickMode) { drawPickLabels(c); return; }
     const k = Math.min(1.9, Math.max(0.75, Math.sqrt(v.s / 0.55)));
     // Ship sprites used the same near-constant scale at every zoom, so at
@@ -1317,7 +1321,7 @@ const MapView = (() => {
     const st = S_();
     // Never let one bad step kill the whole frame loop: that froze the
     // map at world view after a game started, because step() threw.
-    try { if (st && !pickMode) step(dt * (st.speed === 0 ? 0 : st.speed === 3 ? 2.5 : st.speed)); } catch (e) { console.error('map step failed', e); }
+    try { if (st && !pickMode && !playScreenOn()) step(dt * (st.speed === 0 ? 0 : st.speed === 3 ? 2.5 : st.speed)); } catch (e) { console.error('map step failed', e); }
     try { if (dirty) { drawBase(); dirty = false; } } catch (e) { console.error('map draw failed', e); dirty = false; }
     try { drawTop(now); } catch (e) { console.error('map top draw failed', e); }
     handlers.frame && handlers.frame(now);

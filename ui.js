@@ -472,7 +472,7 @@ function renderPanel() {
 
 // ---------- HUD: slim top strip + always-visible goals, no bottom nav ----------
 function renderHUD() {
-  if (!S || UI.pick) return;
+  if (!S || UI.pick || UI.playScreen) return;
   // New HUD (Worl Inc.): no bottom bar buttons except the phone.
   // Top-left: profile. Top-middle: business money. Top-right: the
   // game date — tap it to read The Ticker Times (a new edition lands
@@ -2072,7 +2072,7 @@ function gameOver() {
 }
 let lastT = 0;
 function loop(now) {
-  if (!S || UI.pick || S.over) { lastT = now; return; }
+  if (!S || UI.pick || S.over || UI.playScreen) { lastT = now; return; }
   // Daily money is automatic, even if the game stays open past midnight.
   // Leaders get none here either, matching enterGame (their treasury
   // is not a daily-grant wallet — without this guard the first frame
