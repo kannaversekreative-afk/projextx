@@ -3960,7 +3960,7 @@ const A = {
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
     const net = (typeof incBizNetPerSec === 'function' ? incBizNetPerSec(biz) : (biz.income || 0) * (biz.level || 1));
     const tabBtn = (id, label) => `<button class="btn${tab === id ? ' on' : ''}" data-a="incManage" data-x="${dotKey}|${id}">${label}</button>`;
-    let tabs = `<p>${tabBtn('overview', 'Overview')} ${tabBtn('products', 'Products')} ${tabBtn('managers', 'Managers')}${t && t.blends ? ` ${tabBtn('blends', 'Blends')}` : ''}</p>`;
+    let tabs = `<p>${tabBtn('overview', 'Overview')} ${tabBtn('products', 'Products')} ${tabBtn('managers', 'Managers')} ${tabBtn('operations', 'Operations')}${t && t.blends ? ` ${tabBtn('blends', 'Blends')}` : ''}</p>`;
     let body = '';
     if (tab === 'overview') {
       body += `<p>${sec ? esc(sec.name) : ''} · Level ${biz.level || 1} · Base ${fmt(biz.income || 0)}/sec · Net ${fmt(net)}/sec</p>`;
@@ -3992,6 +3992,26 @@ const A = {
           if (biz.coffeeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incCoffeeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
           else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incCoffeeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
         }
+      }
+      const typeMgrs = (typeof incBizTypeManagers === 'function' ? incBizTypeManagers(biz) : []);
+      if (typeMgrs.length) {
+        body += `<p class="muted">${esc(biz.name)} managers (each +15% income):</p>`;
+        if (!biz.typeManagers) biz.typeManagers = {};
+        for (const m of typeMgrs) {
+          if (biz.typeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incTypeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
+          else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incTypeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
+        }
+      }
+    } else if (tab === 'operations') {
+      const ops = (t && t.ops) ? t.ops : [];
+      if (!ops.length) body += `<p class="muted">No operations for this type yet.</p>`;
+      else {
+        if (biz.boost && biz.boost.until && Date.now() < biz.boost.until) body += `<p>⚡ Boost active: ×${biz.boost.mult} for ${Math.ceil((biz.boost.until - Date.now()) / 1000)}s more.</p>`;
+        if (biz.bonusIncome) body += `<p>Permanent bonuses: +${fmt(biz.bonusIncome)}/sec.</p>`;
+        ops.forEach((op, i) => {
+          if (op.kind === 'timed') body += `<p>${esc(op.name)} — ×${op.mult} income for ${op.secs}s — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+          else body += `<p>${esc(op.name)} — +${fmt(op.value)}/sec forever — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+        });
       }
     } else if (tab === 'blends') {
       const blends = biz.blends || [];
@@ -4064,6 +4084,42 @@ const A = {
     save();
     toast(`${name} created (+$${inc}/sec).`, 'good');
     A.incManage(x + '|blends');
+  },
+  incTypeHire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, mid] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    if (!biz.typeManagers) biz.typeManagers = {};
+    biz.typeManagers[mid] = true; save();
+    toast('Manager hired.', 'good');
+    A.incManage(dotKey + '|managers');
+  },
+  incTypeFire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, mid] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz || !biz.typeManagers) return;
+    delete biz.typeManagers[mid]; save();
+    toast('Manager fired.', 'good');
+    A.incManage(dotKey + '|managers');
+  },
+  incOp: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, idxS] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const op = t && t.ops ? t.ops[parseInt(idxS, 10)] : null;
+    if (!op) return;
+    if (S.cash < op.cost) return toast('Not enough business cash.', 'bad');
+    S.cash -= op.cost;
+    if (op.kind === 'timed') biz.boost = { mult: op.mult, until: Date.now() + op.secs * 1000 };
+    else biz.bonusIncome = (biz.bonusIncome || 0) + op.value;
+    save();
+    toast(`${op.name} running.`, 'good');
+    A.incManage(dotKey + '|operations');
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
