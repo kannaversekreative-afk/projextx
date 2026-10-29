@@ -111,12 +111,17 @@ function incBizMktCostPerSec(biz, t) {
 function incBizPeopleMult(biz) {
   try {
     if (!biz || typeof S === 'undefined' || !S) return 1;
+    // A shop sharing a dot with a site uses whichever population is
+    // larger (site pop or people routed straight to the shop), never
+    // a negative population: a negative pop used to flip the whole
+    // multiplier below zero and turn the shop's revenue negative.
+    let pop = 0;
     if (biz.dotKey && S.airports) {
       const site = S.airports[biz.dotKey];
-      if (site && site.pop != null) return 1 + Math.min(site.pop, 4000) / 1000;
+      if (site && site.pop != null) pop = site.pop;
     }
-    if (biz.pop != null) return 1 + Math.min(biz.pop, 4000) / 1000;
-    return 1;
+    if (biz.pop != null) pop = Math.max(pop, biz.pop);
+    return 1 + Math.min(Math.max(pop, 0), 4000) / 1000;
   } catch (e) { return 1; }
 }
 // Per-second money breakdown for one business. Revenue is gross sales
@@ -201,12 +206,22 @@ function incBizRatings(biz) {
   const overall = (price + product + service + atmosphere) / 4;
   return { price, product, service, atmosphere, overall, reviews: biz.reviews || 0 };
 }
-function incBizFareMult(biz) { return (1 + 0.1 * incBizBoardCount(biz)) * incBizBoostMult(biz) * (1 + 0.05 * incBizMktCount(biz)); }
-// Full US: every contiguous state (US_CAPITALS) is in S.incStates.
+function incBizFareMult(biz) {
+  // Fares get the same boosts as shop sales, so a General Manager,
+  // type managers and the President are not pure salary drains on
+  // an Airline: GM +20%, each type manager +15%, President +25%.
+  let m = (1 + 0.1 * incBizBoardCount(biz)) * incBizBoostMult(biz) * (1 + 0.05 * incBizMktCount(biz));
+  if (biz && biz.manager) m *= 1.2;
+  if (biz && biz.typeManagers && typeof incBizTypeManagers === 'function') for (const tm of incBizTypeManagers(biz)) if (biz.typeManagers[tm.id]) m *= 1.15;
+  try { if (typeof S !== 'undefined' && S && S.president) m *= 1.25; } catch (e) {}
+  return m;
+}
+// Full US: all 50 states (US_CAPITALS, Alaska and Hawaii included)
+// are in S.incStates.
 function incFullUS() {
   try {
     if (typeof S === 'undefined' || !S || !S.incStates) return false;
-    if (typeof US_CAPITALS === 'undefined') return S.incStates.length >= 48;
+    if (typeof US_CAPITALS === 'undefined') return S.incStates.length >= 50;
     return US_CAPITALS.every(u => S.incStates.includes(u.s));
   } catch (e) { return false; }
 }
@@ -215,7 +230,19 @@ function incFullUS() {
 // Annual profit uses game time: 52 weeks x 600 seconds per week.
 function incIPOValue(biz) {
   if (!biz) return 0;
-  if (biz.type === 'airline') return Math.round((biz.spent || biz.cost || 0) * 5 * 0.93);
+  if (biz.type === 'airline') {
+    // Airlines IPO on actual fare performance, not spend alone:
+    // no fares or under 7 game days of operation = no IPO value,
+    // so build-hire-IPO instantly for 5x spend no longer works.
+    // Fare rate is annualised like other businesses (52 weeks x
+    // 600 sec/year), capped at the old 5x spend ceiling.
+    const built = (biz.builtDay != null) ? biz.builtDay : ((typeof S !== 'undefined' && S) ? S.day : 0);
+    const days = Math.max(0, ((typeof S !== 'undefined' && S) ? S.day : 0) - built);
+    if (!biz.fareEarned || days < 7) return 0;
+    const farePerSec = biz.fareEarned / Math.max(1, days * 600 / 7);
+    const annualFare = farePerSec * 31200;
+    return Math.round(Math.min((biz.spent || biz.cost || 0) * 5 * 0.93, annualFare * 10 * 0.93));
+  }
   const annual = incBizNetPerSec(biz) * 31200;
   if (annual <= 0) return 0;
   return Math.round(annual * 10 * 0.93);

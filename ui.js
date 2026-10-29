@@ -137,6 +137,9 @@ async function idbDel(key) {
 }
 function migrateSave(s) {
   if (!s || !s.co) return s;
+  // Old saves predate Settings: default them, or drawTop's
+  // settings.motion read blanks the whole map top layer.
+  if (!s.settings) s.settings = { vol: 0.5, ui: 0.8, motion: true, minigames: true, battleSize: '6x6' };
   // Old saves were built on the old ~7.68B world population. Rescale
   // their country populations to the new 8.3B world, preserving any
   // growth since the game started.
@@ -214,12 +217,17 @@ async function save() {
       S.lastSeen = Date.now();
       const ok = await idbPut('main', S);
       if (!ok) {
-        const copy = JSON.parse(JSON.stringify(S));
-        for (const k in copy.co) { copy.co[k].h.d = copy.co[k].h.d.slice(-120); copy.co[k].h.v = (copy.co[k].h.v || []).slice(-120); copy.co[k].h.w = copy.co[k].h.w.slice(-104); }
-        copy.news = (copy.news || []).slice(0, 60);
-        localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
+        let fbOk = false;
+        try {
+          const copy = JSON.parse(JSON.stringify(S));
+          for (const k in copy.co) { if (copy.co[k].h) { copy.co[k].h.d = copy.co[k].h.d.slice(-120); copy.co[k].h.v = (copy.co[k].h.v || []).slice(-120); copy.co[k].h.w = copy.co[k].h.w.slice(-104); } }
+          copy.news = (copy.news || []).slice(0, 60);
+          localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
+          fbOk = true;
+        } catch (e2) {}
+        if (!fbOk) { try { toast('Save failed — your progress may not be saved.', 'bad'); } catch (e3) {} }
       }
-    } catch (e) {}
+    } catch (e) { try { toast('Save failed — your progress may not be saved.', 'bad'); } catch (e4) {} }
   } while (savePending);
   saveInFlight = false;
 }
@@ -515,8 +523,14 @@ function renderHUD() {
     }
     return '';
   })();
+  // Creation choices wired, trivially: the picked company colour
+  // and logo mark the profile pill (level/competitors stay stored
+  // only — no difficulty or rival system exists to wire them to).
+  const pillAvatar = (S.mode === 'inc' && S.companyLogo != null && typeof crtLogoSVG === 'function')
+    ? `<span class="hud-avatar" style="color:${esc(S.companyColor || '#ffffff')}">${crtLogoSVG(S.companyLogo)}</span>`
+    : `<span class="hud-avatar">👤</span>`;
   $('hud').innerHTML = `
-  <button class="hud-pill hud-tl" data-a="panel" data-x="profile"><span class="hud-avatar">👤</span><span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)} · ${fmtMoney(S.cash, true)}</small></span></button>
+  <button class="hud-pill hud-tl" data-a="panel" data-x="profile">${pillAvatar}<span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)} · ${fmtMoney(S.cash, true)}</small></span></button>
   <button class="hud-pill hud-tr" data-a="paper">📰 ${fmtDate(S.day)}</button>
   <button class="hud-btn hud-br" style="bottom:max(12px, env(safe-area-inset-bottom))" data-a="drawer" aria-label="Phone">📱</button>
   ${viewBtns}
@@ -1281,7 +1295,7 @@ function enterGame(returning) {
   MapView.home();
   // Worl Inc. new games open on the 5-state New York cluster map,
   // so the player sees their starting states and dots immediately.
-  if (S.mode === 'inc' && !returning) { MapView.showCluster('USA', 'New York'); renderHUD(); }
+  if (S.mode === 'inc') { MapView.showCluster('USA', 'New York'); renderHUD(); }
   if (returning) welcomeBack(); else S.tutorial = 0;
   renderTutorial();
 }
@@ -1396,7 +1410,8 @@ function simulateOffline(awayMs) {
               if (other && other.type === 'hub') rate += Math.min(other.level || 1, A.level || 1);
             }
           }
-          const amt = rate * pct * dt;
+          const amt = Math.min(rate * pct * dt, Math.max(0, A.pop || 0));
+          if (amt <= 0) continue;
           if (A.pop === undefined) A.pop = 0;
           if (B.pop === undefined) B.pop = 0;
           A.pop -= amt;
@@ -1507,7 +1522,7 @@ function openAirCard() {
   if (!S) return;
   const tab = UI.airTab || 'routes';
   UI.cardKind = 'air';
-  const fmt = n => '$' + Math.round(n).toLocaleString();
+  const fmt = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : '$' + Math.round(n).toLocaleString());
   const sites = S.airports || {};
   const siteKeys = Object.keys(sites);
   const routes = S.routes || [];
@@ -1516,6 +1531,14 @@ function openAirCard() {
   let html = '';
   if (tab === 'routes') {
     const totalVeh = (fl.prop || 0) + (fl.jet || 0) + (fl.jumbo || 0) + (fl.ship || 0);
+    // Route revenue uses the same boosted fare as live flow (an
+    // Airline's board/manager/president boosts), and a route whose
+    // destination is at capacity earns nothing, because step() stops
+    // all flow into a full site.
+    const airlineBiz = (S.mode === 'inc' && S.incBiz) ? Object.values(S.incBiz).find(b => b && b.type === 'airline') : null;
+    const fareEach = (airlineBiz && typeof incBizFareMult === 'function') ? 50 * incBizFareMult(airlineBiz) : 50;
+    const routeDest = (A, B) => (A.type === 'hub' && B.type === 'airport') ? B : (A.type === 'airport' && B.type === 'hub') ? A : null;
+    const routeRev = (A, B) => { const d = routeDest(A, B); if (!d) return 0; if ((d.pop || 0) >= (d.level || 1) * 20000) return 0; return Math.min(A.level || 1, B.level || 1) * fareEach; };
     html = `<h2>Routes</h2><p>${routes.length} routes · ${totalVeh} vehicles</p>`;
     const bott = [];
     routes.forEach(r => {
@@ -1535,7 +1558,8 @@ function openAirCard() {
     else routes.forEach(r => {
       const A = sites[r.from], B = sites[r.to]; if (!A || !B) return;
       const kind = (A.type === 'port' || B.type === 'port') ? 'Trade' : (A.type === 'hub' && B.type === 'hub') ? 'Cargo' : 'Passengers';
-      const rev = kind === 'Passengers' ? ` · +${fmt(Math.min(A.level || 1, B.level || 1) * 50)}/sec` : '';
+      const rv = kind === 'Passengers' ? routeRev(A, B) : 0;
+      const rev = rv ? ` · +${fmt(rv)}/sec` : '';
       html += `<p><button class="btn3d" data-a="airSite" data-x="${r.from}">${esc(A.name)}</button> → <button class="btn3d" data-a="airSite" data-x="${r.to}">${esc(B.name)}</button> (${kind})${rev} <button class="btn3d" data-a="routeRemove" data-x="${r.from}|${r.to}">Remove</button></p>`;
     });
     html += `<button class="btn3d orange wide" data-a="airNewRoute">+ NEW ROUTE</button>`;
@@ -1549,9 +1573,15 @@ function openAirCard() {
     const hubs = siteKeys.filter(k => sites[k].type === 'hub').length, airs = siteKeys.filter(k => sites[k].type === 'airport').length, ports = siteKeys.filter(k => sites[k].type === 'port').length;
     const totPop = siteKeys.reduce((s, k) => s + (sites[k].type === 'port' ? 0 : (sites[k].pop || 0)), 0);
     let revSec = 0;
+    const airlineBiz2 = (S.mode === 'inc' && S.incBiz) ? Object.values(S.incBiz).find(b => b && b.type === 'airline') : null;
+    const fareEach2 = (airlineBiz2 && typeof incBizFareMult === 'function') ? 50 * incBizFareMult(airlineBiz2) : 50;
     routes.forEach(r => {
       const A = sites[r.from], B = sites[r.to];
-      if (A && B && ((A.type === 'hub' && B.type === 'airport') || (A.type === 'airport' && B.type === 'hub'))) revSec += Math.min(A.level || 1, B.level || 1) * 50;
+      if (A && B && ((A.type === 'hub' && B.type === 'airport') || (A.type === 'airport' && B.type === 'hub'))) {
+        const d = (A.type === 'hub') ? B : A;
+        if ((d.pop || 0) >= (d.level || 1) * 20000) return;
+        revSec += Math.min(A.level || 1, B.level || 1) * fareEach2;
+      }
     });
     html = `<h2>Your Airline</h2>`;
     html += `<div class="statgrid"><div><b>${siteKeys.length}</b><span>Sites</span></div><div><b>${routes.length}</b><span>Routes</span></div><div><b>${fmt(revSec)}/sec</b><span>Route revenue</span></div></div>`;
@@ -1564,7 +1594,7 @@ function openAirCard() {
     else html += `<p>No sites yet. Buy an airport, hub, or port from any dot.</p>`;
   } else {
     html = `<h2>More</h2>`;
-    html += `<p>How it works: hubs grow (level+1)/sec. Airports grow only on hub routes (min levels/sec). Ports generate trade (level+1)×100/sec. Passengers pay $50 on arrival; trade sells $1/unit at hubs. A full site (level×20,000) stops growing and drags stability — upgrade it or move people out.</p>`;
+    html += `<p>How it works: hubs grow level×2/sec. Airports grow level/sec on their own, plus hub-route flow. Ports generate trade (level+1)×100/sec. Passengers pay $50 on arrival; trade sells $1/unit at hubs. A full site (level×20,000) stops growing and drags stability — upgrade it or move people out.</p>`;
     html += `<p><button class="btn3d" data-a="layers">Map layers</button> <button class="btn3d" data-a="drawer">Phone</button> <button class="btn3d" data-a="closeModal">Back to map</button></p>`;
   }
   openModal(html, 'sheet');
@@ -1574,7 +1604,7 @@ function onDotTap(dot) {
   UI.dotBuy = dot;
   UI.cardKind = 'dot';
   const owned = S.airports && S.airports[dot.key];
-  const fmt = n => '$' + Math.round(n).toLocaleString();
+  const fmt = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : '$' + Math.round(n).toLocaleString());
   const title = dot.key.startsWith('r:') && W.byA3[dot.a3] ? dot.name + ' (' + W.byA3[dot.a3].name + ')' : dot.name;
   let code = '';
   if (dot.key.startsWith('c')) { const ct = W.cities.find(x => x.id === +dot.key.slice(1)); code = (ct && ct.code) || (dot.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase(); }
@@ -1613,7 +1643,7 @@ function onDotTap(dot) {
       html += `<p>Trade: ${Math.floor(owned.trade || 0).toLocaleString()} (+${(lv + 1) * 100}/sec)</p>`;
       html += `<p>Ports haul trade by ship. Trade arriving at a hub sells for $1 per unit.</p>`;
     } else if (owned.type === 'hub') {
-      html += `<p>Population: ${Math.floor(owned.pop || 0).toLocaleString()} (+${lv + 1}/sec)</p>`;
+      html += `<p>Population: ${Math.floor(owned.pop || 0).toLocaleString()} (+${lv * 2}/sec)</p>`;
       const sends = [];
       (S.routes || []).forEach(r => { const otherKey = r.from === dot.key ? r.to : (r.to === dot.key ? r.from : null); if (!otherKey) return; const other = S.airports && S.airports[otherKey]; if (other && other.type === 'airport') sends.push(esc(other.name) + ' ' + Math.min(lv, other.level || 1) + '/sec'); });
       if (sends.length) html += `<p>Sends: ${sends.join(', ')}</p>`;
@@ -1655,6 +1685,14 @@ function onDotTap(dot) {
       html += `<p><button class="btn3d" data-a="fleetBuy" data-x="prop"${S.cash < 50000 ? ' disabled' : ''}>BUY PROP ${fmt(50000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jet"${S.cash < 200000 ? ' disabled' : ''}>BUY JET ${fmt(200000)}</button> <button class="btn3d" data-a="fleetBuy" data-x="jumbo"${S.cash < 1000000 ? ' disabled' : ''}>BUY JUMBO ${fmt(1000000)}</button></p>`;
     }
     html += `<button class="btn3d orange wide" data-a="routeStart" data-x="${dot.key}">DRAW ROUTE</button>`;
+    // Standalone sites can be sold (80% of build + upgrade spend,
+    // the business rule). Airline-owned sites are excluded: sell
+    // the Airline business to remove those.
+    if (!(S.mode === 'inc' && typeof incAirlineForSite === 'function' && incAirlineForSite(dot.key))) {
+      const siteSpent = owned.spent != null ? owned.spent : (owned.type === 'airport' ? 220000 : owned.type === 'port' ? 600000 : 1250000);
+      const siteSellVal = Math.round(siteSpent * 0.8);
+      html += `<button class="btn3d orange wide" data-a="incSiteSell" data-x="${dot.key}">SELL SITE ${fmt(siteSellVal)}</button>`;
+    }
     if (owned.type === 'port') {
       html += `<p>Move trade: <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.1">10%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.25">25%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.5">50%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|0.75">75%</button> <button class="btn3d" data-a="tradeStart" data-x="${dot.key}|1">100%</button></p>`;
     } else {
@@ -2437,6 +2475,9 @@ PANELS.web = () => {
     body = `<h4>World Times</h4><div class="list">${S.news.slice(0, 60).map(n => `<div class="kv"><span><b>${esc(n.cat)}</b> · ${esc(n.text)}</span><small>${fmtDate(n.d)}</small></div>`).join('') || '<p class="muted small">No news yet.</p>'}</div>`;
   } else if (w.view === 'mail') {
     url = 'mail://inbox';
+    // Opening the mail view marks it read, so the Web home badge
+    // and mail chip clear instead of counting the same mail forever.
+    if ((S.mail || []).some(m => !m.read)) { (S.mail || []).forEach(m => { m.read = true; }); try { save(); } catch (e) {} }
     body = `<h4>Mail (${S.mail.filter(m => !m.read).length} unread)</h4><div class="list">${S.mail.map(m => `<div class="card in"><b>${esc(m.from)}</b> · <span class="muted small">${fmtDate(m.d)}</span><p>${esc(m.subject)} — ${esc(m.body)}</p>${m.offer && !m.offer.done ? `<button class="btn3d orange" data-a="acceptOffer" data-x="${m.id}">ACCEPT OFFER · ${fmtMoney(m.offer.price * stake(m.offer.a3), true)} for your stake</button>` : m.offer ? '<span class="tagp green">Offer accepted</span>' : ''}</div>`).join('') || '<p class="muted small">No mail.</p>'}</div>`;
   } else {
     const q = w.q.trim().toLowerCase();
@@ -3114,7 +3155,8 @@ PANELS.settings = () => {
   return panelShell('Settings', '',
     `<div class="kv"><span>Sound volume</span><span><input type="range" min="0" max="1" step="0.1" value="${S.settings.vol}" data-in="vol" data-x=""> ${Math.round(S.settings.vol * 100)}%</span></div>
     <div class="kv"><span>Map motion (vehicles)</span><button class="btn" data-a="toggleMotion">${S.settings.motion ? 'ON' : 'OFF'}</button></div>
-    <div class="kv"><span>App Store</span><button class="btn" data-a="toggleMinigames">${minigamesEnabled() ? 'ON' : 'OFF'}</button></div>
+    <div class="kv"><span>War battle mini-game</span><button class="btn" data-a="toggleMinigames">${minigamesEnabled() ? 'ON' : 'OFF'}</button></div>
+    <p class="muted small">This toggle only controls the war battle board (off skips the taunt/FIGHT path on invasions). It does not gate the App Store.</p>
     <div class="kv"><span>War battle board</span><span>${['4x4', '6x6', '8x8', '10x10'].map(s => `<button class="btn small ${(S.settings.battleSize || '6x6') === s ? 'on' : ''}" data-a="setBattleSize" data-x="${s}">${s}</button>`).join(' ')}</span></div>
     <div class="kv"><span>Save</span><b>IndexedDB, full history, no size cap</b></div>
     <button class="btn" data-a="exportSave">COPY SAVE TO CLIPBOARD</button>
@@ -3224,8 +3266,10 @@ const storeGame = id => STORE_GAMES.find(g => g.id === id);
 const downloadedGames = () => { if (typeof S === 'undefined' || !S) return []; if (!Array.isArray(S.downloaded)) S.downloaded = []; return S.downloaded.map(storeGame).filter(Boolean); };
 const isDownloaded = id => (typeof S !== 'undefined' && S && S.downloaded || []).includes(id);
 function storeTabsHTML(tab) {
-  const tabs = [['today', '📰', 'Today'], ['games', '🚀', 'Games'], ['apps', '🗂️', 'Apps'], ['arcade', '🕹️', 'Arcade'], ['search', '🔍', 'Search']];
-  return `<div class="as-tabs">${tabs.map(([k, ic, t]) => `<button class="as-tab ${tab === k ? 'on' : ''}" data-a="storeTab" data-x="${k}"><span>${ic}</span><span>${t}</span></button>`).join('')}</div>`;
+  // Apps and Arcade were empty placeholders ("games only" / "no
+  // titles"), so they are removed until those sections exist.
+  const tabs = [['today', '📰', 'Today'], ['games', '🚀', 'Games'], ['search', '🔍', 'Search']];
+  return `<div class="as-tabs">${tabs.map(([k, ic, t]) => `<button class="as-tab ${tab === k ? 'on' : ''}" data-a="appStoreTab" data-x="${k}"><span>${ic}</span><span>${t}</span></button>`).join('')}</div>`;
 }
 function storeDlBtn(g) {
   if (g.builtin || isDownloaded(g.id)) return `<button class="store-dl" data-a="mgplayPhone" data-x="${g.id}">Open</button>`;
@@ -3236,9 +3280,9 @@ function storeRowHTML(g) {
 }
 function storeDetailHTML(g) {
   const dl = isDownloaded(g.id) || g.builtin;
-  const del = UI.storeDelConfirm === g.id
-    ? `<div class="store-del-confirm"><b>Delete ${esc(g.name)} from your phone?</b><p>You can download it again from the App Store any time.</p><div class="row gap"><button class="btn3d wide" data-a="storeDel" data-x="${g.id}">DELETE</button><button class="btn wide" data-a="storeDelCancel">KEEP IT</button></div></div>`
-    : (dl && !g.builtin ? `<button class="store-del" data-a="storeDelAsk" data-x="${g.id}">Delete from Phone</button>` : '');
+  const del = UI.appStoreDelConfirm === g.id
+    ? `<div class="store-del-confirm"><b>Delete ${esc(g.name)} from your phone?</b><p>You can download it again from the App Store any time.</p><div class="row gap"><button class="btn3d wide" data-a="appStoreDel" data-x="${g.id}">DELETE</button><button class="btn wide" data-a="appStoreDelCancel">KEEP IT</button></div></div>`
+    : (dl && !g.builtin ? `<button class="store-del" data-a="appStoreDelAsk" data-x="${g.id}">Delete from Phone</button>` : '');
   return `<div class="store">
     <button class="store-back" data-a="storeBack" aria-label="Back">←</button>
     <div class="store-detail">
@@ -3255,11 +3299,11 @@ function storeDetailHTML(g) {
       <p class="store-desc">${esc(g.desc)}</p>
       ${del}
     </div>
-    ${storeTabsHTML(UI.storeTab || 'games')}
+    ${storeTabsHTML(UI.appStoreTab || 'games')}
   </div>`;
 }
 function storeHTML() {
-  const tab = UI.storeTab || 'games';
+  const tab = (['today', 'games', 'search'].includes(UI.appStoreTab) ? UI.appStoreTab : 'games');
   const g = UI.storeGame ? storeGame(UI.storeGame) : null;
   if (g) return panelShell('App Store', '', storeDetailHTML(g));
   const q = (UI.storeQuery || '').toLowerCase();
@@ -3294,7 +3338,7 @@ function storeHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis' || UI.mgGame === 'brainrot') {
-    const src = { pro: 'minigames/pro.html?v=20261026dv', college: 'minigames/college.html?v=20261026dv', baseball: 'minigames/baseball.html?v=20261026dx', hockey: 'minigames/hockey.html?v=20261026ed', tennis: 'minigames/tennis.html?v=20261026fi', brainrot: 'minigames/brainrot/index.html?v=20261026fm' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026im', college: 'minigames/college.html?v=20261026im', baseball: 'minigames/baseball.html?v=20261026im', hockey: 'minigames/hockey.html?v=20261026im', tennis: 'minigames/tennis.html?v=20261026im', brainrot: 'minigames/brainrot/index.html?v=20261026im' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis', brainrot: 'Brain Rot' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
@@ -3760,8 +3804,9 @@ PANELS.mode = () => {
 };
 PANELS.help = () => {
   return panelShell('Help', '',
-    `<div class="card in"><h4>How to play</h4><p>Pick a country, name your company, lease a location in one of its cities, buy stocks, and grow. Time only moves one week at a time (tap the date at the top right, press YES), vehicles keep moving while you wait, no age limit, and Vs Market is an equal-weighted algo that buys the same amount of every stock. Wars and disasters push prices down. Good events push them up. Your goals are always at the top: population, net worth, and beating the market.</p>
-    <p class="muted small">Take control of a company by buying 50% of its stock, or all of it with a takeover offer. Invade a neighbour to take its company and its people. Save is automatic.</p></div>`);
+    `<div class="card in"><h4>How to play Worl Inc.</h4><p>You run the United States as a business, starting from the New York cluster (New York, Vermont, New Hampshire, Maine, Massachusetts). Tap a state dot to buy an airport, hub, or port, or to build a business there. Draw routes between your airports and hubs — people flowing in is what makes your shops earn. Businesses earn every second; upgrade them, hire managers, and unlock new state clusters to grow across the country.</p>
+    <p>A new edition of The Ticker Times lands every 10 minutes (tap the date pill, top right, to read it). Open the phone (bottom right) for News, Trade, Bank, the App Store, and more. Save is automatic.</p>
+    <p class="muted small">Note: the sound-volume slider in Settings is saved but has no audio path yet — the game produces no sound through it.</p></div>`);
 };
 // Every menu item, shared by the hamburger popup and the old More
 // sheet. The popup is the new home for all of these now that the
@@ -3777,6 +3822,7 @@ const MENU_ITEMS = [
   ['cabinet', '👥', 'Advisors'], ['elections', '🗳️', 'Elections'], ['karma', '✨', 'Karma'],
   ['leaderboard', ICONS.leader, 'Leaderboard'], ['sports', ICONS.sports, 'Sports'], ['crypto', ICONS.crypto, 'Crypto'], ['bank', ICONS.bank, 'Bank'],
   ['markets', ICONS.markets, 'Trade'],
+  ['web', ICONS.search, 'Web'],
   ['radio', '📻', 'Robot Radio'],
   ['minigames', '🎮', 'App Store'],
   ['settings', ICONS.settings, 'Settings'], ['help', ICONS.help, 'Help'],
@@ -3795,7 +3841,7 @@ function moreSheet() {
 // settings). The money tiles ride on the real-stuff page.
 const PHONE_PAGES = [
   { name: 'Real stuff', wallets: ['private'], apps: ['company', 'leader', 'progress', 'nation', 'elections', 'cabinet', 'leaderboard', 'mars', 'karma', 'crypto', 'newsapp', 'sports', 'radio', 'airport', 'minigames'] },
-  { name: 'More', wallets: [], apps: ['tawk', 'calendar', 'settings', 'help'] },
+  { name: 'More', wallets: [], apps: ['web', 'tawk', 'calendar', 'settings', 'help'] },
 ];
 // Home pages, plus a Games page that appears only once a game has
 // been downloaded from the App Store. Downloaded games live there,
@@ -3845,7 +3891,13 @@ function phoneHTML() {
     const dots = `<div class="phone-dots">${pages.map((p, i) => `<button class="phone-dot ${i === page ? 'on' : ''}" data-a="phonePage" data-x="${i}" aria-label="${p.name}"></button>`).join('')}</div>`;
     return `${toprow}<div class="phone-grid">${dlConfirm}${dollars}${apps.map(appBtn).join('')}${dlTiles}</div>${dots}${dockHTML()}`;
   }
-  return `${toprow}<div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
+  // App mode: a real app bar above the app screen — ← back to the
+  // previous app (closePanel pops UI.phoneStack) or to the grid,
+  // plus the app's name. Detail screens previously had no way back
+  // to the app that opened them except the dock Home button.
+  const appTitle = (MENU_ITEMS.find(m => m[0] === UI.phoneApp) || [])[2] || UI.phoneApp;
+  const appBar = `<div class="phone-appbar"><button class="phone-back" data-a="closePanel" aria-label="Back">← Apps</button><span class="phone-appbar-name">${esc(appTitle)}</span><span class="phone-appbar-pad"></span></div>`;
+  return `${toprow}${appBar}<div id="phoneCard" class="phone-card app-${UI.phoneApp}" data-stop></div>${dockHTML()}`;
 }
 function openMenuPopup() {
   // The phone: every menu item is an app on a home screen. Tapping
@@ -3885,6 +3937,12 @@ function departuresBoardHTML(inPhone) {
     const k = W.byA3[c.a3];
     return { ct: c, k, km: airportDistanceKm(from, c), grp: k ? depContGroup(k.cont) : 'Oceania' };
   }).filter(d => d.grp === sel).sort((a, b) => a.km - b.km);
+  // US state capitals are not in W.cities: append them to the
+  // Americas board. They have no lat/lon, so no km is shown (—)
+  // and airportFly flies to the capital's own map point.
+  if (sel === 'Americas' && typeof US_CAPITALS !== 'undefined' && W.byA3['USA']) {
+    US_CAPITALS.forEach(u => dests.push({ ct: { id: 'us:' + u.s, name: u.c, a3: 'USA' }, k: W.byA3['USA'], km: null, grp: 'Americas' }));
+  }
   const head = `<div class="dep-head"><span class="dep-plane">✈️</span><h2>${esc(from.name)} Airport</h2>${inPhone ? '' : `<button class="xbtn" data-a="closeModal" aria-label="Close">${IC.close}</button>`}</div>`;
   const leaveBtn = (!inPhone && typeof CityView !== 'undefined' && CityView.isOpen && CityView.isOpen()) ? `<button class="btn wide" data-a="depLeave">\u2190 Back to world map</button>` : '';
   const body = `<p class="dep-welcome">Welcome to ${esc(from.name)} Airport. Tap the destination below to catch a flight.</p>${leaveBtn}
@@ -3893,7 +3951,7 @@ function departuresBoardHTML(inPhone) {
   <div class="dep-maphint">Tap a continent on the map to see its cities.</div>
   <div class="row gap dep-tabs">${groups.map(g => `<button class="dep-tab${g === sel ? ' on' : ''}" data-a="depCont" data-x="${g}">${g}</button>`).join('')}<button class="dep-tab" data-a="depWorld">World</button><button class="dep-tab" data-a="depEstate">Estate</button><button class="dep-tab" data-a="marsTravel">Mars</button></div>
   <div class="dep-board"><div class="dep-row dep-headrow"><span>Destination</span><span>Distance (km)</span></div>
-  ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km.toLocaleString('en-US')}</span></button>`).join('')}
+  ${dests.map(d => `<button class="dep-row" data-a="depFly" data-x="${d.ct.id}"><span class="dep-dot">${esc(d.ct.name)}<small> · ${esc(d.k.name)}</small></span><span class="dep-filler"></span><span class="dep-dot dep-km">${d.km == null ? '—' : d.km.toLocaleString('en-US')}</span></button>`).join('')}
   </div>`;
   return head + body;
 }
@@ -3994,8 +4052,30 @@ function incRemoveAirlineSites(biz, airportKey) {
   const keys = [airportKey].concat(biz.hubs || []);
   if (S.airports) for (const k of keys) delete S.airports[k];
   if (S.routes) S.routes = S.routes.filter(r => !keys.includes(r.from) && !keys.includes(r.to));
-  if (S.flowPct) for (const k in S.flowPct) if (keys.some(sk => k.startsWith(sk + '|'))) delete S.flowPct[k];
+  // Flows in both directions, not just outbound: an inbound flow
+  // entry used to survive a sale until the step's stale cleanup.
+  if (S.flowPct) for (const k in S.flowPct) if (keys.some(sk => k.startsWith(sk + '|') || k.endsWith('|' + sk))) delete S.flowPct[k];
   if (S.moves) S.moves = S.moves.filter(m => !keys.includes(m.from) && !keys.includes(m.to));
+  if (S.tradeMoves) S.tradeMoves = S.tradeMoves.filter(m => !keys.includes(m.from) && !keys.includes(m.to));
+}
+// Routes, flows and in-flight moves touching one dot, for a shop
+// sold, deleted or IPO'd: without this the route stayed in S.routes
+// forever but its sheet row hid it (no other endpoint), so it could
+// never be removed. A dot holding both a site and a shop shares one
+// key, so site-sale callers pass hasBiz to keep shop routes instead.
+function incRemoveBizLinks(key) {
+  if (S.routes) S.routes = S.routes.filter(r => r.from !== key && r.to !== key);
+  if (S.flowPct) for (const k in S.flowPct) if (k.startsWith(key + '|') || k.endsWith('|' + key)) delete S.flowPct[k];
+  if (S.moves) S.moves = S.moves.filter(m => m.from !== key && m.to !== key);
+  if (S.tradeMoves) S.tradeMoves = S.tradeMoves.filter(m => m.from !== key && m.to !== key);
+}
+// Worl Inc. locked-state guard, shared by the build/buy handlers:
+// the dot sheet is the only gate today, so a stale or future caller
+// could otherwise build in a locked state with no error.
+function incDotLocked(dotKey) {
+  if (!S || S.mode !== 'inc' || !dotKey || !dotKey.startsWith('us:')) return false;
+  if (!S.incStates) return false;
+  return !S.incStates.includes(dotKey.slice(3));
 }
 function incAirportUpCost(lv) { return [0, 100000, 250000, 500000, 1000000][lv] || 0; }
 const A = {
@@ -4119,8 +4199,8 @@ const A = {
     const [dotKey, secId] = (x || '').split('|');
     const sec = (typeof incSectorById === 'function' ? incSectorById(secId) : null);
     if (!sec) return toast('No such sector.', 'bad');
-    const fmt = n => '$' + Math.round(n).toLocaleString();
-    const rows = sec.types.map(t => `<div class="srow"><span class="avatar">🏪</span><span class="sname"><b>${esc(t.name)}</b><span class="muted">${fmt(t.cost)} to build · earns ${fmt(t.income)}/sec</span></span><button class="btn" data-a="incBuild" data-x="${dotKey}|${secId}|${t.id}"${S.cash < t.cost ? ' disabled' : ''}>Build</button></div>`).join('');
+    const fmt = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : '$' + Math.round(n).toLocaleString());
+    const rows = sec.types.map(t => `<div class="srow"><span class="avatar">🏪</span><span class="sname"><b>${esc(t.name)}</b><span class="muted">${fmt(t.cost)} to build · ${t.fare ? `earns ${(typeof curSym === 'function' ? curSym() : '$')}50 per arriving passenger` : `earns ${fmt(t.income)}/sec`}</span></span><button class="btn" data-a="incBuild" data-x="${dotKey}|${secId}|${t.id}"${S.cash < t.cost ? ' disabled' : ''}>Build</button></div>`).join('');
     openModal(`<h2>${esc(sec.name).toUpperCase()}</h2><p class="muted">${esc(sec.blurb)}</p><div class="menu-list">${rows}</div>`, 'sheet');
   },
   incConnect: (x) => {
@@ -4135,8 +4215,12 @@ const A = {
     const sec = (typeof incSectorById === 'function' ? incSectorById(secId) : null);
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, typeId) : null);
     if (!sec || !t) return toast('No such business.', 'bad');
+    if (typeof incDotLocked === 'function' && incDotLocked(dotKey)) return toast('That state is locked — unlock its cluster first.', 'bad');
     if (!S.incBiz) S.incBiz = {};
     if (S.incBiz[dotKey]) return toast('A business is already here.', 'bad');
+    // One Airline only: hubs always attach to the first airline, so
+    // a second one could never own hubs and lost them on a sale.
+    if (typeId === 'airline' && Object.values(S.incBiz).some(b => b && b.type === 'airline')) return toast('You already have an Airline.', 'bad');
     if (S.cash < t.cost) return toast('Not enough business cash.', 'bad');
     S.cash -= t.cost;
     if (typeId === 'airline') {
@@ -4149,7 +4233,7 @@ const A = {
       S.airports[dotKey] = { type: 'airport', name: d ? d.name : dotKey, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
       S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: 0, fare: true, level: 1, spent: t.cost, hubs: [], dotKey, loc: d ? d.name : dotKey };
     } else {
-      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost, dotKey, loc: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.name : dotKey, x: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.x : undefined, y: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.y : undefined };
+      S.incBiz[dotKey] = { sector: secId, type: typeId, name: t.name, cost: t.cost, income: t.income, level: 1, spent: t.cost, builtDay: S.day, fareEarned: 0, dotKey, loc: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.name : dotKey, x: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.x : undefined, y: (UI.dotBuy && UI.dotBuy.key === dotKey) ? UI.dotBuy.y : undefined };
     }
     save(); renderHUD();
     toast(`${t.name} built.`, 'good');
@@ -4187,9 +4271,27 @@ const A = {
     const biz = S.incBiz[x];
     const val = Math.round((biz.spent || (biz.cost || 0) * (biz.level || 1)) * 0.8);
     if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
+    if (typeof incRemoveBizLinks === 'function') incRemoveBizLinks(x);
     S.cash += val; delete S.incBiz[x];
     save(); renderHUD();
     toast(`${biz.name} sold for $${val.toLocaleString()}.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incSiteSell: (x) => {
+    if (!S || !S.airports || !S.airports[x]) return;
+    const site = S.airports[x];
+    if (S.mode === 'inc' && typeof incAirlineForSite === 'function' && incAirlineForSite(x)) return toast('Sell the Airline business to remove its sites.', 'bad');
+    const spent = site.spent != null ? site.spent : (site.type === 'airport' ? 220000 : site.type === 'port' ? 600000 : 1250000);
+    const val = Math.round(spent * 0.8);
+    const hasBiz = S.mode === 'inc' && S.incBiz && S.incBiz[x];
+    delete S.airports[x];
+    // Flows touching a gone site must go; routes/moves are kept
+    // when a shop shares the dot, because they feed the shop too.
+    if (S.flowPct) for (const k in S.flowPct) if (k.startsWith(x + '|') || k.endsWith('|' + x)) delete S.flowPct[k];
+    if (!hasBiz && typeof incRemoveBizLinks === 'function') incRemoveBizLinks(x);
+    S.cash += val;
+    save(); renderHUD();
+    toast(`${site.name} sold for ${(typeof fmtMoney === 'function' ? fmtMoney(val) : '$' + val.toLocaleString())}.`, 'good');
     if (UI.dotBuy) onDotTap(UI.dotBuy);
   },
   incDelete: (x) => {
@@ -4197,6 +4299,7 @@ const A = {
     const biz = S.incBiz[x];
     const name = biz.name || 'Business';
     if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
+    if (typeof incRemoveBizLinks === 'function') incRemoveBizLinks(x);
     delete S.incBiz[x];
     save(); renderHUD();
     toast(`${name} deleted.`, 'good');
@@ -4206,6 +4309,7 @@ const A = {
     // A hub belongs to your Airline: build it on an empty dot and it
     // joins the business (selling the Airline removes its hubs too).
     if (!S || S.mode !== 'inc') return;
+    if (typeof incDotLocked === 'function' && incDotLocked(x)) return toast('That state is locked — unlock its cluster first.', 'bad');
     if (S.airports && S.airports[x]) return toast('You already own a building here.', 'bad');
     let owner = null;
     if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (b && b.type === 'airline') { owner = b; break; } }
@@ -4215,9 +4319,13 @@ const A = {
     if (S.cash < price) return toast('Not enough business cash.', 'bad');
     if (!S.airports) S.airports = {};
     const d = (UI.dotBuy && UI.dotBuy.key === x) ? UI.dotBuy : null;
-    S.airports[x] = { type: 'hub', name: d ? d.name : x, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1 };
+    S.airports[x] = { type: 'hub', name: d ? d.name : x, a3: d ? d.a3 : S.home, x: d ? d.x : 0, y: d ? d.y : 0, pop: 0, level: 1, spent: price };
     if (!owner.hubs) owner.hubs = [];
     if (!owner.hubs.includes(x)) owner.hubs.push(x);
+    // Hub build money counts toward the Airline's spent, like hub
+    // upgrades do — otherwise sell/IPO underpaid by up to $1.25M
+    // per hub (the first hub is free, so price 0 adds nothing).
+    owner.spent = (owner.spent || owner.cost) + price;
     S.cash -= price;
     save(); renderHUD();
     toast(hubFree ? 'Hub built (free, first hub).' : 'Hub built.', 'good');
@@ -4251,7 +4359,7 @@ const A = {
     const bizCount = S.incBiz ? Object.keys(S.incBiz).length : 0;
     if (S.presidentSupport == null) S.presidentSupport = Math.min(95, 30 + bizCount * 2);
     const sup = S.presidentSupport;
-    const fmt = n => '$' + Math.round(n).toLocaleString();
+    const fmt = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : '$' + Math.round(n).toLocaleString());
     openModal(`<h2>RUN FOR PRESIDENT</h2><p>Support: <b>${sup}%</b> ${sup >= 50 ? '(winning)' : '(need 50%+)'}</p><p class="muted">Businesses: ${bizCount}. Campaigning costs ${fmt(10000)} for +5% support.</p><div class="menu-list"><button class="btn wide" data-a="incCampaign"${S.cash < 10000 ? ' disabled' : ''}>CAMPAIGN ${fmt(10000)} (+5%)</button><button class="btn wide" data-a="incElect">HOLD ELECTION</button></div>`, 'sheet');
   },
   incCampaign: () => {
@@ -4305,6 +4413,7 @@ const A = {
     const val = (typeof incIPOValue === 'function' ? incIPOValue(biz) : 0);
     if (val <= 0) return toast('IPO needs a profit first.', 'bad');
     if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
+    if (typeof incRemoveBizLinks === 'function') incRemoveBizLinks(x);
     S.cash += val; delete S.incBiz[x];
     save(); renderHUD();
     toast(`${biz.name} IPO raised $${val.toLocaleString()}.`, 'good');
@@ -4322,7 +4431,7 @@ const A = {
     const biz = S.incBiz[dotKey];
     if (!biz) return;
     if (!biz.dotKey) biz.dotKey = dotKey;
-    const fmt = n => '$' + Math.round(n).toLocaleString();
+    const fmt = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : '$' + Math.round(n).toLocaleString());
     const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
     const rates = (typeof incBizRates === 'function' ? incBizRates(biz) : { net: (biz.income || 0) * (biz.level || 1) });
@@ -4398,7 +4507,7 @@ const A = {
         body += `<h3>BLENDS</h3>`;
         if (!blends.length) body += `<p class="muted">No blends yet.</p>`;
         else blends.forEach(b => { body += `<p>${esc(b.name)} — +${fmt(b.income)}/sec</p>`; });
-        body += `<button class="btn wide" data-a="incBlend" data-x="${dotKey}">CREATE BLEND (two best products, +50% synergy)</button>`;
+        body += `<button class="btn wide" data-a="incBlend" data-x="${dotKey}"${blends.length >= 3 ? ' disabled' : ''}>CREATE BLEND (two best products, +50% synergy) — ${fmt(1000)} · ${blends.length}/3</button>`;
       }
     } else if (tab === 'marketing') {
       const cards = (t && t.marketing) ? t.marketing : [];
@@ -4418,6 +4527,7 @@ const A = {
       if (!ops.length) body += `<p class="muted">No campaigns for this type yet.</p>`;
       else ops.forEach((op, i) => {
         if (op.kind === 'timed') body += `<p>${esc(op.name)} — ×${op.mult} sales for ${op.secs}s — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
+        else if (biz.permOps && biz.permOps[i]) body += `<p>${esc(op.name)} — +${fmt(op.value)}/sec forever — Owned ✓</p>`;
         else body += `<p>${esc(op.name)} — +${fmt(op.value)}/sec forever — ${fmt(op.cost)} <button class="btn" data-a="incOp" data-x="${dotKey}|${i}"${S.cash < op.cost ? ' disabled' : ''}>Run</button></p>`;
       });
     } else if (tab === 'finance') {
@@ -4468,7 +4578,9 @@ const A = {
     if (!p) return;
     if (!biz.prices) biz.prices = {};
     const cur = (biz.prices[p.name] != null) ? biz.prices[p.name] : p.price;
-    biz.prices[p.name] = Math.max(1, Math.round(cur * (parseInt(dirS, 10) > 0 ? 1.1 : 0.9)));
+    const cap = p.price * 2;
+    if (parseInt(dirS, 10) > 0 && cur >= cap) return toast(`${p.name} is already at max price (2x base).`, 'bad');
+    biz.prices[p.name] = Math.max(1, Math.min(cap, Math.round(cur * (parseInt(dirS, 10) > 0 ? 1.1 : 0.9))));
     save();
     toast(`${p.name} now $${biz.prices[p.name].toLocaleString()}.`, 'good');
     A.incManage(dotKey + '|product');
@@ -4509,16 +4621,25 @@ const A = {
     const biz = S.incBiz[x];
     const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    // Blends are a Coffee Shop feature only, and they used to be
+    // free and unlimited — a straight money printer. Now: max 3
+    // per shop, $1,000 each, counted in spent.
+    if (!t || !t.blends) return toast('This business cannot make blends.', 'bad');
+    if (!biz.blends) biz.blends = [];
+    if (biz.blends.length >= 3) return toast('Max 3 blends per shop.', 'bad');
+    const blendCost = 1000;
+    if (S.cash < blendCost) return toast('Not enough business cash.', 'bad');
     const prods = (t && t.products) ? t.products : [];
     if (prods.length < 2) return toast('Need two products to blend.', 'bad');
     const priced = prods.map(p => ({ p, cur: (biz.prices && biz.prices[p.name] != null) ? biz.prices[p.name] : p.price })).sort((a, b) => b.cur - a.cur);
     const share = (biz.income || 0) / prods.length;
     const inc = Math.round(share * 2 * 1.5 * 100) / 100;
-    if (!biz.blends) biz.blends = [];
     const name = `House Blend ${biz.blends.length + 1}`;
+    S.cash -= blendCost;
+    biz.spent = (biz.spent || biz.cost) + blendCost;
     biz.blends.push({ name, income: inc });
     save();
-    toast(`${name} created (+$${inc}/sec).`, 'good');
+    toast(`${name} created (+${(typeof curSym === 'function' ? curSym() : '$')}${inc}/sec).`, 'good');
     A.incManage(x + '|product');
   },
   incTypeHire: (x) => {
@@ -4549,10 +4670,16 @@ const A = {
     const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
     const op = t && t.ops ? t.ops[parseInt(idxS, 10)] : null;
     if (!op) return;
+    // Permanent campaigns are one purchase per business: without
+    // this guard the same +$/sec-forever op stacked without limit.
+    if (op.kind !== 'timed') {
+      if (!biz.permOps) biz.permOps = {};
+      if (biz.permOps[idxS]) return toast('Already running permanently.', 'bad');
+    }
     if (S.cash < op.cost) return toast('Not enough business cash.', 'bad');
     S.cash -= op.cost;
     if (op.kind === 'timed') biz.boost = { mult: op.mult, until: Date.now() + op.secs * 1000 };
-    else biz.bonusIncome = (biz.bonusIncome || 0) + op.value;
+    else { biz.bonusIncome = (biz.bonusIncome || 0) + op.value; biz.permOps[idxS] = true; }
     save();
     toast(`${op.name} running.`, 'good');
     A.incManage(dotKey + '|marketing');
@@ -4603,7 +4730,7 @@ const A = {
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
-  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isWorldRegion && MapView.isWorldRegion(p[0], p[1])) MapView.showRegionMap(p[0], p[1]); else if (MapView.isClusterState && MapView.isClusterState(p[1])) MapView.showCluster(p[0], p[1]); else MapView.showRegion(p[0], p[1]); renderHUD(); },
+  goRegion: x => { const p = (x || '').split('|'); closeModal(); if (MapView.isWorldRegion && MapView.isWorldRegion(p[0], p[1])) MapView.showRegionMap(p[0], p[1]); else if (MapView.isClusterState && MapView.isClusterState(p[1])) { if (S && S.mode === 'inc' && typeof incDotLocked === 'function' && incDotLocked('us:' + p[1])) { toast('That cluster is locked — unlock it first.', 'bad'); renderHUD(); return; } MapView.showCluster(p[0], p[1]); } else MapView.showRegion(p[0], p[1]); renderHUD(); },
   exitToWorld: () => { MapView.exitToWorld(); renderHUD(); },
   exitToCountry: () => { MapView.exitToCountry(); renderHUD(); },
   countryPanel: x => { openCountryPanel(x); },
@@ -4638,7 +4765,7 @@ const A = {
   closePaper: () => { closePaper(); if (S && S.pendingVictory) { const v = S.pendingVictory; S.pendingVictory = null; save(); openModal(`<h2>🏆 Victory!</h2><p>${esc(v)}</p><p class="muted small">Keep playing, or restart for a new run.</p><button class="btn3d orange wide" data-a="closeModal">KEEP PLAYING</button>`, 'center'); return; } if (S && S.pendingSituation && typeof WORL_SITUATIONS !== 'undefined') { const s = WORL_SITUATIONS.find(x => x.id === S.pendingSituation); if (s) openModal(`<h2>🎲 ${esc(s.title)}</h2><p>${esc(s.text)}</p>${s.choices.map((c, i) => `<button class="btn3d orange wide" data-a="situationChoice" data-x="${i}">${esc(c.label)} — ${esc(c.desc)}</button>`).join('')}`, 'center'); } },
   paperPrev: () => flipPaper(-1),
   paperNext: () => flipPaper(1),
-  paperAdBuy: () => { closePaper(); openPanel('offices'); },
+  paperAdBuy: () => { closePaper(); openPanel('ads'); },
   adCompany: x => { UI.adCompany = x; renderPanel(); },
   adRoute: x => { UI.adRoute = x; renderPanel(); },
   adWeeks: x => { UI.adWeeks = parseInt(x, 10) || 4; renderPanel(); },
@@ -4722,7 +4849,7 @@ const A = {
   layerToggle: x => { if (!S.mapLayers) S.mapLayers = { vehicles: true, labels: true, cities: true }; S.mapLayers[x] = S.mapLayers[x] === false; save(); openLayersModal(); },
   departures: () => openDeparturesModal(),
   depCont: x => { UI.depCont = x; openDeparturesModal(); },
-  depFly: x => { const dc = W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); closeModal(); try { airportFly(+x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
+  depFly: x => { const dc = (typeof x === 'string' && x.startsWith('us:')) ? null : W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); closeModal(); try { airportFly(x); } catch (e) { toast('Could not fly there.', 'bad'); } save(); renderHUD(); },
   marsExpand: () => { const err = marsExpand(S.home); if (err) return toast(err, 'bad'); save(); renderPanel(); toast('Mine expanded.', 'good'); },
   marsTravel: () => { closePanel(); closeModal(); CityView.openMars(); document.body.classList.add('in-city'); renderCityHUD(); toast('Welcome to Mars.', 'good'); },
   marsBuyMine: x => { const err = marsBuySite(S.home, +x); if (err) return toast(err, 'bad'); closePopup(); CityView.refresh(); renderCityHUD(); toast('Mine bought. Income arrives every week.', 'good'); save(); refreshAll(); },
@@ -4731,13 +4858,16 @@ const A = {
     const [key, type] = (x || '').split('|');
     const dot = UI.dotBuy && UI.dotBuy.key === key ? UI.dotBuy : null;
     if (!dot) return toast('Pick a dot first.', 'bad');
+    if (typeof incDotLocked === 'function' && incDotLocked(key)) return toast('That state is locked — unlock its cluster first.', 'bad');
     if (!S.airports) S.airports = {};
     if (S.airports[key]) return toast('You already own a building here.', 'bad');
     const hubFree = type === 'hub' && (!S.airports || !Object.values(S.airports).some(a => a.type === 'hub'));
     const price = type === 'hub' ? (hubFree ? 0 : 1250000) : type === 'port' ? 600000 : 220000;
     if (S.cash < price) return toast('Not enough cash.', 'bad');
     S.cash -= price;
-    S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0 } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 0 };
+    // Sites are created valid at once: level 1 (no step-time default
+    // needed) and spent tracked, so a later site Sell can pay 80%.
+    S.airports[key] = type === 'port' ? { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, trade: 0, level: 1, spent: price } : { type, name: dot.name, a3: dot.a3, x: dot.x, y: dot.y, pop: 0, level: 1, spent: price };
     UI.dotBuy = null;
     save(); closeModal(); renderHUD(); tutCheck();
     if (Object.keys(S.airports).length >= 2) { UI.routing = key; toast((type === 'hub' ? 'Hub' : type === 'port' ? 'Port' : 'Airport') + ' bought. Tap a site to connect your route.', 'good'); }
@@ -4879,6 +5009,7 @@ const A = {
     if (S.cash < cost) return toast('Not enough cash.', 'bad');
     S.cash -= cost;
     a.level = lv + 1;
+    a.spent = (a.spent || 0) + cost;
     // If this site belongs to an Airline business, the business tracks
     // it: its level mirrors its airport, and every upgrade (airport or
     // hub) counts toward what a sale pays back.
@@ -5139,15 +5270,16 @@ const A = {
   airportCountry: x => { UI.airport = { cont: UI.airport.cont, a3: x }; renderPanel(); },
   airportBack: () => { UI.airport = { cont: null, a3: null }; renderPanel(); },
   airportBack2: () => { UI.airport = { cont: UI.airport.cont, a3: null }; renderPanel(); },
-  airportFly: x => { const dc = W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); act(() => airportFly(+x), null); },
-  webSite: x => { UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
+  airportFly: x => { const dc = (typeof x === 'string' && x.startsWith('us:')) ? null : W.cities[+x]; if (S.flow && typeof flowCanExpand === 'function' && !flowCanExpand() && dc && dc.a3 !== S.home) return toast('Only your home country is open. Buy an office and hire a full board to travel.', 'bad'); act(() => airportFly(x), null); },
+  webSite: x => { if (!UI.webHist) UI.webHist = []; if (UI.web) UI.webHist.push({ view: UI.web.view, q: UI.web.q, a3: UI.web.a3 }); UI.web = { view: 'site', q: UI.web.q, a3: x }; renderPanel(); },
   webView: x => {
+    if (!UI.webHist) UI.webHist = []; if (UI.web) UI.webHist.push({ view: UI.web.view, q: UI.web.q, a3: UI.web.a3 });
     if (x === 'mine') UI.web = { view: 'site', q: '', a3: S.home };
     else UI.web = { view: x, q: UI.web.q, a3: null };
     renderPanel();
   },
-  webBack: () => { UI.web = { view: 'search', q: UI.web.q, a3: null }; renderPanel(); },
-  webHome: () => { UI.web = { view: 'home', q: '', a3: null }; renderPanel(); },
+  webBack: () => { const prev = (UI.webHist && UI.webHist.pop()); UI.web = prev ? { view: prev.view, q: prev.q, a3: prev.a3 } : { view: 'search', q: UI.web.q, a3: null }; renderPanel(); },
+  webHome: () => { UI.webHist = []; UI.web = { view: 'home', q: '', a3: null }; renderPanel(); },
   webTier: x => act(() => buyWebTier(x), 'Website upgraded'),
   webAd: x => { const [a3, id] = x.split('|'); act(() => toggleAd(a3, id)); },
   webAddon: x => { const [a3, id] = x.split('|'); act(() => buyAddon(a3, id), 'Add-on bought'); },
@@ -5338,10 +5470,10 @@ A.mgplayPhone = (g) => {
   }
   renderPhoneApp();
 };
-A.storeTab = (t) => { UI.storeTab = t; UI.storeGame = null; UI.storeDelConfirm = null; renderPhoneApp(); };
+A.appStoreTab = (t) => { UI.appStoreTab = t; UI.storeGame = null; UI.appStoreDelConfirm = null; renderPhoneApp(); };
 A.storeFilter = (k) => { UI.storeFilter = k; renderPhoneApp(); };
 A.storeGame = (id) => { UI.storeGame = id; renderPhoneApp(); };
-A.storeBack = () => { UI.storeGame = null; UI.storeDelConfirm = null; renderPhoneApp(); };
+A.storeBack = () => { UI.storeGame = null; UI.appStoreDelConfirm = null; renderPhoneApp(); };
 A.storeDl = (id) => {
   if (!Array.isArray(S.downloaded)) S.downloaded = [];
   if (!S.downloaded.includes(id)) S.downloaded.push(id);
@@ -5350,11 +5482,11 @@ A.storeDl = (id) => {
   toast(g ? g.name + ' added to your Home Screen · Games page' : 'Added to your Home Screen');
   renderPhoneApp();
 };
-A.storeDelAsk = (id) => { UI.storeDelConfirm = id; renderPhoneApp(); };
-A.storeDelCancel = () => { UI.storeDelConfirm = null; renderPhoneApp(); };
-A.storeDel = (id) => {
+A.appStoreDelAsk = (id) => { UI.appStoreDelConfirm = id; renderPhoneApp(); };
+A.appStoreDelCancel = () => { UI.appStoreDelConfirm = null; renderPhoneApp(); };
+A.appStoreDel = (id) => {
   S.downloaded = (S.downloaded || []).filter(x => x !== id);
-  save(); UI.storeDelConfirm = null; UI.dlSuppress = null;
+  save(); UI.appStoreDelConfirm = null; UI.dlSuppress = null;
   toast('Deleted from your Home Screen'); renderPhoneApp();
 };
 A.storeSearch = () => { const el = document.getElementById('storeQ'); UI.storeQuery = el ? el.value : ''; renderPhoneApp(); };
@@ -5423,7 +5555,7 @@ function onInput(e) {
     const cs = country(S.home); if (cs) { if (k === 'taxCorp') cs.tax = +t.value / 100; if (k === 'taxInc') cs.incTax = +t.value / 100; if (k === 'taxVat') cs.vat = +t.value / 100; }
     save();
   }
-  if (k === 'vol') { S.settings.vol = +t.value; }
+  if (k === 'vol') { S.settings.vol = +t.value; save(); }
 }
 function marketsListHTML() {
   const rows = marketRows();

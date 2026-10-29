@@ -95,7 +95,12 @@ const MapView = (() => {
   };
   const clusterBox = () => {
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, found = false;
-    clusterStates().forEach(name => { const b = stateBox(name); if (!b) return; found = true; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+    // Cluster 9 frames only the contiguous West Coast (California,
+    // Oregon, Washington): including Alaska and Hawaii's far-apart
+    // boxes shrank all five states to specks in mostly empty sea.
+    // Alaska and Hawaii stay in the cluster and are reached by panning.
+    const names = viewCluster === 9 ? clusterStates().filter(n => n !== 'Alaska' && n !== 'Hawaii') : clusterStates();
+    names.forEach(name => { const b = stateBox(name); if (!b) return; found = true; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
     return found ? [x0, y0, x1, y1] : null;
   };
   const clusterForState = name => CLUSTER_MAPS.findIndex(list => list.includes(name));
@@ -456,13 +461,22 @@ const MapView = (() => {
     // One catch-up beat max, so a long absence does not spam weeks.
     if (typeof S !== 'undefined' && S && S.mode === 'inc' && typeof stepWeek === 'function') {
       if (Date.now() - (S.incPaperAt || 0) >= 600000) {
-        S.incPaperAt = Date.now();
-        try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); } catch (e) { console.error('newspaper beat failed', e); }
-        // Weekly Finance records per business: one income-statement week
-        // (revenue, costs, net, per-product revenue/units, game date),
-        // last 12 weeks kept. Reviews grow with units sold.
-        try { if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; if (!b.dotKey) b.dotKey = k; const wk = (typeof incBizWeekly === 'function') ? incBizWeekly(b) : null; if (wk) { try { wk.date = (typeof fmtDate === 'function' && S.day != null) ? fmtDate(S.day) : ''; } catch (e) {} b.weekly = ((b.weekly || []).concat([wk])).slice(-12); const units = Object.values(wk.prodUnits || {}).reduce((a, c) => a + c, 0); b.reviews = (b.reviews || 0) + Math.floor(units / 20); b.sales = ((b.sales || []).concat([wk.net])).slice(-12); } } } catch (e) {}
-        try { save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
+        // One edition per beat: stepDay already pushes an edition at
+        // week end, so the beat must NOT push a second one (it used
+        // to create a premature edition for the new week). The beat
+        // clock only advances on success, so a failed week retries
+        // on the next beat instead of being silently skipped, and a
+        // paper error is surfaced instead of swallowed.
+        let beatOk = false;
+        try { stepWeek(); beatOk = true; } catch (e) { console.error('newspaper beat failed', e); }
+        if (beatOk) {
+          S.incPaperAt = Date.now();
+          // Weekly Finance records per business: one income-statement week
+          // (revenue, costs, net, per-product revenue/units, game date),
+          // last 12 weeks kept. Reviews grow with units sold.
+          try { if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; if (!b.dotKey) b.dotKey = k; const wk = (typeof incBizWeekly === 'function') ? incBizWeekly(b) : null; if (wk) { try { wk.date = (typeof fmtDate === 'function' && S.day != null) ? fmtDate(S.day) : ''; } catch (e) {} b.weekly = ((b.weekly || []).concat([wk])).slice(-12); const units = Object.values(wk.prodUnits || {}).reduce((a, c) => a + c, 0); b.reviews = (b.reviews || 0) + Math.floor(units / 20); b.sales = ((b.sales || []).concat([wk.net])).slice(-12); } } } catch (e) {}
+          try { save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
+        } else if (S.lastPaperError) { try { toast('Newspaper failed: ' + String(S.lastPaperError).slice(0, 120), 'bad'); } catch (e) {} S.lastPaperError = null; }
       }
     }
     // Worl Inc. businesses earn every second: net (boosts minus
@@ -499,20 +513,23 @@ const MapView = (() => {
           if (!A && !B) continue;
           const aLv = (A && A.level) || 1, bLv = (B && B.level) || 1;
           if (A && B) {
-            if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.to); } }
-            if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.from); } }
+            if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; const fare = add * fareFor(r.to); S.cash = (S.cash || 0) + fare; try { const own = (typeof incAirlineForSite === 'function') ? incAirlineForSite(r.from) : null; if (own && own.biz) own.biz.fareEarned = (own.biz.fareEarned || 0) + fare; } catch (e) {} } }
+            if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; const fare = add * fareFor(r.from); S.cash = (S.cash || 0) + fare; try { const own = (typeof incAirlineForSite === 'function') ? incAirlineForSite(r.to) : null; if (own && own.biz) own.biz.fareEarned = (own.biz.fareEarned || 0) + fare; } catch (e) {} } }
           }
           // Site -> shop routes: a hub or airport connected straight
           // to a business feeds people into the shop itself (biz.pop),
           // at min(source level, shop level)/sec, capped like a site.
           // No fare — the shop's sales multiplier is the payoff.
           if (S.mode === 'inc' && S.incBiz) {
-            if (A && (A.type === 'hub' || A.type === 'airport') && !B && S.incBiz[r.to]) {
+            // A shop sharing its dot with an airport/hub gets fed
+            // too, not just the site: dropping the !B / !A guards
+            // means a route to a dot that holds both feeds both.
+            if (A && (A.type === 'hub' || A.type === 'airport') && S.incBiz[r.to]) {
               const bz = S.incBiz[r.to]; if (bz.pop === undefined) bz.pop = 0;
               const bl = bz.level || 1;
               if (bz.pop < bl * 20000) bz.pop = Math.min(bz.pop + Math.min(aLv, bl) * dt, bl * 20000);
             }
-            if (B && (B.type === 'hub' || B.type === 'airport') && !A && S.incBiz[r.from]) {
+            if (B && (B.type === 'hub' || B.type === 'airport') && S.incBiz[r.from]) {
               const bz = S.incBiz[r.from]; if (bz.pop === undefined) bz.pop = 0;
               const bl = bz.level || 1;
               if (bz.pop < bl * 20000) bz.pop = Math.min(bz.pop + Math.min(bLv, bl) * dt, bl * 20000);
@@ -546,7 +563,11 @@ const MapView = (() => {
               if (other && other.type === 'hub') rate += Math.min(other.level || 1, A.level || 1);
             }
           }
-          const amt = rate * pct * dt;
+          // Never drain a source below zero: the flow is capped at
+          // the people actually there, so no fares are created from
+          // a negative population and no site goes negative.
+          const amt = Math.min(rate * pct * dt, Math.max(0, A.pop || 0));
+          if (amt <= 0) continue;
           if (A.pop === undefined) A.pop = 0;
           if (B.pop === undefined) B.pop = 0;
           A.pop -= amt;
@@ -887,7 +908,7 @@ const MapView = (() => {
           c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.fill(); c.stroke();
         });
       }
-      if (typeof US_CAPITALS !== 'undefined') {
+      if (layerOn('cities') && typeof US_CAPITALS !== 'undefined') {
         US_CAPITALS.forEach(st => {
           const [sx, sy] = toScreen(st.x, st.y); if (sx < -10 || sy < -10 || sx > vw + 10 || sy > vh + 10) return;
           const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5));
@@ -1049,7 +1070,7 @@ const MapView = (() => {
           const [sx, sy] = toScreen(a.x, a.y); if (sx < -60 || sy < -40 || sx > vw + 60 || sy > vh + 40) continue;
           let code = '';
           if (key.startsWith('c')) { const ct = W.cities.find(x => x.id === +key.slice(1)); code = (ct && ct.code) || (a.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase(); }
-          else if (key.startsWith('us:')) code = key.slice(3).toUpperCase();
+          else if (key.startsWith('us:')) { const cap = (typeof US_CAPITALS !== 'undefined') ? US_CAPITALS.find(u => u.s === key.slice(3)) : null; code = cap && cap.code ? cap.code : key.slice(3).toUpperCase(); }
           else code = (a.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
           if (!code) continue;
           c.font = 'bold 11px system-ui, sans-serif';
@@ -1087,7 +1108,7 @@ const MapView = (() => {
     // moves) — same places as every other map. No pills, no cities,
     // no vehicles, no military.
     if (viewKind === 'regionMap') { drawDots(); drawAirline(now); return; }
-    if (st && st.settings.motion && layerOn('vehicles')) {
+    if (st && st.settings && st.settings.motion && layerOn('vehicles')) {
       units.forEach(u => {
         const co = st.co[u.a3]; if (!co) return;
         let x, y, a;
@@ -1288,9 +1309,11 @@ const MapView = (() => {
       }
       // White dots are buyable on every map: tapping one opens the
       // airport/hub buy sheet for that city, instead of the country
-      // underneath.
+      // underneath. In a cluster view only the cluster's own state
+      // dots are drawn, so only those may be tapped — the world
+      // dot set used to open buy sheets for invisible dots.
       {
-        const best = dotAt(sx, sy);
+        const best = viewKind === 'cluster' ? clusterDotAt(sx, sy) : dotAt(sx, sy);
         if (best) { handlers.dot && handlers.dot(best); return; }
       }
       // Cluster maps: one dot per state, same buy sheet as the
@@ -1357,7 +1380,7 @@ const MapView = (() => {
     world() { resetView(); flyTo(MAP_W / 2, MAP_H / 2, 0); },
     showCountry(a3) { enterCountry(a3); },
     showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; viewRegionName = null; const box = regionBox(region); if (box) frameBox(box); },
-    showCluster(a3, state) { viewCluster = Math.max(0, clusterForState(state)); viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; viewRegionName = null; const box = clusterBox(); if (box) frameBox(box); },
+    showCluster(a3, state) { const ci = clusterForState(state); if (ci < 0) { if (typeof toast === 'function') toast('No such cluster state.', 'bad'); return; } viewCluster = ci; viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; viewRegionName = null; const box = clusterBox(); if (box) frameBox(box); },
     clusters() { return CLUSTER_MAPS; },
     clusterFor(state) { return clusterForState(state); },
     isClusterState(name) { return isClusterState(name); },

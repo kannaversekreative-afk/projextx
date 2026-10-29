@@ -12,7 +12,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(47,124,246,0.6); outline-offset: 2px; }
 input, select { font: inherit; }
 svg { display: block; }
-#map { position: fixed; inset: 0; touch-action: none; }
+#map { position: fixed; top: 0; left: 0; right: 0; bottom: -120px; touch-action: none; }
 #map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #hud, #popup, #tut, #chud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hud > *, #popup > *, #tut > *, #chud > * { pointer-events: auto; }
@@ -182,7 +182,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .flag-big { font-size: 46px; line-height: 1; }
 
 /* city view */
-#cityview { position: fixed; inset: 0; z-index: 4; display: none; overflow: hidden; touch-action: none; background: #1ba2c9; }
+#cityview { position: fixed; top: 0; left: 0; right: 0; bottom: -120px; z-index: 4; display: none; overflow: hidden; touch-action: none; background: #1ba2c9; }
 #cityview.open { display: block; }
 #cityview canvas { position: absolute; inset: 0; }
 #cityview .pins { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
@@ -234,7 +234,7 @@ h5 { margin: 14px 0 6px; font-size: 14px; font-weight: 900; color: var(--muted);
 .sw.on { box-shadow: 0 0 0 3px var(--ink); }
 .toast { background: #2f7cf6; color: #fff; border-radius: 30px; padding: 12px 20px; font-size: 15px; box-shadow: var(--shadow); animation: pop .18s ease-out; max-width: 90vw; text-align: center; }
 .toast.good { background: #0d7a3d; } .toast.bad { background: #b9362f; }
-#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 95px); z-index: 30; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 95px); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 /* Vehicle tap card */
 .vcard { padding: 2px; }
 .vroute { font-size: 28px; font-weight: 900; margin: 10px 0 4px; }
@@ -461,7 +461,7 @@ body.in-city #hud { display: none; }
    tablet and a desktop are untouched, because they are already
    horizontal. Phone panels stay full-width sheets (see the override
    below), not the web side sheet on the right. */
-#game { position: fixed; inset: 0; overflow: hidden; }
+#game { position: fixed; top: 0; left: 0; right: 0; bottom: -120px; overflow: hidden; }
 body.landscape-phone #game { position: fixed; inset: 0; top: auto; left: auto; width: auto; height: auto; transform: none; overflow: hidden; }
 body.landscape-phone #panel { left: auto; right: 12px; top: 12px; bottom: 12px; width: min(420px, 52%); max-height: none; }
 body.landscape-phone .popup { top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100% - 120px); }
@@ -701,6 +701,10 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
    inside it, so sticky headers and footers stay in view. Panel bodies
    must not become a second scroller, or sticky stops working. */
 .phone-card { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: #fff; border-radius: 28px; color: var(--ink); }
+.phone-appbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 6px 8px; color: #e2e8f0; }
+.phone-appbar .phone-back { background: none; border: 0; color: #e2e8f0; font-weight: 800; font-size: 14px; padding: 6px; cursor: pointer; }
+.phone-appbar-name { flex: 1; text-align: center; font-weight: 900; font-size: 15px; }
+.phone-appbar-pad { width: 52px; flex: none; }
 /* The phone frame itself is white text, and light apps inside it used
    to inherit that — white text on a light card, unreadable (Karma's
    score was the worst case). The card sets its own ink; dark apps
@@ -1073,7 +1077,7 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .stmt-t { font-weight: 900; border-top: 2px solid var(--line); padding-top: 6px; }
 
 /* ---------- play screen + new-business flow (hh) ---------- */
-#playscreen { position: fixed; inset: 0; z-index: 200; display: none; flex-direction: column; }
+#playscreen { position: fixed; top: 0; left: 0; right: 0; bottom: -120px; z-index: 200; display: none; flex-direction: column; }
 #playscreen.open { display: flex; }
 .play-map { flex: 6 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .play-logo { white-space: nowrap; text-align: center; color: #0b1e3a; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }

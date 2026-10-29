@@ -15,9 +15,16 @@ function airportCountries(cont) {
 }
 function airportCities(a3) {
   // Every city in the country, capital first, then major cities by size.
-  return W.cities.filter(c => c.a3 === a3)
+  const list = W.cities.filter(c => c.a3 === a3)
     .sort((a, b) => (b.isCapital ? 1 : 0) - (a.isCapital ? 1 : 0) || (b.pop || 0) - (a.pop || 0))
     .map(c => ({ id: c.id, name: c.name, kind: c.isCapital ? 'Capital' : (c.isMajor ? 'Major city' : 'City') }));
+  // USA destinations also include its 50 state capitals, which live
+  // in US_CAPITALS, not W.cities. Their ids are 'us:<state>' and
+  // airportFly handles them by flying to the capital's map point.
+  if (a3 === 'USA' && typeof US_CAPITALS !== 'undefined') {
+    US_CAPITALS.forEach(u => list.push({ id: 'us:' + u.s, name: u.c, kind: 'State capital' }));
+  }
+  return list;
 }
 function airportFromCity() {
   // The city the player is standing in wins: opening departures from inside
@@ -34,12 +41,22 @@ function airportDistanceKm(a, b) {
   return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
 function airportFly(cityId) {
+  // US state capitals have no W.cities entry: fly to the capital's
+  // own map point instead of the country's capital (Washington DC).
+  if (typeof cityId === 'string' && cityId.startsWith('us:') && typeof US_CAPITALS !== 'undefined') {
+    const u = US_CAPITALS.find(x => x.s === cityId.slice(3)); if (!u) return 'City not found.';
+    closePanel();
+    MapView.flyToXY(u.x, u.y);
+    toast(`Flying to ${u.c}`, 'good');
+    return null;
+  }
+  cityId = +cityId;
   const from = airportFromCity();
   const c = W.cities[cityId]; if (!c) return 'City not found.';
   const km = airportDistanceKm(from, c);
   S.airportFrom = cityId;
   closePanel();
-  MapView.flyToCountry(c.a3);
+  MapView.flyToCity(cityId);
   toast(`Flying to ${c.name} — ${km.toLocaleString()} km`, 'good');
   return null;
 }

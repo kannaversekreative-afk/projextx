@@ -69,7 +69,11 @@ function bankruptcyYear(year) {
     }
   });
   // Player bankruptcy at 5 years ends the run — with rebirth on offer.
-  if (st.personal.years >= 5 || st.business.years >= 5) {
+  // Worl Inc. is exempt: its cash is per-second business cash, and
+  // the legacy rule silently destroyed Inc. saves (loadSave drops
+  // over saves, so the next launch showed no "Continuing" and no
+  // game-over screen). Inc. never ends on this rule.
+  if (S.mode !== 'inc' && (st.personal.years >= 5 || st.business.years >= 5)) {
     if (typeof finishGame === 'function') finishGame(true);
   }
 }
