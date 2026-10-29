@@ -860,6 +860,8 @@ T.forEach(t => {
     el.addEventListener('pointercancel', end);
     el.addEventListener('wheel', e => { if (photoMode) return; e.preventDefault(); zoomAt(view.s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
     window.addEventListener('resize', () => { if (city) apply(); });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { if (city) apply(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && city) apply(); });
   }
   function zoomAt(s, sx, sy) { const mx = (sx - view.x) / view.s, my = (sy - view.y) / view.s; view.s = s; apply(); view.x = sx - mx * view.s; view.y = sy - my * view.s; apply(); }
   // Tapping a building itself — not just its pin — opens its card, so
@@ -942,7 +944,7 @@ T.forEach(t => {
     pmViewport.addEventListener('pointercancel', pmEnd);
     pmViewport.addEventListener('wheel', e => { if (!photoMode) return; e.preventDefault(); const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pm.s * Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top); }, { passive: false });
     pmViewport.addEventListener('dblclick', e => { if (!photoMode) return; const rect = pmViewport.getBoundingClientRect(); pmZoomAt(pm.s >= pm.fit * 3 ? pm.fit : pm.s * 2, e.clientX - rect.left, e.clientY - rect.top); });
-    window.addEventListener('resize', () => { if (!photoMode || !pm.iw) return; const ratio = pm.s / pm.fit; pm.fit = Math.min(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih); pm.s = pm.fit * ratio; pmApply(); });
+    window.addEventListener('resize', () => { if (!photoMode || !pm.iw) return; const ratio = pm.s / pm.fit; pm.fit = Math.max(pmViewport.clientWidth / pm.iw, pmViewport.clientHeight / pm.ih); pm.s = pm.fit * ratio; pmApply(); });
   }
   function openCode() {
     photoMode = false; el.classList.remove('photo');

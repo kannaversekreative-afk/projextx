@@ -499,23 +499,27 @@ function renderHUD() {
     const vi = MapView.viewInfo();
     if (vi.kind === 'country') {
       const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
-      return `<div style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10;display:flex;gap:8px"><button class="btn" data-a="exitToWorld" aria-label="Back to world">← World</button><button class="btn" data-a="countryPanel" data-x="${vi.a3}" aria-label="Open country panel">${esc(name)}</button></div>`;
+      return `<div style="position:absolute;left:50%;top:calc(max(12px, env(safe-area-inset-top)) + 60px);transform:translateX(-50%);z-index:10;display:flex;gap:8px"><button class="btn" data-a="exitToWorld" aria-label="Back to world">← World</button><button class="btn" data-a="countryPanel" data-x="${vi.a3}" aria-label="Open country panel">${esc(name)}</button></div>`;
     }
     if (vi.kind === 'region') {
       const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
-      return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
+      return `<button class="btn" style="position:absolute;left:50%;top:calc(max(12px, env(safe-area-inset-top)) + 60px);transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
     }
     if (vi.kind === 'cluster') {
       const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
-      return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
+      return `<button class="btn" style="position:absolute;left:50%;top:calc(max(12px, env(safe-area-inset-top)) + 60px);transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
     }
     if (vi.kind === 'regionMap') {
       const name = (W.byA3[vi.a3] && W.byA3[vi.a3].name) || vi.a3;
-      return `<button class="btn" style="position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
+      return `<button class="btn" style="position:absolute;left:50%;top:calc(max(12px, env(safe-area-inset-top)) + 60px);transform:translateX(-50%);z-index:10" data-a="exitToCountry" aria-label="Back to country">← ${esc(name)}</button>`;
     }
     return '';
   })();
   $('hud').innerHTML = `
+  <button class="hud-pill hud-tl" data-a="panel" data-x="profile"><span class="hud-avatar">👤</span><span class="hud-tl-text"><b>${esc(youName)}</b><small>${esc(youTitle)} · ${fmtMoney(S.cash, true)}</small></span></button>
+  <button class="hud-pill hud-tr" data-a="paper">📰 ${fmtDate(S.day)}</button>
+  <button class="hud-btn hud-br" style="bottom:max(12px, env(safe-area-inset-bottom))" data-a="drawer" aria-label="Phone">📱</button>
+  ${viewBtns}
   ${UI.placing ? `<div class="place-banner card"><b>Where do you want it?</b><span>Tap anywhere on the map to place your business${!S.placed || !S.placed.length ? ' · first one free' : ' · $5,000,000'}</span><button class="btn" data-a="cancelPlace">Cancel</button></div>` : ''}`;
   if (UI.panel && !(UI.modal === 'phone' && UI.phoneApp)) $('panel').classList.add('open');
 }
@@ -551,7 +555,8 @@ function renderCityHUD() {
       // Bottom row (Worl Inc.): phone on the right only. No filters,
       // no city/flying pill — the row matches the map HUD.
       html = `<div class="citytopbar"><span>\u{1F465} ${fmtPop(livePop)} \u00b7 \u{1F4B0} ${fmtMoney(liveGdp, true)} \u00b7 \u{1F4C8} ${fmtPct(growth)}/yr</span></div>`
-        + `<button class="hud-btn hud-br" data-a="drawer" aria-label="Phone">\u{1F4F1}</button>`;
+        + `<div class="cityexit"><button data-a="leaveCity">\u2715 Leave city</button></div>`
+        + `<button class="hud-btn hud-br" style="bottom:max(12px, env(safe-area-inset-bottom))" data-a="drawer" aria-label="Phone">\u{1F4F1}</button>`;
     }
   }
   if (html !== UI.lastCityHUD) { UI.lastCityHUD = html; $('chud').innerHTML = html; }
