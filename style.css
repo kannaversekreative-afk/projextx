@@ -381,7 +381,7 @@ body.in-city #hud { display: none; }
 .airtabs { background: #ffffff; border-radius: 24px; box-shadow: var(--shadow); display: flex; gap: 4px; padding: 6px; }
 .airtabs button { flex: 1; border: 0; background: transparent; color: #334155; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 2px; border-radius: 18px; cursor: pointer; white-space: nowrap; }
 .airtabs button.sel { background: #2563eb; color: #ffffff; }
-#airtabs { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 24px)); z-index: 10; }
+#airtabs { position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: min(420px, calc(100vw - 24px)); z-index: 10; }
 .aircard-tabs { margin-top: 18px; border: 1.5px solid #dbeafe; box-shadow: none; }
 .codechip { display: inline-block; background: #2563eb; color: #ffffff; font-size: 12px; font-weight: 900; padding: 3px 8px; border-radius: 10px; vertical-align: middle; margin-right: 8px; letter-spacing: 0.5px; }
 .statgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
@@ -1071,7 +1071,7 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .stmt-t { font-weight: 900; border-top: 2px solid var(--line); padding-top: 6px; }
 
 /* ---------- play screen + new-business flow (hh) ---------- */
-#playscreen { position: fixed; inset: 0; z-index: 200; display: none; }
+#playscreen { position: fixed; top: 0; left: 0; right: 0; height: 100dvh; z-index: 200; display: none; }
 #playscreen.open { display: block; }
 .play-float { position: absolute; inset: 0; }
 .play-logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; text-align: center; color: #0b1e3a; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
@@ -1083,7 +1083,7 @@ button.hud-tl-text { border: 0; background: transparent; font: inherit; color: i
 .play-link { color: #e6edf5; text-shadow: 0 1px 8px rgba(0,0,0,0.6); font-weight: 800; font-size: 14px; padding: 6px; }
 .play-cont { color: #0b1e3a; text-shadow: 0 1px 8px rgba(255,255,255,0.7); font-size: 14px; font-weight: 700; }
 .play-warn { color: #0b1e3a; text-shadow: 0 1px 8px rgba(255,255,255,0.7); font-weight: 800; text-align: center; max-width: 420px; margin: 0; }
-#create { position: fixed; inset: 0; z-index: 210; display: none; background: #2a3648; color: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+#create { position: fixed; top: 0; left: 0; right: 0; height: 100dvh; z-index: 210; display: none; background: #2a3648; color: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #create.open { display: block; }
 .crt-head { position: sticky; top: 0; z-index: 2; background: #2a3648; display: flex; justify-content: space-between; align-items: center; padding: calc(20px + env(safe-area-inset-top)) 20px 12px; }
 .crt-head h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }
