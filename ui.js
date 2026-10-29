@@ -1193,7 +1193,151 @@ function tutCheck() {
   const T = (S && S.mode === 'inc') ? TUT_INC : (S && S.flow ? TUT_FLOW : TUT);
   if (S && S.tutorial >= 0 && S.tutorial < T.length && T[S.tutorial].done && T[S.tutorial].done()) { S.tutorial++; renderTutorial(); save(); }
 }
+// ---------- Worl Inc. offline earnings ----------
+// While the player is away, the world keeps running: businesses earn,
+// hubs grow, routes feed people (and fares), standing flows redirect,
+// flights land, trade stockpiles. Simulated in 60-second steps so
+// rising populations raise business multipliers as they would live.
+// Only the first 8 hours of an absence pay — longer absences show the
+// cap on the welcome-back card. Short absences (under 10 minutes) pay
+// silently, no card, so quick app switches never interrupt play.
+const OFFLINE_CAP_S = 8 * 3600;
+const OFFLINE_FARE = 50; // must match AIR_FARE in mapview.js
+const OFFLINE_MODAL_MIN_MS = 10 * 60000;
+function offlineFare(key) {
+  try {
+    const b = S.incBiz && S.incBiz[key];
+    if (b && b.type === 'airline' && typeof incBizFareMult === 'function') return OFFLINE_FARE * incBizFareMult(b);
+  } catch (e) {}
+  return OFFLINE_FARE;
+}
+function fmtAway(ms) {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return mins + 'm';
+  const hrs = Math.floor(mins / 60), days = Math.floor(hrs / 24);
+  if (days) return days + ' day' + (days > 1 ? 's' : '') + ' ' + (hrs % 24) + 'h';
+  return hrs + 'h ' + (mins % 60) + 'm';
+}
+function fmtDur(s) {
+  return Math.floor(s / 3600) + 'h ' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + 'm';
+}
+function simulateOffline(awayMs) {
+  const countedS = Math.min(Math.max(Math.floor(awayMs / 1000), 0), OFFLINE_CAP_S);
+  const res = { countedS, biz: 0, fares: 0, tradeCash: 0, people: 0, flights: 0, total: 0 };
+  if (countedS <= 0 || !S || S.mode !== 'inc') return res;
+  const STEP = 60;
+  for (let t = 0; t < countedS; t += STEP) {
+    const dt = Math.min(STEP, countedS - t);
+    if (S.airports) {
+      for (const k in S.airports) {
+        const a = S.airports[k];
+        if (a.type === 'hub') { if (a.pop === undefined) a.pop = 0; const cap = (a.level || 1) * 20000; if (a.pop < cap) { const add = Math.min((a.level || 1) * 2 * dt, cap - a.pop); a.pop += add; res.people += add; } }
+        else if (a.type === 'airport') { if (a.pop === undefined) a.pop = 0; const cap = (a.level || 1) * 20000; if (a.pop < cap) { const add = Math.min((a.level || 1) * dt, cap - a.pop); a.pop += add; res.people += add; } }
+        else if (a.type === 'port') { if (a.trade === undefined) a.trade = 0; a.trade += ((a.level || 1) + 1) * 100 * dt; }
+      }
+      if (Array.isArray(S.routes)) {
+        for (const r of S.routes) {
+          const A = S.airports[r.from], B = S.airports[r.to];
+          if (A && B) {
+            const aLv = A.level || 1, bLv = B.level || 1;
+            if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; res.people += add; res.fares += add * offlineFare(r.to); } }
+            if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; res.people += add; res.fares += add * offlineFare(r.from); } }
+          }
+          if (S.incBiz) {
+            if (A && (A.type === 'hub' || A.type === 'airport') && !B && S.incBiz[r.to]) { const bz = S.incBiz[r.to]; if (bz.pop === undefined) bz.pop = 0; const bl = bz.level || 1; if (bz.pop < bl * 20000) { const add = Math.min(Math.min(A.level || 1, bl) * dt, bl * 20000 - bz.pop); bz.pop += add; res.people += add; } }
+            if (B && (B.type === 'hub' || B.type === 'airport') && !A && S.incBiz[r.from]) { const bz = S.incBiz[r.from]; if (bz.pop === undefined) bz.pop = 0; const bl = bz.level || 1; if (bz.pop < bl * 20000) { const add = Math.min(Math.min(B.level || 1, bl) * dt, bl * 20000 - bz.pop); bz.pop += add; res.people += add; } }
+          }
+        }
+      }
+      if (S.flowPct) {
+        for (const k in S.flowPct) {
+          const pct = S.flowPct[k];
+          if (!pct) { delete S.flowPct[k]; continue; }
+          const sep = k.indexOf('|');
+          if (sep < 0) { delete S.flowPct[k]; continue; }
+          const from = k.slice(0, sep), to = k.slice(sep + 1);
+          const A = S.airports[from], B = S.airports[to];
+          if (!A || !B) { delete S.flowPct[k]; continue; }
+          if (!(S.routes || []).some(r => (r.from === from && r.to === to) || (r.from === to && r.to === from))) { delete S.flowPct[k]; continue; }
+          if ((B.pop || 0) >= (B.level || 1) * 20000) continue;
+          let rate = 0;
+          if (A.type === 'hub') rate = (A.level || 1) * 2;
+          else {
+            for (const r of (S.routes || [])) {
+              const otherKey = r.from === from ? r.to : (r.to === from ? r.from : null);
+              if (!otherKey) continue;
+              const other = S.airports[otherKey];
+              if (other && other.type === 'hub') rate += Math.min(other.level || 1, A.level || 1);
+            }
+          }
+          const amt = rate * pct * dt;
+          if (A.pop === undefined) A.pop = 0;
+          if (B.pop === undefined) B.pop = 0;
+          A.pop -= amt;
+          B.pop += amt;
+          res.fares += amt * offlineFare(to);
+        }
+      }
+    }
+    if (S.incBiz) {
+      for (const k in S.incBiz) {
+        const b = S.incBiz[k]; if (!b) continue; if (!b.dotKey) b.dotKey = k;
+        const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1);
+        res.biz += net * dt;
+      }
+    }
+    if (Array.isArray(S.moves)) {
+      for (let i = S.moves.length - 1; i >= 0; i--) {
+        const mp = S.moves[i];
+        if (mp.wait > 0) { mp.wait -= dt; continue; }
+        mp.t += dt / mp.dur;
+        if (mp.t >= 1) {
+          const B = S.airports && S.airports[mp.to];
+          if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; res.fares += mp.amount * offlineFare(mp.to); }
+          S.moves.splice(i, 1); res.flights++;
+        }
+      }
+    }
+    if (Array.isArray(S.tradeMoves)) {
+      for (let i = S.tradeMoves.length - 1; i >= 0; i--) {
+        const tm = S.tradeMoves[i];
+        if (tm.wait > 0) { tm.wait -= dt; continue; }
+        tm.t += dt / tm.dur;
+        if (tm.t >= 1) {
+          const B = S.airports && S.airports[tm.to];
+          if (B) {
+            if (B.type === 'hub') res.tradeCash += tm.amount;
+            else if (B.type === 'port') { if (B.trade === undefined) B.trade = 0; B.trade += tm.amount; }
+          }
+          S.tradeMoves.splice(i, 1);
+        }
+      }
+    }
+  }
+  res.total = res.biz + res.fares + res.tradeCash;
+  S.cash = (S.cash || 0) + res.total;
+  return res;
+}
+function welcomeBackInc() {
+  if (!S.lastSeen) return;
+  const awayMs = Date.now() - S.lastSeen;
+  if (awayMs <= 0) return;
+  const r = simulateOffline(awayMs);
+  save();
+  if (awayMs < OFFLINE_MODAL_MIN_MS || r.total <= 0) return;
+  const fmt = n => (n < 0 ? '-$' : '+$') + Math.abs(Math.round(n)).toLocaleString();
+  let html = `<h2>Welcome back</h2>`;
+  html += `<p>You were away ${fmtAway(awayMs)}. Your businesses kept earning for the first ${fmtDur(r.countedS)}.</p>`;
+  html += `<p><b style="font-size:26px">${fmt(r.total)}</b> <span class="muted">total offline earnings</span></p>`;
+  html += `<p>Business earnings <b>${fmt(r.biz)}</b></p>`;
+  html += `<p>Passenger earnings <b>${fmt(r.fares)}</b></p>`;
+  if (r.tradeCash > 0) html += `<p>Cargo sold <b>${fmt(r.tradeCash)}</b></p>`;
+  html += `<p class="muted small">${Math.floor(r.people).toLocaleString()} people joined your airports and shops${r.flights ? ` · ${r.flights} flight${r.flights === 1 ? '' : 's'} landed` : ''}.</p>`;
+  html += `<button class="btn3d orange wide" data-a="closeModal">BACK TO MAP</button>`;
+  openModal(html, 'sheet');
+}
 function welcomeBack() {
+  if (S.mode === 'inc') { welcomeBackInc(); return; }
   if (S.lastSeen && Date.now() - S.lastSeen > 864e5) {
     openModal(`<h2>Welcome back!</h2><p class="muted">Day ${S.day} · ${fmtDate(S.day)} · ${careerName()}</p>
       <div class="stats3 box"><div><span>Net worth</span><b>${fmtMoney(netWorth(), true)}</b></div><div><span>Population</span><b>${fmtPop(nationPop())}</b></div><div><span>vs Market</span><b class="${upCls(beatMarket())}">${fmtPct(beatMarket())}</b></div></div>
