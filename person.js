@@ -72,6 +72,8 @@ function personTitle() {
   if (typeof S !== 'undefined' && S && S.leader) return 'Leader';
   // Worl Inc.: you are the founder running the country as a business,
   // not an employee — never a job title like Factory worker.
+  // Winning the presidency outranks Founder.
+  if (typeof S !== 'undefined' && S && S.mode === 'inc' && S.president) return 'President';
   if (typeof S !== 'undefined' && S && S.mode === 'inc') return 'Founder';
   if (P.job) { try { return jobTitle(P.job); } catch (e) {} }
   return 'Citizen';

@@ -426,6 +426,14 @@ const MapView = (() => {
   // on its own earns nothing until it is connected. Trade still
   // sells separately at $1 per unit into a hub.
   const AIR_FARE = 50;
+  // Airline board boost: an airport owned by an Airline business earns
+  // boosted fares (+10% per board member). Other sites pay base fare.
+  const fareFor = key => {
+    try {
+      if (typeof S !== 'undefined' && S && S.mode === 'inc' && S.incBiz && S.incBiz[key] && S.incBiz[key].type === 'airline' && typeof incBizFareMult === 'function') return AIR_FARE * incBizFareMult(S.incBiz[key]);
+    } catch (e) {}
+    return AIR_FARE;
+  };
   function step(dt) {
     const st = S_(); if (!st) return;
     // Worl Inc. newspaper beat: every 10 real minutes, a week passes
@@ -435,12 +443,18 @@ const MapView = (() => {
     if (typeof S !== 'undefined' && S && S.mode === 'inc' && typeof stepWeek === 'function') {
       if (Date.now() - (S.incPaperAt || 0) >= 600000) {
         S.incPaperAt = Date.now();
-        try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
+        try { stepWeek(); if (typeof pushPaperEdition === 'function') pushPaperEdition(); } catch (e) { console.error('newspaper beat failed', e); }
+        // Weekly sales per business (for the Manage chart): net/sec x
+        // 600 seconds per game week, last 12 weeks kept.
+        try { if (S.incBiz) for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1); b.sales = ((b.sales || []).concat([Math.round(net * 600)])).slice(-12); } } catch (e) {}
+        try { save(); renderHUD(); toast('📰 New edition of The Ticker Times — tap the date to read it', 'good'); } catch (e) { console.error('newspaper beat failed', e); }
       }
     }
-    // Worl Inc. businesses earn every second: income × level each.
+    // Worl Inc. businesses earn every second: net (boosts minus
+    // salaries) from the shared helper, so board, manager, pricing,
+    // blends and president all flow through one formula.
     if (typeof S !== 'undefined' && S && S.mode === 'inc' && S.incBiz) {
-      for (const k in S.incBiz) { const b = S.incBiz[k]; if (b) S.cash += (b.income || 0) * (b.level || 1) * dt; }
+      for (const k in S.incBiz) { const b = S.incBiz[k]; if (!b) continue; const net = (typeof incBizNetPerSec === 'function') ? incBizNetPerSec(b) : (b.income || 0) * (b.level || 1); S.cash += net * dt; }
     }
     // Airline citizens: hubs are originators by nature, no toggle.
     // A hub grows (level + 1)/sec constantly, up to capacity level x 20000. An airport grows
@@ -466,8 +480,8 @@ const MapView = (() => {
           const A = S.airports[r.from], B = S.airports[r.to];
           if (!A || !B) continue;
           const aLv = A.level || 1, bLv = B.level || 1;
-          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * AIR_FARE; } }
-          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * AIR_FARE; } }
+          if (A.type === 'hub' && B.type === 'airport') { if (B.pop === undefined) B.pop = 0; if (B.pop < bLv * 20000) { const add = Math.min(Math.min(aLv, bLv) * dt, bLv * 20000 - B.pop); B.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.to); } }
+          if (B.type === 'hub' && A.type === 'airport') { if (A.pop === undefined) A.pop = 0; if (A.pop < aLv * 20000) { const add = Math.min(Math.min(bLv, aLv) * dt, aLv * 20000 - A.pop); A.pop += add; S.cash = (S.cash || 0) + add * fareFor(r.from); } }
         }
       }
       // Percent flows: a route can carry a standing percent of
@@ -501,7 +515,7 @@ const MapView = (() => {
           if (B.pop === undefined) B.pop = 0;
           A.pop -= amt;
           B.pop += amt;
-          S.cash = (S.cash || 0) + amt * AIR_FARE;
+          S.cash = (S.cash || 0) + amt * fareFor(to);
         }
       }
       if (Array.isArray(S.moves)) {
@@ -511,7 +525,7 @@ const MapView = (() => {
           mp.t += dt / mp.dur;
           if (mp.t >= 1) {
             const B = S.airports[mp.to];
-            if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; S.cash = (S.cash || 0) + mp.amount * AIR_FARE; }
+            if (B) { if (B.pop === undefined) B.pop = 0; B.pop += mp.amount; S.cash = (S.cash || 0) + mp.amount * fareFor(mp.to); }
             S.moves.splice(i, 1);
             save();
           }
@@ -1280,6 +1294,8 @@ const MapView = (() => {
     showCountry(a3) { enterCountry(a3); },
     showRegion(a3, region) { viewKind = 'region'; viewA3 = a3; viewRegion = region; viewRegionName = null; const box = regionBox(region); if (box) frameBox(box); },
     showCluster(a3, state) { viewCluster = Math.max(0, clusterForState(state)); viewKind = 'cluster'; viewA3 = a3 || 'USA'; viewRegion = null; viewRegionName = null; const box = clusterBox(); if (box) frameBox(box); },
+    clusters() { return CLUSTER_MAPS; },
+    clusterFor(state) { return clusterForState(state); },
     isClusterState(name) { return isClusterState(name); },
     showRegionMap(a3, region) { viewKind = 'regionMap'; viewA3 = a3; viewRegion = null; viewRegionName = region; const box = worldRegionBox(a3, region); if (box) frameBox(box); },
     isWorldRegion(a3, name) { return !!worldRegionEntry(a3, name); },

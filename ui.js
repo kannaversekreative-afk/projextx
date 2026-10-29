@@ -1307,6 +1307,23 @@ function onDotTap(dot) {
   else if (dot.key.startsWith('us:')) code = dot.key.slice(3).toUpperCase();
   else code = (dot.name || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
   let html = `<h2>${code ? `<span class="codechip">${code}</span>` : ''}${esc(title)}</h2>`;
+  // Worl Inc. locked states: a state outside S.incStates cannot be
+  // built on. Its sheet offers only the cluster unlock.
+  if (S.mode === 'inc' && dot.key.startsWith('us:') && S.incStates && !S.incStates.includes(dot.key.slice(3)) && typeof MapView !== 'undefined' && MapView.clusterFor) {
+    const st = dot.key.slice(3);
+    const ci = MapView.clusterFor(st);
+    if (ci > 0) {
+      const clusters = (typeof MapView.clusters === 'function' ? MapView.clusters() : null);
+      const states = (clusters && clusters[ci]) ? clusters[ci] : [st];
+      const cost = 50000 * ci;
+      let lh = `<h2>${code ? `<span class="codechip">${code}</span>` : ''}${esc(title)}</h2>`;
+      lh += `<p>🔒 Locked. This cluster opens when you unlock it.</p><p>${states.map(esc).join(', ')}</p>`;
+      lh += `<button class="btn3d orange wide" data-a="incUnlock" data-x="${ci}"${S.cash < cost ? ' disabled' : ''}>UNLOCK CLUSTER ${fmt(cost)}</button>`;
+      if (S.cash < cost) lh += `<div class="muted small">Business cash is ${fmt(S.cash)} — you need ${fmt(cost)}.</div>`;
+      openModal(lh, 'sheet');
+      return;
+    }
+  }
   if (S.co && S.co[dot.a3] && (S.flow || dot.a3 === S.home)) {
     if (S.co[dot.a3].office) html += `<div class="kv"><span>Office</span><b>Opened</b></div>`;
     else if (!S.flow || (typeof controlled === 'function' && controlled(dot.a3))) {
@@ -1406,6 +1423,11 @@ function onDotTap(dot) {
   // hold both an airport and a business.
   if (S.mode === 'inc' && typeof INC_SECTORS !== 'undefined') {
     if (!S.incBiz) S.incBiz = {};
+    // Full US unlocks the run for president.
+    if (typeof incFullUS === 'function' && incFullUS()) {
+      if (S.president) html += `<p>🇺🇸 President of the United States</p>`;
+      else html += `<button class="btn3d orange wide" data-a="incPresident">RUN FOR PRESIDENT</button>`;
+    }
     const biz = S.incBiz[dot.key];
     if (biz) {
       const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
@@ -1423,6 +1445,23 @@ function onDotTap(dot) {
       }
       const sellVal = Math.round((biz.spent || (biz.cost || 0) * lv) * 0.8);
       html += `<p><button class="btn3d" data-a="incSell" data-x="${dot.key}">SELL ${fmt(sellVal)}</button> <button class="btn3d" data-a="incDelete" data-x="${dot.key}">DELETE</button></p>`;
+      // Board: CEO is you. Each hired role costs salary/sec and boosts
+      // income 10% (fares for airlines). A full board unlocks IPO.
+      html += `<h3>BOARD</h3><p class="muted small">CEO: you. ${biz.type === 'airline' ? 'Each role boosts passenger fares 10%.' : 'Each role boosts income 10%.'}</p>`;
+      if (typeof INC_BOARD_ROLES !== 'undefined') {
+        const board = biz.board || {};
+        for (const r of INC_BOARD_ROLES) {
+          if (board[r.id]) html += `<p>${r.name} ✓ $${r.salary}/sec <button class="btn" data-a="incBoardFire" data-x="${dot.key}|${r.id}">Fire</button></p>`;
+          else html += `<p>${r.name} — $${r.salary}/sec <button class="btn" data-a="incBoardHire" data-x="${dot.key}|${r.id}">Hire</button></p>`;
+        }
+      }
+      const boardCount = (typeof incBizBoardCount === 'function' ? incBizBoardCount(biz) : 0);
+      if (boardCount >= 5 && typeof incIPOValue === 'function') {
+        const ipo = incIPOValue(biz);
+        if (ipo > 0) html += `<button class="btn3d orange wide" data-a="incIPO" data-x="${dot.key}">IPO — RAISE ${fmt(ipo)}</button>`;
+        else if (biz.type !== 'airline') html += `<p class="muted small">IPO needs a profit (income above salaries) first.</p>`;
+      } else if (boardCount > 0) html += `<p class="muted small">IPO unlocks with a full board (${boardCount}/5 hired).</p>`;
+      html += `<button class="btn3d orange wide" data-a="incManage" data-x="${dot.key}">MANAGE ${esc(biz.name).toUpperCase()}</button>`;
     } else {
       html += `<button class="btn3d orange wide" data-a="incBuildPick" data-x="${dot.key}">BUILD BUSINESS</button>`;
     }
@@ -3820,6 +3859,211 @@ const A = {
     save(); renderHUD();
     toast(hubFree ? 'Hub built (free, first hub).' : 'Hub built.', 'good');
     if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  // Worl Inc. state unlocks: each cluster past New York costs
+  // $50,000 x its cluster index. Unlocking adds its states to
+  // S.incStates, so their dots become buildable.
+  incUnlock: (x) => {
+    if (!S || S.mode !== 'inc') return;
+    const ci = parseInt(x, 10);
+    if (!(ci > 0) || typeof MapView === 'undefined' || typeof MapView.clusters !== 'function') return toast('No such cluster.', 'bad');
+    const states = MapView.clusters()[ci];
+    if (!states) return toast('No such cluster.', 'bad');
+    if (!S.incStates) S.incStates = ['New York', 'Vermont', 'New Hampshire', 'Maine', 'Massachusetts'];
+    if (states.every(s => S.incStates.includes(s))) return toast('Already unlocked.', 'bad');
+    const cost = 50000 * ci;
+    if (S.cash < cost) return toast('Not enough business cash.', 'bad');
+    S.cash -= cost;
+    for (const s of states) if (!S.incStates.includes(s)) S.incStates.push(s);
+    save(); renderHUD();
+    toast(`Cluster unlocked: ${states.join(', ')}.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  // Worl Inc. president: full US unlocks the run. Support starts from
+  // your empire (30% + 2% per business, capped 95%). Campaigning is
+  // $10,000 for +5%. Win at 50%+; a loss keeps your support.
+  incPresident: () => {
+    if (!S || S.mode !== 'inc' || !(typeof incFullUS === 'function' && incFullUS())) return toast('Unlock the full US first.', 'bad');
+    if (S.president) return toast('You are already President.', 'good');
+    const bizCount = S.incBiz ? Object.keys(S.incBiz).length : 0;
+    if (S.presidentSupport == null) S.presidentSupport = Math.min(95, 30 + bizCount * 2);
+    const sup = S.presidentSupport;
+    const fmt = n => '$' + Math.round(n).toLocaleString();
+    openModal(`<h2>RUN FOR PRESIDENT</h2><p>Support: <b>${sup}%</b> ${sup >= 50 ? '(winning)' : '(need 50%+)'}</p><p class="muted">Businesses: ${bizCount}. Campaigning costs ${fmt(10000)} for +5% support.</p><div class="menu-list"><button class="btn wide" data-a="incCampaign"${S.cash < 10000 ? ' disabled' : ''}>CAMPAIGN ${fmt(10000)} (+5%)</button><button class="btn wide" data-a="incElect">HOLD ELECTION</button></div>`, 'sheet');
+  },
+  incCampaign: () => {
+    if (!S || S.mode !== 'inc') return;
+    if (S.cash < 10000) return toast('Not enough business cash.', 'bad');
+    S.cash -= 10000;
+    S.presidentSupport = Math.min(95, (S.presidentSupport || 30) + 5);
+    save(); renderHUD();
+    toast(`Support is now ${S.presidentSupport}%.`, 'good');
+    A.incPresident();
+  },
+  incElect: () => {
+    if (!S || S.mode !== 'inc') return;
+    const sup = S.presidentSupport || 0;
+    if (sup >= 50) {
+      S.president = true; save(); renderHUD();
+      openModal(`<h2>🇺🇸 YOU ARE PRESIDENT</h2><p>You won the United States. Your businesses now earn 25% more, and your title is President.</p><button class="btn wide" data-a="closeModal">CONTINUE</button>`, 'sheet');
+    } else {
+      openModal(`<h2>ELECTION LOST</h2><p>Support was ${sup}% — you needed 50%+. Campaign more and try again. Your support stays where it is.</p><button class="btn wide" data-a="incPresident">BACK TO CAMPAIGN</button>`, 'sheet');
+    }
+  },
+  incBoardHire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, role] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    if (!biz.board) biz.board = {};
+    if (biz.board[role]) return toast('Already hired.', 'bad');
+    biz.board[role] = true;
+    save(); renderHUD();
+    toast(`${role.toUpperCase()} hired.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incBoardFire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, role] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz || !biz.board || !biz.board[role]) return;
+    delete biz.board[role];
+    save(); renderHUD();
+    toast(`${role.toUpperCase()} fired.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incIPO: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const biz = S.incBiz[x];
+    if ((typeof incBizBoardCount === 'function' ? incBizBoardCount(biz) : 0) < 5) return toast('IPO needs a full board.', 'bad');
+    const val = (typeof incIPOValue === 'function' ? incIPOValue(biz) : 0);
+    if (val <= 0) return toast('IPO needs a profit first.', 'bad');
+    if (biz.type === 'airline') incRemoveAirlineSites(biz, x);
+    S.cash += val; delete S.incBiz[x];
+    save(); renderHUD();
+    toast(`${biz.name} IPO raised $${val.toLocaleString()}.`, 'good');
+    if (UI.dotBuy) onDotTap(UI.dotBuy);
+  },
+  incBack: () => { if (UI.dotBuy) onDotTap(UI.dotBuy); },
+  // Worl Inc. Manage: per-type business system. Tabs: Overview
+  // (income, net, weekly sales chart), Products (pricing levers),
+  // Managers (a general manager + coffee managers), Blends (coffee
+  // only: combine two products into a higher-earning blend).
+  incManage: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const parts = (x || '').split('|');
+    const dotKey = parts[0], tab = parts[1] || 'overview';
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    const fmt = n => '$' + Math.round(n).toLocaleString();
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const net = (typeof incBizNetPerSec === 'function' ? incBizNetPerSec(biz) : (biz.income || 0) * (biz.level || 1));
+    const tabBtn = (id, label) => `<button class="btn${tab === id ? ' on' : ''}" data-a="incManage" data-x="${dotKey}|${id}">${label}</button>`;
+    let tabs = `<p>${tabBtn('overview', 'Overview')} ${tabBtn('products', 'Products')} ${tabBtn('managers', 'Managers')}${t && t.blends ? ` ${tabBtn('blends', 'Blends')}` : ''}</p>`;
+    let body = '';
+    if (tab === 'overview') {
+      body += `<p>${sec ? esc(sec.name) : ''} · Level ${biz.level || 1} · Base ${fmt(biz.income || 0)}/sec · Net ${fmt(net)}/sec</p>`;
+      const sales = biz.sales || [];
+      if (!sales.length) body += `<p class="muted">No sales yet — weekly sales land with each newspaper edition.</p>`;
+      else {
+        const max = Math.max(1, ...sales.map(v => Math.abs(v)));
+        const bars = sales.map(v => `<span style="display:inline-block;width:16px;height:${Math.max(2, Math.round(Math.abs(v) / max * 60))}px;background:${v >= 0 ? '#2f7cf6' : '#e5484d'};margin-right:2px;vertical-align:bottom" title="${fmt(v)}"></span>`).join('');
+        body += `<p>Weekly sales (last ${sales.length}):</p><p>${bars}</p><p class="muted small">Latest week: ${fmt(sales[sales.length - 1])}</p>`;
+      }
+      if (biz.type === 'airline') body += `<p class="muted">Airlines earn passenger fares ($50 each, boosted by board), not flat income. Net above is board salaries only.</p>`;
+    } else if (tab === 'products') {
+      const prods = (t && t.products) ? t.products : [];
+      if (!prods.length) body += `<p class="muted">No products for this type yet.</p>`;
+      else {
+        body += `<p class="muted">Pricing moves income: the average of current price / base price scales base income.</p>`;
+        prods.forEach((p, i) => {
+          const cur = (biz.prices && biz.prices[p.name] != null) ? biz.prices[p.name] : p.price;
+          body += `<p>${esc(p.name)} — ${fmt(cur)} (base ${fmt(p.price)}) <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|-1">-10%</button> <button class="btn" data-a="incPrice" data-x="${dotKey}|${i}|1">+10%</button></p>`;
+        });
+      }
+    } else if (tab === 'managers') {
+      if (biz.manager) body += `<p>Manager ✓ $5/sec (+20% income) <button class="btn" data-a="incManagerFire" data-x="${dotKey}">Fire</button></p>`;
+      else body += `<p>Manager — $5/sec (+20% income) <button class="btn" data-a="incManagerHire" data-x="${dotKey}">Hire</button></p>`;
+      if (biz.type === 'coffee' && typeof INC_COFFEE_MANAGERS !== 'undefined') {
+        body += `<p class="muted">Coffee managers (each +15% income):</p>`;
+        if (!biz.coffeeManagers) biz.coffeeManagers = {};
+        for (const m of INC_COFFEE_MANAGERS) {
+          if (biz.coffeeManagers[m.id]) body += `<p>${esc(m.name)} (${esc(m.skill)}) ✓ $${m.salary}/sec <button class="btn" data-a="incCoffeeFire" data-x="${dotKey}|${m.id}">Fire</button></p>`;
+          else body += `<p>${esc(m.name)} (${esc(m.skill)}) — $${m.salary}/sec <button class="btn" data-a="incCoffeeHire" data-x="${dotKey}|${m.id}">Hire</button></p>`;
+        }
+      }
+    } else if (tab === 'blends') {
+      const blends = biz.blends || [];
+      if (!blends.length) body += `<p class="muted">No blends yet.</p>`;
+      else blends.forEach(b => { body += `<p>${esc(b.name)} — +${fmt(b.income)}/sec</p>`; });
+      body += `<button class="btn wide" data-a="incBlend" data-x="${dotKey}">CREATE BLEND (two best products, +50% synergy)</button>`;
+    }
+    openModal(`<h2>MANAGE ${esc(biz.name).toUpperCase()}</h2>${tabs}${body}<p><button class="btn wide" data-a="incBack">BACK</button></p>`, 'sheet');
+  },
+  incPrice: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, idxS, dirS] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const p = t && t.products ? t.products[parseInt(idxS, 10)] : null;
+    if (!p) return;
+    if (!biz.prices) biz.prices = {};
+    const cur = (biz.prices[p.name] != null) ? biz.prices[p.name] : p.price;
+    biz.prices[p.name] = Math.max(1, Math.round(cur * (parseInt(dirS, 10) > 0 ? 1.1 : 0.9)));
+    save();
+    toast(`${p.name} now $${biz.prices[p.name].toLocaleString()}.`, 'good');
+    A.incManage(dotKey + '|products');
+  },
+  incManagerHire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    S.incBiz[x].manager = true; save();
+    toast('Manager hired (+20% income, $5/sec).', 'good');
+    A.incManage(x + '|managers');
+  },
+  incManagerFire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    delete S.incBiz[x].manager; save();
+    toast('Manager fired.', 'good');
+    A.incManage(x + '|managers');
+  },
+  incCoffeeHire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, mid] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz) return;
+    if (!biz.coffeeManagers) biz.coffeeManagers = {};
+    biz.coffeeManagers[mid] = true; save();
+    toast('Coffee manager hired.', 'good');
+    A.incManage(dotKey + '|managers');
+  },
+  incCoffeeFire: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz) return;
+    const [dotKey, mid] = (x || '').split('|');
+    const biz = S.incBiz[dotKey];
+    if (!biz || !biz.coffeeManagers) return;
+    delete biz.coffeeManagers[mid]; save();
+    toast('Coffee manager fired.', 'good');
+    A.incManage(dotKey + '|managers');
+  },
+  incBlend: (x) => {
+    if (!S || S.mode !== 'inc' || !S.incBiz || !S.incBiz[x]) return;
+    const biz = S.incBiz[x];
+    const sec = (typeof incSectorById === 'function' ? incSectorById(biz.sector) : null);
+    const t = (typeof incTypeById === 'function' ? incTypeById(sec, biz.type) : null);
+    const prods = (t && t.products) ? t.products : [];
+    if (prods.length < 2) return toast('Need two products to blend.', 'bad');
+    const priced = prods.map(p => ({ p, cur: (biz.prices && biz.prices[p.name] != null) ? biz.prices[p.name] : p.price })).sort((a, b) => b.cur - a.cur);
+    const share = (biz.income || 0) / prods.length;
+    const inc = Math.round(share * 2 * 1.5 * 100) / 100;
+    if (!biz.blends) biz.blends = [];
+    const name = `House Blend ${biz.blends.length + 1}`;
+    biz.blends.push({ name, income: inc });
+    save();
+    toast(`${name} created (+$${inc}/sec).`, 'good');
+    A.incManage(x + '|blends');
   },
 
   goCountry: x => { closeModal(); MapView.showCountry(x); renderHUD(); },
