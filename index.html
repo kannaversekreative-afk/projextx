@@ -3,99 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0b1e3a">
-<meta name="color-scheme" content="light">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Worl Inc.">
-<link rel="apple-touch-icon" href="worl-icon-180.png">
-<link rel="manifest" href="manifest.json">
-<title>Worl</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Playfair+Display:wght@800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261026ip">
+<title>Worl Clean — Piece 2</title>
+<style>
+html, body { margin: 0; height: 100%; background: #2a3648; overflow: hidden; font-family: system-ui, sans-serif; }
+body { position: relative; }
+#app { height: 100%; display: flex; flex-direction: column; background: #2a3648; }
+#map-area { flex: 0 0 58%; background: #bcd7ee; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+#map-area canvas { position: absolute; inset: 0; display: block; }
+#map-area h1 { position: relative; z-index: 1; color: #0b1e3a; font-family: Georgia, serif; font-size: 44px; letter-spacing: 1px; margin: 0; text-align: center; text-shadow: 0 2px 18px rgba(255,255,255,0.65); }
+#panel { flex: 1; background: #2a3648; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+.play-btn { width: min(420px, 82vw); padding: 14px 11px; border-radius: 20px; background: #3a4756; border: 2px solid #6e7f94; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 3px; }
+.play-cont { color: #9fb3c8; font-size: 14px; font-weight: 700; }
+.play-reset { color: #9fb3c8; font-weight: 800; font-size: 14px; background: none; border: 0; }
+.play-ver { margin-top: auto; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #5a6b82; }
+</style>
 </head>
 <body>
-<div id="game">
-<div id="map"></div>
-<div id="cityview"><canvas></canvas><div class="pins"></div><div class="photomap"><div class="pm-viewport"><div class="pm-stage"><img alt=""><div id="pmTraffic"></div></div></div></div></div>
-<div id="hud"></div>
-<div id="chud"></div>
-<div id="popup"></div>
-<div id="tut"></div>
+<div id="app">
+  <div id="map-area"><canvas id="worldmap"></canvas><h1>WORL INC.</h1></div>
+  <div id="panel">
+    <button class="play-btn" id="playBtn">PLAY</button>
+    <div class="play-cont" id="playCont">Continuing My Company</div>
+    <button class="play-reset">Reset</button>
+    <div class="play-ver">CLEAN PIECE 2</div>
+  </div>
 </div>
-<!-- Panels, modals, paper, watch and the intro live OUTSIDE #game on
-purpose: on portrait phones #game is rotated 90 degrees, and a rotated
-ancestor turns every fixed child into rotated coordinates — panels
-then scrolled sideways instead of vertically, which is why no page
-scrolled. Out here they are plain viewport overlays and scroll down. -->
-<div id="panel"></div>
-<div id="modal"></div>
-<div id="toasts"></div>
-<div id="watch"></div>
-<div id="paper"></div>
-<div id="inherit"></div>
-<div id="playscreen"></div>
-<div id="create"></div>
-<script src="data.js?v=20261026ip"></script>
-<script src="world-data.js?v=20261026ip"></script>
-<script src="world-data-a.js?v=20261026ip"></script>
-<script src="world-data-b.js?v=20261026ip"></script>
-<script src="world-data-c.js?v=20261026ip"></script>
-<script src="major-cities.js?v=20261026ip"></script>
-<script src="world.js?v=20261026ip"></script>
-<script src="us-states.js?v=20261026ip"></script>
-<script src="us-capitals.js?v=20261026ip"></script>
-<script src="us-states-named.js?v=20261026ip"></script>
-<script src="world-regions.js?v=20261026ip"></script>
-<script src="random-world.js?v=20261026ip"></script>
-<script src="sim.js?v=20261026ip"></script>
-<script src="random-names.js?v=20261026ip"></script>
-<script src="world-events.js?v=20261026ip"></script>
-<script src="warbattle.js?v=20261026ip"></script>
-<script src="leader.js?v=20261026ip"></script>
-<script src="stock-logos.js?v=20261026ip"></script>
-<script src="real-companies.js?v=20261026ip"></script>
-<script src="coffee-companies.js?v=20261026ip"></script>
-<script src="mars.js?v=20261026ip"></script>
-<script src="casino.js?v=20261026ip"></script>
-<script src="crypto.js?v=20261026ip"></script>
-<script src="sports.js?v=20261026ip"></script>
-<script src="store-logos.js?v=20261026ip"></script>
-<script src="stores.js?v=20261026ip"></script>
-<script src="offices.js?v=20261026ip"></script>
-  <script src="corpnews.js?v=20261026ip"></script>
-  <script src="ads.js?v=20261026ip"></script>
-  <script src="tawk.js?v=20261026ip"></script>
-  <script src="radio.js?v=20261026ip"></script>
-  <script src="person.js?v=20261026ip"></script>
-  <script src="elections.js?v=20261026ip"></script>
-<script src="karma.js?v=20261026ip"></script>
-<script src="newsapp.js?v=20261026ip"></script>
-<script src="bank.js?v=20261026ip"></script>
-<script src="etf.js?v=20261026ip"></script>
-<script src="economy.js?v=20261026ip"></script>
-<script src="politics.js?v=20261026ip"></script>
-<script src="bankruptcy.js?v=20261026ip"></script>
-<script src="cityunlock.js?v=20261026ip"></script>
-<script src="modes.js?v=20261026ip"></script>
-<script src="capital.js?v=20261026ip"></script>
-<script src="website.js?v=20261026ip"></script>
-<script src="airport.js?v=20261026ip"></script>
-<script src="earnings.js?v=20261026ip"></script>
-<script src="mapview.js?v=20261026ip"></script>
-<script src="landmarks.js?v=20261026ip"></script>
-<script src="city-maps.js?v=20261026ip"></script>
-<script src="city-maps-b.js?v=20261026ip"></script>
-<script src="city-maps-c.js?v=20261026ip"></script>
-<script src="city-maps-d.js?v=20261026ip"></script>
-<script src="city-maps-e.js?v=20261026ip"></script>
-<script src="city-maps-f.js?v=20261026ip"></script>
-<script src="city-maps-g.js?v=20261026ip"></script>
-<script src="cityview.js?v=20261026ip"></script>
-<script src="milestones.js?v=20261026ip"></script>
-<script src="sectors-inc.js?v=20261026ip"></script>
-<script src="logos.js?v=20261026ip"></script>
-<script src="ui.js?v=20261026ip"></script>
+<script src="world-data.js?v=20261026clean2"></script>
+<script src="world-data-a.js?v=20261026clean2"></script>
+<script src="world-data-b.js?v=20261026clean2"></script>
+<script src="world-data-c.js?v=20261026clean2"></script>
+<script src="world.js?v=20261026clean2"></script>
+<script src="map.js?v=20261026clean2"></script>
 </body>
 </html>
