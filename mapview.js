@@ -13,7 +13,10 @@ const MapView = (() => {
   const v = { s: 1, x: 0, y: 0 };
   let dirty = true, anim = null, sel = null, pickMode = false, hoverCountry = null;
   const handlers = {};
-  const COL = { sea: '#0b1e3a', sea2: '#0a1930', land: '#3a4756', home: '#1e3a5f', border: 'rgba(148,163,184,0.4)', grid: 'rgba(148,163,184,0.12)' };
+  // Light map (Apple-bar match): soft blue sea, light gray land.
+  // Everything drawn on it keeps dark outlines / blue accents, so
+  // dots, routes, pills and the play-screen wordmark stay readable.
+  const COL = { sea: '#bcd7ee', sea2: '#a3c6e6', land: '#e9e9e9', home: '#1e3a5f', border: 'rgba(100,116,139,0.55)', grid: 'rgba(100,116,139,0.20)' };
   // Title screen: the world pauses and the map goes pristine — no
   // save-state tints, no home stroke, no dots, no simulation. The
   // play screen is map + logo + PLAY, nothing else on top of it.
@@ -291,7 +294,7 @@ const MapView = (() => {
     const vis = k => k.hasShape && !(k.box[2] < x0 || k.box[0] > x1 || k.box[3] < y0 || k.box[1] > y1);
     W.countries.forEach(k => {
       if (!vis(k)) return;
-      let fill = k.playable ? COL.land : '#2a3648';
+      let fill = k.playable ? COL.land : '#d3d3d3';
       if (st && k.a3 === st.home && k.a3 !== 'USA') fill = COL.home;
       if (pickMode && k.playable) fill = k.a3 === hoverCountry ? '#2f7cf6' : '#eaf2ff';
       c.fillStyle = fill; c.fill(k.path);
@@ -305,7 +308,7 @@ const MapView = (() => {
     c.strokeStyle = COL.border; c.lineWidth = 0.8 / v.s; c.lineJoin = 'round';
     W.countries.forEach(k => { if (vis(k)) c.stroke(k.path); });
     if (st && !pickMode) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 1.4 / v.s; const h = W.byA3[st.home]; if (h.hasShape) c.stroke(h.path); }
-    if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#fff'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
+    if (pickMode && hoverCountry && W.byA3[hoverCountry].hasShape) { c.strokeStyle = '#2f7cf6'; c.lineWidth = 2 / v.s; c.stroke(W.byA3[hoverCountry].path); }
   }
 
   // ---------- vehicles ----------
@@ -978,7 +981,7 @@ const MapView = (() => {
         const src = S.airports[dsrc];
         const [sx, sy] = toScreen(src.x, src.y);
         const rr = Math.max(4, Math.min(9, 3 + v.s * 1.5)) + 6 + Math.sin(now / 300) * 1.5;
-        c.strokeStyle = '#ffffff'; c.lineWidth = 2;
+        c.strokeStyle = '#2f7cf6'; c.lineWidth = 2;
         c.beginPath(); c.arc(sx, sy, rr, 0, 7); c.stroke();
       }
       if (dsrc && drawPos && S && S.airports && S.airports[dsrc]) {
