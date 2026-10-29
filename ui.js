@@ -1153,7 +1153,6 @@ function notifyWorl(title, body) {
 // here too; Play drops them straight back into their one world.
 function showPlayScreen() {
   UI.playScreen = true;
-  try { document.body.style.background = '#2a3648'; } catch (e) {}
   // NOTE: do NOT reset UI.playConfirm here — playReset sets it true
   // and then calls this to render the confirmation; resetting it
   // here made Reset silently do nothing (the confirm never rendered).
@@ -1172,11 +1171,11 @@ function showPlayScreen() {
       <button class="play-link" data-a="playResetNo">Keep playing</button>`
     : `<button class="play-btn" data-a="playGo">PLAY</button>${cont}
       ${has ? `<button class="play-reset" data-a="playReset">Reset</button>` : ''}`}
-    <div class="play-ver">BUILD io</div>
+    <div class="play-ver">BUILD ip</div>
   </div>`;
   $('playscreen').classList.add('open');
 }
-function hidePlayScreen() { UI.playScreen = false; $('playscreen').innerHTML = ''; $('playscreen').classList.remove('open'); try { document.body.style.background = ''; } catch (e) {} }
+function hidePlayScreen() { UI.playScreen = false; $('playscreen').innerHTML = ''; $('playscreen').classList.remove('open'); }
 // New-business flow: one scrollable page, same steps as the reference
 // (name, portrait, CEO name, level, competitors, currency, capital,
 // color, logo, start). Layout and feel only — all art here is Worl's
@@ -3340,7 +3339,7 @@ function storeHTML() {
 const OLD_MINIGAMES_PANEL = PANELS.minigames;
 PANELS.minigames = () => {
   if (UI.mgGame === 'pro' || UI.mgGame === 'college' || UI.mgGame === 'baseball' || UI.mgGame === 'hockey' || UI.mgGame === 'tennis' || UI.mgGame === 'brainrot') {
-    const src = { pro: 'minigames/pro.html?v=20261026io', college: 'minigames/college.html?v=20261026io', baseball: 'minigames/baseball.html?v=20261026io', hockey: 'minigames/hockey.html?v=20261026io', tennis: 'minigames/tennis.html?v=20261026io', brainrot: 'minigames/brainrot/index.html?v=20261026io' }[UI.mgGame];
+    const src = { pro: 'minigames/pro.html?v=20261026ip', college: 'minigames/college.html?v=20261026ip', baseball: 'minigames/baseball.html?v=20261026ip', hockey: 'minigames/hockey.html?v=20261026ip', tennis: 'minigames/tennis.html?v=20261026ip', brainrot: 'minigames/brainrot/index.html?v=20261026ip' }[UI.mgGame];
     const title = { pro: 'Pro Football', college: 'College Football', baseball: 'Baseball', hockey: 'Hockey', tennis: 'Tennis', brainrot: 'Brain Rot' }[UI.mgGame];
     if (UI.inPhone) return panelShell('App Store', '', `<div class="mg-wrap"><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);
     return panelShell('App Store', '', `<div class="mg-wrap"><div class="row between"><button class="btn" data-a="mgmenu">← App Store</button><span class="muted small">${title} · saves in this browser</span></div><iframe class="mg-frame" src="${src}" title="${title}"></iframe></div>`);

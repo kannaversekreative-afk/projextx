@@ -196,9 +196,13 @@ const MapView = (() => {
   function resize() {
     const ow = vw, oh = vh;
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    const visH = (window.visualViewport && window.visualViewport.height) || 0;
-    vw = Math.max(wrap.clientWidth || 0, window.innerWidth || 0);
-    vh = Math.max(wrap.clientHeight || 0, window.innerHeight || 0, visH);
+    // Clean layout: canvas sizes to its own container (#map, absolute
+    // inset 0 in #game, which fills body). Never to window.innerHeight
+    // or visualViewport — those are the visual viewport in iOS PWA,
+    // 59pt short of the layout viewport, and that shortfall is what
+    // made every fixed-height fix stop short at the bottom.
+    vw = wrap.clientWidth || window.innerWidth || 0;
+    vh = wrap.clientHeight || window.innerHeight || 0;
     [base, top].forEach(c => { c.width = vw * dpr; c.height = vh * dpr; c.style.width = vw + 'px'; c.style.height = vh + 'px'; });
     if (ow > 0 && oh > 0) { v.x += (vw - ow) / 2; v.y += (vh - oh) / 2; }
     if (v.s < Math.max(vw / MAP_W, vh / MAP_H)) fit();
