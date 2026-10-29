@@ -3905,6 +3905,9 @@ const A = {
     const sup = S.presidentSupport || 0;
     if (sup >= 50) {
       S.president = true; save(); renderHUD();
+      // Clear any campaign toast first, so it never sits on top of
+      // the win modal (the toast would otherwise cover the message).
+      try { const tc = $('toasts'); if (tc) tc.innerHTML = ''; } catch (e) {}
       openModal(`<h2>🇺🇸 YOU ARE PRESIDENT</h2><p>You won the United States. Your businesses now earn 25% more, and your title is President.</p><button class="btn wide" data-a="closeModal">CONTINUE</button>`, 'sheet');
     } else {
       openModal(`<h2>ELECTION LOST</h2><p>Support was ${sup}% — you needed 50%+. Campaign more and try again. Your support stays where it is.</p><button class="btn wide" data-a="incPresident">BACK TO CAMPAIGN</button>`, 'sheet');
